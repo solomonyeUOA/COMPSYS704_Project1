@@ -1,0 +1,91 @@
+// Six-position rotary-table Plant model.
+
+RotaryTablePlant(
+    input signal ROTARY_TABLE_TRIGGER;
+    input String signal LOAD_BOTTLE;
+    input signal MARK_FILLED;
+    input signal MARK_LID_PLACED;
+    input signal MARK_CAPPED;
+    input signal REMOVE_BOTTLE;
+    input signal INJECT_ALIGNMENT_FAULT;
+    input signal CLEAR_ALIGNMENT_FAULT;
+    input signal ROTATION_DONE;
+
+    output signal TABLE_ALIGNED_WITH_SENSOR;
+    output signal CAP_ON_BOTTLE_AT_POS1;
+    output signal BOTTLE_AT_LID_POSITION;
+    output signal LID_POSITION_CLEAR;
+)
+->{
+    Member3Visualisation.start();
+    System.out.println("Member 3 RotaryTablePlantCD started");
+
+    {loop {present(LOAD_BOTTLE) {
+            if (Member3PlantStateV1.loadBottle(#LOAD_BOTTLE)) {
+                System.out.println("Rotary Plant loaded bottle " + #LOAD_BOTTLE);
+            }
+    } pause;}}
+    ||
+    {loop {present(MARK_FILLED) {
+        Member3PlantStateV1.markFilled();
+    } pause;}}
+    ||
+    {loop {present(MARK_LID_PLACED) {
+        Member3PlantStateV1.markLidPlaced();
+    } pause;}}
+    ||
+    {loop {present(MARK_CAPPED) {
+        Member3PlantStateV1.markCapped();
+    } pause;}}
+    ||
+    {loop {present(REMOVE_BOTTLE) {
+            BottleStateV1 removed = Member3PlantStateV1.removeBottleAtExit();
+            if (removed != null) {
+                System.out.println("Rotary Plant removed " + removed.getId());
+            }
+    } pause;}}
+    ||
+    {loop {present(INJECT_ALIGNMENT_FAULT) {
+        Member3PlantStateV1.setAlignmentFault(true);
+    } pause;}}
+    ||
+    {loop {present(CLEAR_ALIGNMENT_FAULT) {
+        Member3PlantStateV1.setAlignmentFault(false);
+    } pause;}}
+    ||
+    {loop {
+        present(ROTARY_TABLE_TRIGGER) {
+            Member3PlantStateV1.setRotaryMotor(true);
+        }
+        else {
+            Member3PlantStateV1.setRotaryMotor(false);
+        }
+        pause;
+    }}
+    ||
+    {loop {
+        if (Member3PlantStateV1.updateRotary()) {
+            System.out.println(
+                "Rotary Plant step: " +
+                Member3PlantStateV1.rotarySnapshot()
+            );
+        }
+        pause;
+    }}
+    ||
+    {loop {
+        if (Member3PlantStateV1.isTableAligned()) {
+            emit TABLE_ALIGNED_WITH_SENSOR;
+        }
+        if (Member3PlantStateV1.hasCappedBottleAtPosition1()) {
+            emit CAP_ON_BOTTLE_AT_POS1;
+        }
+        if (Member3PlantStateV1.hasBottleWaitingForLid()) {
+            emit BOTTLE_AT_LID_POSITION;
+        }
+        else {
+            emit LID_POSITION_CLEAR;
+        }
+        pause;
+    }}
+}

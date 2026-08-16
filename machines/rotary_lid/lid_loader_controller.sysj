@@ -1,0 +1,113 @@
+// Member 3 lid-loader controller. Upper-case machine signals are local draft
+// V1; the Coordinator-facing status pair remains frozen.
+
+LidLoaderController(
+    input signal LID_STATUS_REQUEST;
+    output Integer signal LID_STATUS;
+
+    input signal BOTTLE_AT_LID_POSITION;
+    input signal LID_POSITION_CLEAR;
+    input signal LID_AVAILABLE;
+    input signal LID_MAGAZINE_EMPTY;
+    input signal LID_PICKED;
+    input signal LID_PLACED_SENSOR;
+    input signal LID_FAULT_RESET;
+
+    output signal PICK_LID_TRIGGER;
+    output signal PLACE_LID_TRIGGER;
+    output signal LID_CYCLE_DONE;
+    output signal LID_ABORT;
+)
+->{
+    System.out.println("Member 3 LidLoaderControllerCD started");
+
+    {
+        loop {
+            present(LID_STATUS_REQUEST) {
+                emit LID_STATUS(Member3MachineStateV1.getLidStatus());
+            }
+            pause;
+        }
+    }
+    ||
+    {
+        loop {
+            present(BOTTLE_AT_LID_POSITION) {
+                present(LID_MAGAZINE_EMPTY) {
+                    Member3MachineStateV1.requestLidLoad(true, false);
+                }
+                else {
+                    present(LID_AVAILABLE) {
+                        Member3MachineStateV1.requestLidLoad(true, true);
+                    }
+                }
+            }
+            pause;
+        }
+    }
+    ||
+    {
+        loop {
+            present(LID_POSITION_CLEAR) {
+                Member3MachineStateV1.acknowledgeLidDone();
+            }
+            pause;
+        }
+    }
+    ||
+    {
+        loop {
+            present(LID_PICKED) {
+                present(LID_PLACED_SENSOR) {
+                    Member3MachineStateV1.tickLidLoaderNow(true, true);
+                }
+                else {
+                    Member3MachineStateV1.tickLidLoaderNow(true, false);
+                }
+            }
+            else {
+                present(LID_PLACED_SENSOR) {
+                    Member3MachineStateV1.tickLidLoaderNow(false, true);
+                }
+                else {
+                    Member3MachineStateV1.tickLidLoaderNow(false, false);
+                }
+            }
+            pause;
+        }
+    }
+    ||
+    {
+        loop {
+            present(LID_FAULT_RESET) {
+                present(LID_AVAILABLE) {
+                    Member3MachineStateV1.resetLidFault(true);
+                }
+                else {
+                    Member3MachineStateV1.resetLidFault(false);
+                }
+            }
+            pause;
+        }
+    }
+    ||
+    {
+        loop {
+            if (Member3MachineStateV1.isLidPickEnabled()) {
+                emit PICK_LID_TRIGGER;
+            }
+            if (Member3MachineStateV1.isLidPlaceEnabled()) {
+                emit PLACE_LID_TRIGGER;
+            }
+            if (Member3MachineStateV1.getLidStatus() ==
+                Member3MachineStateV1.FAULT) {
+                emit LID_ABORT;
+            }
+            if (Member3MachineStateV1.takeLidDoneEvent()) {
+                emit LID_CYCLE_DONE;
+                System.out.println("Lid loader placed one lid");
+            }
+            pause;
+        }
+    }
+}

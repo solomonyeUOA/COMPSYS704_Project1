@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<System xmlns="http://systemjtechnology.com">
+    <SubSystem Name="TRANSPORT_SS" Local="true">
+        <ClockDomain Name="TransportControllerCD"
+                     Class="TransportController">
+            <iSignal Name="TRANSPORT_STATUS_REQUEST"
+                     Class="com.systemj.ipc.SimpleServer"
+                     IP="127.0.0.1" Port="11003" />
+            <iSignal Name="ROTATE_REQUEST"
+                     Class="com.systemj.ipc.SimpleServer"
+                     IP="127.0.0.1" Port="11003" />
+            <iSignal Name="TABLE_ALIGNED_WITH_SENSOR"
+                     Class="com.systemj.ipc.SimpleServer"
+                     IP="127.0.0.1" Port="11003" />
+            <iSignal Name="CAP_ON_BOTTLE_AT_POS1"
+                     Class="com.systemj.ipc.SimpleServer"
+                     IP="127.0.0.1" Port="11003" />
+            <iSignal Name="ROTARY_FAULT_RESET"
+                     Class="com.systemj.ipc.SimpleServer"
+                     IP="127.0.0.1" Port="11003" />
+
+            <oSignal Name="TRANSPORT_STATUS"
+                     To="CoordinatorCD.TRANSPORT_STATUS"
+                     Class="com.systemj.ipc.SimpleClient"
+                     IP="127.0.0.1" Port="11001" />
+            <oSignal Name="ROTARY_TABLE_TRIGGER"
+                     To="RotaryTablePlantCD.ROTARY_TABLE_TRIGGER"
+                     Class="com.systemj.ipc.SimpleClient"
+                     IP="127.0.0.1" Port="12003" />
+            <oSignal Name="ROTATION_DONE"
+                     To="RotaryTablePlantCD.ROTATION_DONE"
+                     Class="com.systemj.ipc.SimpleClient"
+                     IP="127.0.0.1" Port="12003" />
+        </ClockDomain>
+    </SubSystem>
+</System>

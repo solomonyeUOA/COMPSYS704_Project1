@@ -1,0 +1,61 @@
+// TEST ONLY: drives one bottle through the complete Member 3 workflow.
+
+Member3DemoDriver(
+    input signal ROTATION_DONE;
+    input Integer signal TRANSPORT_STATUS;
+    input Integer signal LID_STATUS;
+
+    output signal TRANSPORT_STATUS_REQUEST;
+    output signal LID_STATUS_REQUEST;
+    output String signal LOAD_BOTTLE;
+    output signal ROTATE_REQUEST;
+    output signal MARK_FILLED;
+    output signal MARK_CAPPED;
+    output signal REMOVE_BOTTLE;
+)
+->{
+    Member3DemoStateV1.reset();
+    System.out.println("Member 3 demo driver started");
+
+    {
+        loop {
+            present(ROTATION_DONE) {
+                Member3DemoStateV1.onRotationDone();
+            }
+
+            int action = Member3DemoStateV1.nextAction();
+            if (action == Member3DemoStateV1.LOAD) {
+                emit LOAD_BOTTLE("DEMO-B001");
+                System.out.println("Demo: load bottle");
+            }
+            else if (action == Member3DemoStateV1.ROTATE) {
+                emit ROTATE_REQUEST;
+                System.out.println("Demo: request rotation");
+            }
+            else if (action == Member3DemoStateV1.MARK_FILLED) {
+                emit MARK_FILLED;
+                System.out.println("Demo: filling complete");
+            }
+            else if (action == Member3DemoStateV1.MARK_CAPPED) {
+                emit MARK_CAPPED;
+                System.out.println("Demo: capping complete");
+            }
+            else if (action == Member3DemoStateV1.REMOVE) {
+                emit REMOVE_BOTTLE;
+                System.out.println("Demo: remove bottle");
+            }
+            else if (action == Member3DemoStateV1.PASS) {
+                System.out.println("MEMBER3 SYSTEMJ DEMO PASSED");
+            }
+            pause;
+        }
+    }
+    ||
+    {
+        loop {
+            emit TRANSPORT_STATUS_REQUEST;
+            emit LID_STATUS_REQUEST;
+            pause;
+        }
+    }
+}

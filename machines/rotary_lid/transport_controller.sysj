@@ -1,0 +1,63 @@
+// Member 3 rotary-table controller behind the frozen TransportControllerCD
+// Coordinator boundary. Upper-case machine signals are local draft V1.
+
+TransportController(
+    input signal TRANSPORT_STATUS_REQUEST;
+    output Integer signal TRANSPORT_STATUS;
+
+    input signal ROTATE_REQUEST;
+    input signal TABLE_ALIGNED_WITH_SENSOR;
+    input signal CAP_ON_BOTTLE_AT_POS1;
+    input signal ROTARY_FAULT_RESET;
+
+    output signal ROTARY_TABLE_TRIGGER;
+    output signal ROTATION_DONE;
+)
+->{
+    System.out.println("Member 3 TransportControllerCD started");
+
+    {
+        loop {
+            present(TRANSPORT_STATUS_REQUEST) {
+                int status = Member3MachineStateV1.getTransportStatus();
+                emit TRANSPORT_STATUS(status);
+            }
+            pause;
+        }
+    }
+    ||
+    {
+        loop {
+            present(ROTATE_REQUEST) {
+                present(CAP_ON_BOTTLE_AT_POS1) {
+                    Member3MachineStateV1.requestRotation(true);
+                }
+                else {
+                    Member3MachineStateV1.requestRotation(false);
+                }
+            }
+
+            present(TABLE_ALIGNED_WITH_SENSOR) {
+                Member3MachineStateV1.tickRotaryNow(true);
+                present(ROTARY_FAULT_RESET) {
+                    Member3MachineStateV1.resetRotaryFault(true);
+                }
+            }
+            else {
+                Member3MachineStateV1.tickRotaryNow(false);
+                present(ROTARY_FAULT_RESET) {
+                    Member3MachineStateV1.resetRotaryFault(false);
+                }
+            }
+
+            if (Member3MachineStateV1.isRotaryMotorEnabled()) {
+                emit ROTARY_TABLE_TRIGGER;
+            }
+            if (Member3MachineStateV1.takeRotationDoneEvent()) {
+                emit ROTATION_DONE;
+                System.out.println("Rotary completed one 60-degree step");
+            }
+            pause;
+        }
+    }
+}
