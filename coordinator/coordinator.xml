@@ -1,0 +1,111 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<System xmlns="http://systemjtechnology.com">
+    <SubSystem Name="COORDINATOR_SS" Local="true">
+        <ClockDomain Name="CoordinatorCD" Class="Coordinator">
+            <!-- POS -> Coordinator and Controller -> Coordinator inputs -->
+            <iSignal Name="ORDER" Class="com.systemj.ipc.SimpleServer"
+                     IP="127.0.0.1" Port="11001" />
+            <iSignal Name="LOADER_STATUS" Class="com.systemj.ipc.SimpleServer"
+                     IP="127.0.0.1" Port="11001" />
+            <iSignal Name="TRANSPORT_STATUS" Class="com.systemj.ipc.SimpleServer"
+                     IP="127.0.0.1" Port="11001" />
+            <iSignal Name="FILLER_A_STATUS" Class="com.systemj.ipc.SimpleServer"
+                     IP="127.0.0.1" Port="11001" />
+            <iSignal Name="FILLER_B_STATUS" Class="com.systemj.ipc.SimpleServer"
+                     IP="127.0.0.1" Port="11001" />
+            <iSignal Name="LID_STATUS" Class="com.systemj.ipc.SimpleServer"
+                     IP="127.0.0.1" Port="11001" />
+            <iSignal Name="CAPPER_STATUS" Class="com.systemj.ipc.SimpleServer"
+                     IP="127.0.0.1" Port="11001" />
+            <iSignal Name="BOTTLE_DONE" Class="com.systemj.ipc.SimpleServer"
+                     IP="127.0.0.1" Port="11001" />
+
+            <!-- Coordinator -> POS -->
+            <oSignal Name="ORDER_COMPLETE" To="POSCD.ORDER_COMPLETE"
+                     Class="com.systemj.ipc.SimpleClient"
+                     IP="127.0.0.1" Port="11000" />
+
+            <!-- Coordinator -> Bottle Loader Controller -->
+            <oSignal Name="START_ORDER"
+                     To="BottleLoaderControllerCD.START_ORDER"
+                     Class="com.systemj.ipc.SimpleClient"
+                     IP="127.0.0.1" Port="11002" />
+            <oSignal Name="LOADER_STATUS_REQUEST"
+                     To="BottleLoaderControllerCD.LOADER_STATUS_REQUEST"
+                     Class="com.systemj.ipc.SimpleClient"
+                     IP="127.0.0.1" Port="11002" />
+
+            <!-- Coordinator -> Conveyor / Turntable Controller -->
+            <oSignal Name="TRANSPORT_STATUS_REQUEST"
+                     To="TransportControllerCD.TRANSPORT_STATUS_REQUEST"
+                     Class="com.systemj.ipc.SimpleClient"
+                     IP="127.0.0.1" Port="11003" />
+
+            <!-- Coordinator -> Filler A Controller -->
+            <oSignal Name="FILL_A_RATIO"
+                     To="FillerAControllerCD.FILL_A_RATIO"
+                     Class="com.systemj.ipc.SimpleClient"
+                     IP="127.0.0.1" Port="11004" />
+            <oSignal Name="FILLER_A_STATUS_REQUEST"
+                     To="FillerAControllerCD.FILLER_A_STATUS_REQUEST"
+                     Class="com.systemj.ipc.SimpleClient"
+                     IP="127.0.0.1" Port="11004" />
+
+            <!-- Coordinator -> Filler B Controller -->
+            <oSignal Name="FILL_B_RATIO"
+                     To="FillerBControllerCD.FILL_B_RATIO"
+                     Class="com.systemj.ipc.SimpleClient"
+                     IP="127.0.0.1" Port="11005" />
+            <oSignal Name="FILLER_B_STATUS_REQUEST"
+                     To="FillerBControllerCD.FILLER_B_STATUS_REQUEST"
+                     Class="com.systemj.ipc.SimpleClient"
+                     IP="127.0.0.1" Port="11005" />
+
+            <!-- Coordinator -> Lid Loader Controller -->
+            <oSignal Name="LID_STATUS_REQUEST"
+                     To="LidLoaderControllerCD.LID_STATUS_REQUEST"
+                     Class="com.systemj.ipc.SimpleClient"
+                     IP="127.0.0.1" Port="11006" />
+
+            <!-- Coordinator -> Capper / Final Controller -->
+            <oSignal Name="CAPPER_STATUS_REQUEST"
+                     To="CapperControllerCD.CAPPER_STATUS_REQUEST"
+                     Class="com.systemj.ipc.SimpleClient"
+                     IP="127.0.0.1" Port="11007" />
+
+            <!-- Coordinator -> Overall ABS Visualisation Plant -->
+            <oSignal Name="VIZ_LOADER_STATUS"
+                     To="ABSVisualisationPlantCD.VIZ_LOADER_STATUS"
+                     Class="com.systemj.ipc.SimpleClient"
+                     IP="127.0.0.1" Port="11008" />
+            <oSignal Name="VIZ_TRANSPORT_STATUS"
+                     To="ABSVisualisationPlantCD.VIZ_TRANSPORT_STATUS"
+                     Class="com.systemj.ipc.SimpleClient"
+                     IP="127.0.0.1" Port="11008" />
+            <oSignal Name="VIZ_FILLER_A_STATUS"
+                     To="ABSVisualisationPlantCD.VIZ_FILLER_A_STATUS"
+                     Class="com.systemj.ipc.SimpleClient"
+                     IP="127.0.0.1" Port="11008" />
+            <oSignal Name="VIZ_FILLER_B_STATUS"
+                     To="ABSVisualisationPlantCD.VIZ_FILLER_B_STATUS"
+                     Class="com.systemj.ipc.SimpleClient"
+                     IP="127.0.0.1" Port="11008" />
+            <oSignal Name="VIZ_LID_STATUS"
+                     To="ABSVisualisationPlantCD.VIZ_LID_STATUS"
+                     Class="com.systemj.ipc.SimpleClient"
+                     IP="127.0.0.1" Port="11008" />
+            <oSignal Name="VIZ_CAPPER_STATUS"
+                     To="ABSVisualisationPlantCD.VIZ_CAPPER_STATUS"
+                     Class="com.systemj.ipc.SimpleClient"
+                     IP="127.0.0.1" Port="11008" />
+            <oSignal Name="VIZ_REQUIRED_BOTTLES"
+                     To="ABSVisualisationPlantCD.VIZ_REQUIRED_BOTTLES"
+                     Class="com.systemj.ipc.SimpleClient"
+                     IP="127.0.0.1" Port="11008" />
+            <oSignal Name="VIZ_COMPLETED_BOTTLES"
+                     To="ABSVisualisationPlantCD.VIZ_COMPLETED_BOTTLES"
+                     Class="com.systemj.ipc.SimpleClient"
+                     IP="127.0.0.1" Port="11008" />
+        </ClockDomain>
+    </SubSystem>
+</System>

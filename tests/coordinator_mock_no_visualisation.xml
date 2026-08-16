@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    TEST ONLY: preserves the original three-runtime POS/Coordinator/Mock
+    regression path when ABSVisualisationPlantCD is intentionally not running.
+-->
+<System xmlns="http://systemjtechnology.com">
+    <SubSystem Name="COORDINATOR_TEST_NO_VIZ_SS" Local="true">
+        <ClockDomain Name="CoordinatorCD" Class="Coordinator">
+            <iSignal Name="ORDER" Class="com.systemj.ipc.SimpleServer"
+                     IP="127.0.0.1" Port="11001" />
+            <iSignal Name="LOADER_STATUS" Class="com.systemj.ipc.SimpleServer"
+                     IP="127.0.0.1" Port="11001" />
+            <iSignal Name="TRANSPORT_STATUS" Class="com.systemj.ipc.SimpleServer"
+                     IP="127.0.0.1" Port="11001" />
+            <iSignal Name="FILLER_A_STATUS" Class="com.systemj.ipc.SimpleServer"
+                     IP="127.0.0.1" Port="11001" />
+            <iSignal Name="FILLER_B_STATUS" Class="com.systemj.ipc.SimpleServer"
+                     IP="127.0.0.1" Port="11001" />
+            <iSignal Name="LID_STATUS" Class="com.systemj.ipc.SimpleServer"
+                     IP="127.0.0.1" Port="11001" />
+            <iSignal Name="CAPPER_STATUS" Class="com.systemj.ipc.SimpleServer"
+                     IP="127.0.0.1" Port="11001" />
+            <iSignal Name="BOTTLE_DONE" Class="com.systemj.ipc.SimpleServer"
+                     IP="127.0.0.1" Port="11001" />
+
+            <oSignal Name="ORDER_COMPLETE" To="POSCD.ORDER_COMPLETE"
+                     Class="com.systemj.ipc.SimpleClient"
+                     IP="127.0.0.1" Port="11000" />
+
+            <oSignal Name="START_ORDER" To="MockControllerCD.START_ORDER"
+                     Class="com.systemj.ipc.SimpleClient"
+                     IP="127.0.0.1" Port="11002" />
+            <oSignal Name="FILL_A_RATIO" To="MockControllerCD.FILL_A_RATIO"
+                     Class="com.systemj.ipc.SimpleClient"
+                     IP="127.0.0.1" Port="11002" />
+            <oSignal Name="FILL_B_RATIO" To="MockControllerCD.FILL_B_RATIO"
+                     Class="com.systemj.ipc.SimpleClient"
+                     IP="127.0.0.1" Port="11002" />
+            <oSignal Name="LOADER_STATUS_REQUEST"
+                     To="MockControllerCD.LOADER_STATUS_REQUEST"
+                     Class="com.systemj.ipc.SimpleClient"
+                     IP="127.0.0.1" Port="11002" />
+            <oSignal Name="TRANSPORT_STATUS_REQUEST"
+                     To="MockControllerCD.TRANSPORT_STATUS_REQUEST"
+                     Class="com.systemj.ipc.SimpleClient"
+                     IP="127.0.0.1" Port="11002" />
+            <oSignal Name="FILLER_A_STATUS_REQUEST"
+                     To="MockControllerCD.FILLER_A_STATUS_REQUEST"
+                     Class="com.systemj.ipc.SimpleClient"
+                     IP="127.0.0.1" Port="11002" />
+            <oSignal Name="FILLER_B_STATUS_REQUEST"
+                     To="MockControllerCD.FILLER_B_STATUS_REQUEST"
+                     Class="com.systemj.ipc.SimpleClient"
+                     IP="127.0.0.1" Port="11002" />
+            <oSignal Name="LID_STATUS_REQUEST"
+                     To="MockControllerCD.LID_STATUS_REQUEST"
+                     Class="com.systemj.ipc.SimpleClient"
+                     IP="127.0.0.1" Port="11002" />
+            <oSignal Name="CAPPER_STATUS_REQUEST"
+                     To="MockControllerCD.CAPPER_STATUS_REQUEST"
+                     Class="com.systemj.ipc.SimpleClient"
+                     IP="127.0.0.1" Port="11002" />
+        </ClockDomain>
+    </SubSystem>
+</System>

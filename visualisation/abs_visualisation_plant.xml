@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<System xmlns="http://systemjtechnology.com">
+    <SubSystem Name="ABS_VISUALISATION_SS" Local="true">
+        <ClockDomain Name="ABSVisualisationPlantCD"
+                     Class="ABSVisualisationPlant">
+            <iSignal Name="VIZ_LOADER_STATUS"
+                     Class="com.systemj.ipc.SimpleServer"
+                     IP="127.0.0.1" Port="11008" />
+            <iSignal Name="VIZ_TRANSPORT_STATUS"
+                     Class="com.systemj.ipc.SimpleServer"
+                     IP="127.0.0.1" Port="11008" />
+            <iSignal Name="VIZ_FILLER_A_STATUS"
+                     Class="com.systemj.ipc.SimpleServer"
+                     IP="127.0.0.1" Port="11008" />
+            <iSignal Name="VIZ_FILLER_B_STATUS"
+                     Class="com.systemj.ipc.SimpleServer"
+                     IP="127.0.0.1" Port="11008" />
+            <iSignal Name="VIZ_LID_STATUS"
+                     Class="com.systemj.ipc.SimpleServer"
+                     IP="127.0.0.1" Port="11008" />
+            <iSignal Name="VIZ_CAPPER_STATUS"
+                     Class="com.systemj.ipc.SimpleServer"
+                     IP="127.0.0.1" Port="11008" />
+            <iSignal Name="VIZ_REQUIRED_BOTTLES"
+                     Class="com.systemj.ipc.SimpleServer"
+                     IP="127.0.0.1" Port="11008" />
+            <iSignal Name="VIZ_COMPLETED_BOTTLES"
+                     Class="com.systemj.ipc.SimpleServer"
+                     IP="127.0.0.1" Port="11008" />
+        </ClockDomain>
+    </SubSystem>
+</System>
