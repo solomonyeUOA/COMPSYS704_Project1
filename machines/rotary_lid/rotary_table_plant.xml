@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<System xmlns="http://systemjtechnology.com">
+    <SubSystem Name="ROTARY_PLANT_SS" Local="true">
+        <ClockDomain Name="RotaryTablePlantCD" Class="RotaryTablePlant">
+            <iSignal Name="ROTARY_TABLE_TRIGGER"
+                     Class="com.systemj.ipc.SimpleServer"
+                     IP="127.0.0.1" Port="12003" />
+            <iSignal Name="LOAD_BOTTLE"
+                     Class="com.systemj.ipc.SimpleServer"
+                     IP="127.0.0.1" Port="12003" />
+            <iSignal Name="MARK_FILLED"
+                     Class="com.systemj.ipc.SimpleServer"
+                     IP="127.0.0.1" Port="12003" />
+            <iSignal Name="MARK_LID_PLACED"
+                     Class="com.systemj.ipc.SimpleServer"
+                     IP="127.0.0.1" Port="12003" />
+            <iSignal Name="MARK_CAPPED"
+                     Class="com.systemj.ipc.SimpleServer"
+                     IP="127.0.0.1" Port="12003" />
+            <iSignal Name="REMOVE_BOTTLE"
+                     Class="com.systemj.ipc.SimpleServer"
+                     IP="127.0.0.1" Port="12003" />
+            <iSignal Name="INJECT_ALIGNMENT_FAULT"
+                     Class="com.systemj.ipc.SimpleServer"
+                     IP="127.0.0.1" Port="12003" />
+            <iSignal Name="CLEAR_ALIGNMENT_FAULT"
+                     Class="com.systemj.ipc.SimpleServer"
+                     IP="127.0.0.1" Port="12003" />
+            <iSignal Name="ROTATION_DONE"
+                     Class="com.systemj.ipc.SimpleServer"
+                     IP="127.0.0.1" Port="12003" />
+
+            <oSignal Name="TABLE_ALIGNED_WITH_SENSOR"
+                     To="TransportControllerCD.TABLE_ALIGNED_WITH_SENSOR"
+                     Class="com.systemj.ipc.SimpleClient"
+                     IP="127.0.0.1" Port="11003" />
+            <oSignal Name="CAP_ON_BOTTLE_AT_POS1"
+                     To="TransportControllerCD.CAP_ON_BOTTLE_AT_POS1"
+                     Class="com.systemj.ipc.SimpleClient"
+                     IP="127.0.0.1" Port="11003" />
+            <oSignal Name="BOTTLE_AT_LID_POSITION"
+                     To="LidLoaderControllerCD.BOTTLE_AT_LID_POSITION"
+                     Class="com.systemj.ipc.SimpleClient"
+                     IP="127.0.0.1" Port="11006" />
+            <oSignal Name="LID_POSITION_CLEAR"
+                     To="LidLoaderControllerCD.LID_POSITION_CLEAR"
+                     Class="com.systemj.ipc.SimpleClient"
+                     IP="127.0.0.1" Port="11006" />
+        </ClockDomain>
+    </SubSystem>
+</System>
