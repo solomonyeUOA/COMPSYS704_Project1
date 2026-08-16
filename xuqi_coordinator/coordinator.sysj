@@ -1,0 +1,299 @@
+// COMPSYS704 Project 1 - ABS Coordinator Integration V1
+//
+// The Coordinator handles order-level coordination only. It never controls a
+// Plant and it does not define Controller-to-Controller workpiece movement.
+
+Coordinator(
+    input String signal ORDER;
+    output String signal ORDER_COMPLETE;
+
+    output Integer signal START_ORDER;
+    output Integer signal FILL_A_RATIO;
+    output Integer signal FILL_B_RATIO;
+
+    output signal LOADER_STATUS_REQUEST;
+    output signal CONVEYOR_STATUS_REQUEST;
+    output signal ROTARY_STATUS_REQUEST;
+    output signal FILLER_A_STATUS_REQUEST;
+    output signal FILLER_B_STATUS_REQUEST;
+    output signal LID_STATUS_REQUEST;
+    output signal CAPPER_STATUS_REQUEST;
+    output signal UNLOADER_STATUS_REQUEST;
+
+    // Coordinator -> Overall ABS Visualisation Plant only.
+    output Integer signal VIZ_LOADER_STATUS;
+    output Integer signal VIZ_CONVEYOR_STATUS;
+    output Integer signal VIZ_ROTARY_STATUS;
+    output Integer signal VIZ_FILLER_A_STATUS;
+    output Integer signal VIZ_FILLER_B_STATUS;
+    output Integer signal VIZ_LID_STATUS;
+    output Integer signal VIZ_CAPPER_STATUS;
+    output Integer signal VIZ_UNLOADER_STATUS;
+    output Integer signal VIZ_REQUIRED_BOTTLES;
+    output Integer signal VIZ_COMPLETED_BOTTLES;
+
+    input Integer signal LOADER_STATUS;
+    input Integer signal CONVEYOR_STATUS;
+    input Integer signal ROTARY_STATUS;
+    input Integer signal FILLER_A_STATUS;
+    input Integer signal FILLER_B_STATUS;
+    input Integer signal LID_STATUS;
+    input Integer signal CAPPER_STATUS;
+    input Integer signal UNLOADER_STATUS;
+
+    input signal BOTTLE_DONE;
+)
+->{
+    System.out.println("ABS Coordinator Integration V1 started");
+
+    // Order reception and initial batch dispatch
+    {
+        loop {
+            present(ORDER) {
+                String receivedOrder = #ORDER;
+
+                if (CoordinatorStateV1.orderActive ||
+                    CoordinatorStateV1.completionPending) {
+                    System.out.println(
+                        "Coordinator rejected ORDER while active: " +
+                        receivedOrder
+                    );
+                }
+                else if (!CoordinatorStateV1.accept(receivedOrder)) {
+                    System.out.println(
+                        "Coordinator rejected invalid ORDER: " +
+                        receivedOrder
+                    );
+                }
+                else {
+                    emit START_ORDER(CoordinatorStateV1.requiredBottles);
+                    emit FILL_A_RATIO(
+                        CoordinatorStateV1.currentLiquidARatio
+                    );
+                    emit FILL_B_RATIO(
+                        CoordinatorStateV1.currentLiquidBRatio
+                    );
+                    emit VIZ_REQUIRED_BOTTLES(
+                        CoordinatorStateV1.requiredBottles
+                    );
+                    emit VIZ_COMPLETED_BOTTLES(0);
+
+                    System.out.println(
+                        "Coordinator accepted ORDER " +
+                        CoordinatorStateV1.activeOrder.orderId +
+                        ", product=" +
+                        CoordinatorStateV1.currentProductId() +
+                        ", quantity=" +
+                        CoordinatorStateV1.requiredBottles +
+                        ", A=" +
+                        CoordinatorStateV1.currentLiquidARatio +
+                        ", B=" +
+                        CoordinatorStateV1.currentLiquidBRatio
+                    );
+                }
+            }
+            pause;
+        }
+    }
+    ||
+    // Non-blocking status polling, rate-limited in wall-clock time so the
+    // fast logical reaction loop cannot flood the external signal transport.
+    {
+        loop {
+            if (System.currentTimeMillis() >=
+                CoordinatorStateV1.nextStatusPollMillis) {
+                emit LOADER_STATUS_REQUEST;
+                emit CONVEYOR_STATUS_REQUEST;
+                emit ROTARY_STATUS_REQUEST;
+                emit FILLER_A_STATUS_REQUEST;
+                emit FILLER_B_STATUS_REQUEST;
+                emit LID_STATUS_REQUEST;
+                emit CAPPER_STATUS_REQUEST;
+                emit UNLOADER_STATUS_REQUEST;
+                emit VIZ_REQUIRED_BOTTLES(
+                    CoordinatorStateV1.requiredBottles
+                );
+                emit VIZ_COMPLETED_BOTTLES(
+                    CoordinatorStateV1.completedBottles
+                );
+                CoordinatorStateV1.nextStatusPollMillis =
+                    System.currentTimeMillis() + 1000;
+            }
+            pause;
+        }
+    }
+    ||
+    // Latest Controller status storage for future ABS visualisation
+    {
+        {loop {present(LOADER_STATUS) {
+            if (CoordinatorStateV1.loaderStatus != #LOADER_STATUS) {
+                CoordinatorStateV1.loaderStatus = #LOADER_STATUS;
+                System.out.println(
+                    "Coordinator LOADER_STATUS=" +
+                    CoordinatorStateV1.loaderStatus
+                );
+            }
+            emit VIZ_LOADER_STATUS(CoordinatorStateV1.loaderStatus);
+        } pause;}}
+        ||
+        {loop {present(CONVEYOR_STATUS) {
+            if (CoordinatorStateV1.conveyorStatus != #CONVEYOR_STATUS) {
+                CoordinatorStateV1.conveyorStatus = #CONVEYOR_STATUS;
+                System.out.println(
+                    "Coordinator CONVEYOR_STATUS=" +
+                    CoordinatorStateV1.conveyorStatus
+                );
+            }
+            emit VIZ_CONVEYOR_STATUS(
+                CoordinatorStateV1.conveyorStatus
+            );
+        } pause;}}
+        ||
+        {loop {present(ROTARY_STATUS) {
+            if (CoordinatorStateV1.rotaryStatus != #ROTARY_STATUS) {
+                CoordinatorStateV1.rotaryStatus = #ROTARY_STATUS;
+                System.out.println(
+                    "Coordinator ROTARY_STATUS=" +
+                    CoordinatorStateV1.rotaryStatus
+                );
+            }
+            emit VIZ_ROTARY_STATUS(
+                CoordinatorStateV1.rotaryStatus
+            );
+        } pause;}}
+        ||
+        {loop {present(FILLER_A_STATUS) {
+            if (CoordinatorStateV1.fillerAStatus != #FILLER_A_STATUS) {
+                CoordinatorStateV1.fillerAStatus = #FILLER_A_STATUS;
+                System.out.println(
+                    "Coordinator FILLER_A_STATUS=" +
+                    CoordinatorStateV1.fillerAStatus
+                );
+            }
+            emit VIZ_FILLER_A_STATUS(CoordinatorStateV1.fillerAStatus);
+        } pause;}}
+        ||
+        {loop {present(FILLER_B_STATUS) {
+            if (CoordinatorStateV1.fillerBStatus != #FILLER_B_STATUS) {
+                CoordinatorStateV1.fillerBStatus = #FILLER_B_STATUS;
+                System.out.println(
+                    "Coordinator FILLER_B_STATUS=" +
+                    CoordinatorStateV1.fillerBStatus
+                );
+            }
+            emit VIZ_FILLER_B_STATUS(CoordinatorStateV1.fillerBStatus);
+        } pause;}}
+        ||
+        {loop {present(LID_STATUS) {
+            if (CoordinatorStateV1.lidStatus != #LID_STATUS) {
+                CoordinatorStateV1.lidStatus = #LID_STATUS;
+                System.out.println(
+                    "Coordinator LID_STATUS=" +
+                    CoordinatorStateV1.lidStatus
+                );
+            }
+            emit VIZ_LID_STATUS(CoordinatorStateV1.lidStatus);
+        } pause;}}
+        ||
+        {loop {present(CAPPER_STATUS) {
+            if (CoordinatorStateV1.capperStatus != #CAPPER_STATUS) {
+                CoordinatorStateV1.capperStatus = #CAPPER_STATUS;
+                System.out.println(
+                    "Coordinator CAPPER_STATUS=" +
+                    CoordinatorStateV1.capperStatus
+                );
+            }
+            emit VIZ_CAPPER_STATUS(CoordinatorStateV1.capperStatus);
+        } pause;}}
+        ||
+        {loop {present(UNLOADER_STATUS) {
+            if (CoordinatorStateV1.unloaderStatus != #UNLOADER_STATUS) {
+                CoordinatorStateV1.unloaderStatus = #UNLOADER_STATUS;
+                System.out.println(
+                    "Coordinator UNLOADER_STATUS=" +
+                    CoordinatorStateV1.unloaderStatus
+                );
+            }
+            emit VIZ_UNLOADER_STATUS(
+                CoordinatorStateV1.unloaderStatus
+            );
+        } pause;}}
+    }
+    ||
+    // Send completion after the BOTTLE_DONE reaction has settled. Separating
+    // the two external events avoids coupling final-machine input timing to
+    // the POS notification transport.
+    {
+        loop {
+            if (CoordinatorStateV1.completionPending &&
+                System.currentTimeMillis() >=
+                CoordinatorStateV1.completionSendAfterMillis) {
+                String completionPayload =
+                    CoordinatorStateV1.nextCompletionTransmission();
+                emit ORDER_COMPLETE(completionPayload);
+                System.out.println(
+                    "Coordinator sent ORDER_COMPLETE: " +
+                    completionPayload
+                );
+            }
+            pause;
+        }
+    }
+    ||
+    // Bottle counting, next-product dispatch and order completion
+    {
+        loop {
+            present(BOTTLE_DONE) {
+                if (CoordinatorStateV1.orderActive) {
+                    boolean productComplete =
+                        CoordinatorStateV1.recordBottleDone();
+                    System.out.println(
+                        "Coordinator BOTTLE_DONE " +
+                        CoordinatorStateV1.completedBottles + "/" +
+                        CoordinatorStateV1.requiredBottles +
+                        " for product " +
+                        CoordinatorStateV1.currentProductId()
+                    );
+                    emit VIZ_COMPLETED_BOTTLES(
+                        CoordinatorStateV1.completedBottles
+                    );
+
+                    if (productComplete) {
+                        if (CoordinatorStateV1.hasNextProduct()) {
+                            CoordinatorStateV1.advanceToNextProduct();
+
+                            emit START_ORDER(
+                                CoordinatorStateV1.requiredBottles
+                            );
+                            emit FILL_A_RATIO(
+                                CoordinatorStateV1.currentLiquidARatio
+                            );
+                            emit FILL_B_RATIO(
+                                CoordinatorStateV1.currentLiquidBRatio
+                            );
+                            emit VIZ_REQUIRED_BOTTLES(
+                                CoordinatorStateV1.requiredBottles
+                            );
+                            emit VIZ_COMPLETED_BOTTLES(0);
+
+                            System.out.println(
+                                "Coordinator started next product=" +
+                                CoordinatorStateV1.currentProductId() +
+                                ", quantity=" +
+                                CoordinatorStateV1.requiredBottles
+                            );
+                        }
+                        else {
+                            CoordinatorStateV1.completeOrder();
+                            System.out.println(
+                                "Coordinator completed final bottle for " +
+                                CoordinatorStateV1.activeOrder.orderId
+                            );
+                        }
+                    }
+                }
+            }
+            pause;
+        }
+    }
+}
