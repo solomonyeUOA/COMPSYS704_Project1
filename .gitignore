@@ -16,3 +16,6 @@ visualisation/ABSVisualisationPlant.java
 .vscode/
 .DS_Store
 Thumbs.db
+
+/pos/
+/coordinator/
