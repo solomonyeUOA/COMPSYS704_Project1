@@ -6,7 +6,10 @@
             <iSignal Name="VIZ_LOADER_STATUS"
                      Class="com.systemj.ipc.SimpleServer"
                      IP="127.0.0.1" Port="11008" />
-            <iSignal Name="VIZ_TRANSPORT_STATUS"
+            <iSignal Name="VIZ_CONVEYOR_STATUS"
+                     Class="com.systemj.ipc.SimpleServer"
+                     IP="127.0.0.1" Port="11008" />
+            <iSignal Name="VIZ_ROTARY_STATUS"
                      Class="com.systemj.ipc.SimpleServer"
                      IP="127.0.0.1" Port="11008" />
             <iSignal Name="VIZ_FILLER_A_STATUS"
@@ -19,6 +22,9 @@
                      Class="com.systemj.ipc.SimpleServer"
                      IP="127.0.0.1" Port="11008" />
             <iSignal Name="VIZ_CAPPER_STATUS"
+                     Class="com.systemj.ipc.SimpleServer"
+                     IP="127.0.0.1" Port="11008" />
+            <iSignal Name="VIZ_UNLOADER_STATUS"
                      Class="com.systemj.ipc.SimpleServer"
                      IP="127.0.0.1" Port="11008" />
             <iSignal Name="VIZ_REQUIRED_BOTTLES"

@@ -11,11 +11,13 @@ public final class CoordinatorStateV1 {
     }
 
     public static int loaderStatus = 0;
-    public static int transportStatus = 0;
+    public static int conveyorStatus = 0;
+    public static int rotaryStatus = 0;
     public static int fillerAStatus = 0;
     public static int fillerBStatus = 0;
     public static int lidStatus = 0;
     public static int capperStatus = 0;
+    public static int unloaderStatus = 0;
 
     public static OrderV1 activeOrder = null;
     public static int currentProductIndex = 0;
