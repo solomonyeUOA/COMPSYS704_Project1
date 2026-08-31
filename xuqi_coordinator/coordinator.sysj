@@ -7,6 +7,14 @@ Coordinator(
     input String signal ORDER;
     output String signal ORDER_COMPLETE;
 
+    // Frozen M3-facing V2.1 safety-coordination boundary.
+    input String signal FT_FAULT_ALERT;
+    input String signal FT_SAFE_STOP_REQUEST;
+    input String signal FT_RECOVERY_READY;
+    input String signal FT_RECOVERY_FAILED;
+    output String signal FT_SAFE_STOP_ACK;
+    output String signal FT_RESUME_DECISION;
+
     output Integer signal START_ORDER;
     output Integer signal FILL_A_RATIO;
     output Integer signal FILL_B_RATIO;
@@ -52,12 +60,31 @@ Coordinator(
             present(ORDER) {
                 String receivedOrder = #ORDER;
 
-                if (CoordinatorStateV1.orderActive ||
-                    CoordinatorStateV1.completionPending) {
+                if (CoordinatorStateV1.ftCoordinationHold) {
                     System.out.println(
-                        "Coordinator rejected ORDER while active: " +
-                        receivedOrder
+                        "Coordinator rejected ORDER while FT HOLD is active: " +
+                        receivedOrder + " [COORD-FT] " +
+                        CoordinatorStateV1.ftSnapshot()
                     );
+                }
+                else if (CoordinatorStateV1.orderActive) {
+                    if (!CoordinatorStateV1.isDuplicateOfLastAcceptedOrder(
+                        receivedOrder
+                    )) {
+                        System.out.println(
+                            "Coordinator rejected ORDER while active: " +
+                            receivedOrder + " [COORD-LIFECYCLE] " +
+                            CoordinatorStateV1.lifecycleSnapshot()
+                        );
+                    }
+                }
+                else if (
+                    CoordinatorStateV1.isDuplicateOfLastAcceptedOrder(
+                        receivedOrder
+                    )
+                ) {
+                    // A late transport copy of an already accepted order is
+                    // idempotently ignored and never restarts production.
                 }
                 else if (!CoordinatorStateV1.accept(receivedOrder)) {
                     System.out.println(
@@ -89,6 +116,10 @@ Coordinator(
                         CoordinatorStateV1.currentLiquidARatio +
                         ", B=" +
                         CoordinatorStateV1.currentLiquidBRatio
+                    );
+                    System.out.println(
+                        "[COORD-LIFECYCLE] accepted " +
+                        CoordinatorStateV1.lifecycleSnapshot()
                     );
                 }
             }
@@ -225,16 +256,20 @@ Coordinator(
     // the POS notification transport.
     {
         loop {
-            if (CoordinatorStateV1.completionPending &&
-                System.currentTimeMillis() >=
-                CoordinatorStateV1.completionSendAfterMillis) {
+            if (CoordinatorStateV1.completionPending) {
                 String completionPayload =
                     CoordinatorStateV1.nextCompletionTransmission();
-                emit ORDER_COMPLETE(completionPayload);
-                System.out.println(
-                    "Coordinator sent ORDER_COMPLETE: " +
-                    completionPayload
-                );
+                if (completionPayload != null) {
+                    emit ORDER_COMPLETE(completionPayload);
+                    if (CoordinatorStateV1.completionTransmissionStarted) {
+                        System.out.println(
+                            "[COORD-LIFECYCLE] ORDER_COMPLETE attempt=" +
+                            CoordinatorStateV1.lastCompletionAttempt + " " +
+                            completionPayload + " " +
+                            CoordinatorStateV1.lifecycleSnapshot()
+                        );
+                    }
+                }
             }
             pause;
         }
@@ -244,7 +279,8 @@ Coordinator(
     {
         loop {
             present(BOTTLE_DONE) {
-                if (CoordinatorStateV1.orderActive) {
+                if (CoordinatorStateV1.consumeBottleDoneEdge(true) &&
+                    CoordinatorStateV1.orderActive) {
                     boolean productComplete =
                         CoordinatorStateV1.recordBottleDone();
                     System.out.println(
@@ -259,7 +295,15 @@ Coordinator(
                     );
 
                     if (productComplete) {
-                        if (CoordinatorStateV1.hasNextProduct()) {
+                        if (CoordinatorStateV1.hasNextProduct() &&
+                            CoordinatorStateV1.ftCoordinationHold) {
+                            CoordinatorStateV1.ftBatchTransitionHeld = true;
+                            System.out.println(
+                                "[COORD-FT] next product dispatch held; " +
+                                CoordinatorStateV1.ftSnapshot()
+                            );
+                        }
+                        else if (CoordinatorStateV1.hasNextProduct()) {
                             CoordinatorStateV1.advanceToNextProduct();
 
                             emit START_ORDER(
@@ -289,11 +333,72 @@ Coordinator(
                                 "Coordinator completed final bottle for " +
                                 CoordinatorStateV1.activeOrder.orderId
                             );
+                            System.out.println(
+                                "[COORD-LIFECYCLE] completeOrder " +
+                                CoordinatorStateV1.lifecycleSnapshot()
+                            );
                         }
                     }
                 }
             }
+            else {
+                CoordinatorStateV1.consumeBottleDoneEdge(false);
+            }
             pause;
         }
+    }
+    ||
+    // M3-facing V2.1 safety inputs. The current M1 implementation records
+    // events and holds new order/batch dispatch. It does not have an approved
+    // physical safe-stop confirmation signal, so it deliberately emits
+    // neither FT_SAFE_STOP_ACK nor FT_RESUME_DECISION yet.
+    {
+        {loop {present(FT_FAULT_ALERT) {
+            if (CoordinatorStateV1.recordFtFaultAlert(#FT_FAULT_ALERT)) {
+                System.out.println(
+                    "[COORD-FT] FT_FAULT_ALERT recorded payload=" +
+                    #FT_FAULT_ALERT + " " + CoordinatorStateV1.ftSnapshot()
+                );
+            }
+        } pause;}}
+        ||
+        {loop {present(FT_SAFE_STOP_REQUEST) {
+            if (CoordinatorStateV1.recordFtSafeStopRequest(
+                #FT_SAFE_STOP_REQUEST
+            )) {
+                System.out.println(
+                    "[COORD-FT] FT_SAFE_STOP_REQUEST recorded; " +
+                    "FT_SAFE_STOP_ACK withheld until independent physical " +
+                    "safe-stop evidence exists. payload=" +
+                    #FT_SAFE_STOP_REQUEST + " " +
+                    CoordinatorStateV1.ftSnapshot()
+                );
+            }
+        } pause;}}
+        ||
+        {loop {present(FT_RECOVERY_READY) {
+            if (CoordinatorStateV1.recordFtRecoveryReady(
+                #FT_RECOVERY_READY
+            )) {
+                System.out.println(
+                    "[COORD-FT] FT_RECOVERY_READY recorded; HOLD retained " +
+                    "and no automatic resume performed. payload=" +
+                    #FT_RECOVERY_READY + " " +
+                    CoordinatorStateV1.ftSnapshot()
+                );
+            }
+        } pause;}}
+        ||
+        {loop {present(FT_RECOVERY_FAILED) {
+            if (CoordinatorStateV1.recordFtRecoveryFailed(
+                #FT_RECOVERY_FAILED
+            )) {
+                System.out.println(
+                    "[COORD-FT] FT_RECOVERY_FAILED recorded; HOLD retained. " +
+                    "payload=" + #FT_RECOVERY_FAILED + " " +
+                    CoordinatorStateV1.ftSnapshot()
+                );
+            }
+        } pause;}}
     }
 }

@@ -12,7 +12,7 @@ contract. This guide mirrors the current interface in:
 - `xuqi_coordinator/coordinator.xml`
 - `xuqi_pos/pos.sysj`
 - `xuqi_pos/pos.xml`
-- `COMPSYS704_Project1_Interface_V1.xlsx`
+- `COMPSYS704_Interface_V1_Integration_Test_Candidate_M4_V1_2_synced_fixed_28082026.xlsx`
 
 Use `.sysj` for SystemJ source files. Signal names, data types, Clock Domain
 names, directions, and ports in this guide are exact and case-sensitive. Do
@@ -29,13 +29,13 @@ ports must not be replaced.
 CoordinatorCD (127.0.0.1:11001)
   |
   +-- BottleLoaderControllerCD     11002
-  +-- ConveyorControllerCD         11003
+  +-- RotaryTableControllerCD      11003
   +-- FillerAControllerCD          11004
   +-- FillerBControllerCD          11005
   +-- LidLoaderControllerCD        11006
   +-- CapperControllerCD           11007
   +-- ABSVisualisationPlantCD      11008
-  +-- RotaryTurntableControllerCD  11009
+  +-- ConveyorControllerCD         11009
   +-- BottleUnloaderControllerCD   11010
 ```
 
@@ -46,13 +46,13 @@ integration mappings use IP `127.0.0.1`.
 |---|---|---:|
 | M1 Coordinator | `CoordinatorCD` | `11001` |
 | Bottle Loader | `BottleLoaderControllerCD` | `11002` |
-| Conveyor | `ConveyorControllerCD` | `11003` |
+| Rotary Table | `RotaryTableControllerCD` | `11003` |
 | Filler A | `FillerAControllerCD` | `11004` |
 | Filler B | `FillerBControllerCD` | `11005` |
 | Lid Loader | `LidLoaderControllerCD` | `11006` |
 | Capper | `CapperControllerCD` | `11007` |
 | ABS Visualisation | `ABSVisualisationPlantCD` | `11008` |
-| Rotary Turntable | `RotaryTurntableControllerCD` | `11009` |
+| Conveyor | `ConveyorControllerCD` | `11009` |
 | Bottle Unloader | `BottleUnloaderControllerCD` | `11010` |
 
 For every Machine Controller:
@@ -171,7 +171,7 @@ present(LOADER_STATUS_REQUEST) {
 
 Controller name: Conveyor Controller<br>
 Clock Domain: `ConveyorControllerCD`<br>
-Receiver port: `11003`
+Receiver port: `11009`
 
 ### Interface
 
@@ -198,7 +198,7 @@ present(CONVEYOR_STATUS_REQUEST) {
              Class="YOUR_GENERATED_CLASS">
     <iSignal Name="CONVEYOR_STATUS_REQUEST"
              Class="com.systemj.ipc.SimpleServer"
-             IP="127.0.0.1" Port="11003" />
+             IP="127.0.0.1" Port="11009" />
     <oSignal Name="CONVEYOR_STATUS"
              To="CoordinatorCD.CONVEYOR_STATUS"
              Class="com.systemj.ipc.SimpleClient"
@@ -209,11 +209,11 @@ present(CONVEYOR_STATUS_REQUEST) {
 Do not use the obsolete combined Transport names. Conveyor uses only
 `CONVEYOR_STATUS_REQUEST` and `CONVEYOR_STATUS` at the M1 boundary.
 
-## 7. Rotary Turntable Controller
+## 7. Rotary Table Controller
 
 Controller name: Rotary Turntable Controller<br>
-Clock Domain: `RotaryTurntableControllerCD`<br>
-Receiver port: `11009`
+Clock Domain: `RotaryTableControllerCD`<br>
+Receiver port: `11003`
 
 ### Interface
 
@@ -236,11 +236,11 @@ present(ROTARY_STATUS_REQUEST) {
 ### Controller XML mapping
 
 ```xml
-<ClockDomain Name="RotaryTurntableControllerCD"
+<ClockDomain Name="RotaryTableControllerCD"
              Class="YOUR_GENERATED_CLASS">
     <iSignal Name="ROTARY_STATUS_REQUEST"
              Class="com.systemj.ipc.SimpleServer"
-             IP="127.0.0.1" Port="11009" />
+             IP="127.0.0.1" Port="11003" />
     <oSignal Name="ROTARY_STATUS"
              To="CoordinatorCD.ROTARY_STATUS"
              Class="com.systemj.ipc.SimpleClient"
@@ -460,12 +460,18 @@ Receiver port: `11010`
 |---|---|---|---|
 | `UNLOADER_STATUS_REQUEST` | Coordinator → Bottle Unloader | pure signal | Reply with the current Unloader status without starting or advancing unloading. |
 | `UNLOADER_STATUS` | Bottle Unloader → Coordinator | `Integer signal` | Emit in response to each `UNLOADER_STATUS_REQUEST`. |
-| `BOTTLE_DONE` | Bottle Unloader → Coordinator | pure signal | Emit exactly once after one completed bottle is successfully collected/unloaded. |
+| `BOTTLE_DONE` | Bottle Unloader → Coordinator | pure signal | Emit one bounded `PRESENT` window after one completed bottle is successfully collected/unloaded, then provide an `ABSENT` gap. |
 
 One `BOTTLE_DONE` means one completed bottle has successfully reached and been
 collected at the Bottle Unloader. It must be emitted exactly once per completed
 bottle. Do not emit it when capping finishes, when a status poll arrives, or
 when a bottle merely leaves an upstream station.
+
+The M1 Coordinator counts only the rising edge of this pure signal. Hold one
+logical event `PRESENT` for a bounded observable window, then leave it
+`ABSENT` for at least one receiver reaction before the next bottle event. The
+integration Mock uses a 500 ms default window. Do not retry the same bottle
+event: `BOTTLE_DONE` contains no bottle identifier for de-duplication.
 
 ### SystemJ declarations
 
@@ -554,8 +560,9 @@ Additional Controller-specific checks:
 - Filler A/B: send the current `FILL_A_RATIO` / `FILL_B_RATIO` and confirm the
   recipe values are stored without directly operating Plant valves.
 - Bottle Unloader: complete one real collection and confirm exactly one
-  `BOTTLE_DONE` reaches `CoordinatorCD.BOTTLE_DONE`; confirm capping alone and
-  status polling emit no `BOTTLE_DONE`.
+  bounded, edge-counted `BOTTLE_DONE` reaches `CoordinatorCD.BOTTLE_DONE`,
+  followed by an `ABSENT` gap; confirm capping alone and status polling emit no
+  `BOTTLE_DONE`.
 
 ## 15. Integration Checklist
 
@@ -581,3 +588,5 @@ Additional Controller-specific checks:
 - [ ] `FILL_A_RATIO` and `FILL_B_RATIO` are treated as recipe percentages.
 - [ ] Only `BottleUnloaderControllerCD` emits `BOTTLE_DONE`.
 - [ ] One successful collected bottle produces exactly one `BOTTLE_DONE`.
+- [ ] Each `BOTTLE_DONE` uses one bounded `PRESENT` window and an `ABSENT` gap;
+      it is not retried for the same bottle.

@@ -7,7 +7,8 @@ Machine Controllers and contains no Plant actuator logic.
 ## Architecture boundary
 
 ```text
-Eight Machine Controllers / test Mock
+Eight real Machine Controllers
+        (test Mock in regression only)
                  |
                  | STATUS signals
                  v
@@ -71,7 +72,7 @@ Every signal is sent from `CoordinatorCD` to `ABSVisualisationPlantCD` at
   `BOTTLE_DONE` event.
 - Multi-product progress resets when the next product batch is dispatched.
 
-## Expected Mock sequence
+## Regression-only Mock sequence
 
 For Bottle Loader, Conveyor, Rotary Turntable, Filler A, Filler B, Lid Loader,
 Capper and Bottle Unloader:
@@ -82,5 +83,6 @@ READY -> BUSY -> DONE
 Progress: 0 / 2 -> 1 / 2 -> 2 / 2
 ```
 
-Replacing `MockControllerCD` with real Controllers requires no Visualisation
-change when the real Controllers implement the frozen V1 status interface.
+The production Visualisation boundary is independent of the regression Mock.
+Real Controllers require no Visualisation change when they implement the
+current Coordinator-facing status interface.

@@ -1,4 +1,4 @@
-# Machine modules
+# Machine module integration locations
 
 Before implementing a Controller, read:
 
@@ -6,7 +6,9 @@ Before implementing a Controller, read:
 - `../docs/CONTROLLER_IMPLEMENTATION_GUIDE.md`
 
 Coordinator-facing signal names, types, status codes, Clock Domains and ports
-form the team-agreed Integration V1 baseline.
+form the current development integration baseline. Machine implementations
+remain owned by their respective members; this M1 branch must not invent or
+silently replace missing peer Controller/Plant behaviour.
 
 Expected module ownership:
 
@@ -31,6 +33,12 @@ machines/conveyor/
   plant.sysj
   plant.xml
 ```
+
+Conveyor and Rotary are independent modules. The current Coordinator expects
+`ConveyorControllerCD:11009` with `CONVEYOR_STATUS_REQUEST` /
+`CONVEYOR_STATUS`, and `RotaryTableControllerCD:11003` with
+`ROTARY_STATUS_REQUEST` / `ROTARY_STATUS`. Do not recreate the obsolete
+combined `TransportControllerCD` / `TRANSPORT_*` status boundary.
 
 Do not put motor, valve, actuator or sensor signals in the Coordinator
 interface. Do not copy the test-only unified Mock into a real machine module.

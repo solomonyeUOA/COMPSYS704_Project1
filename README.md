@@ -1,20 +1,39 @@
-# COMPSYS704 Project 1 - Integration V1
+# COMPSYS704 Project 1 - Development Integration Baseline
 
-This repository is the shared integration baseline for the Automated Bottling
-System (ABS). It contains the Swing POS, SystemJ ABS Coordinator, frozen
-Coordinator-facing interfaces, display-only ABS Visualisation and a test-only
-Mock Controller. Real Machine Controller/Plant modules are still to be added
-by their owners.
+This repository is the current development-stage integration baseline for the
+Automated Bottling System (ABS). It contains the implemented Swing POS,
+SystemJ ABS Coordinator, Coordinator-facing contracts, display-only ABS
+Visualisation and regression tests. The unified Mock Controller is test-only;
+real Machine Controller/Plant modules remain owned and integrated by their
+respective team members.
 
 The V1 freeze is a team-agreed baseline, not a forever-immutable API. Proposed
 changes must be agreed and applied consistently to source, XML, tests and docs.
+
+## Current integration status
+
+- M1 POS, Coordinator, transport-tolerance handling, display-only
+  Visualisation and the current six-signal M1/M3 safety boundary are preserved.
+- Conveyor and Rotary are independent Controllers. The current M1 production
+  mapping uses `ConveyorControllerCD:11009` and
+  `RotaryTableControllerCD:11003` with separate `CONVEYOR_*` and `ROTARY_*`
+  status interfaces.
+- The available M3 Lid interface matches `LidLoaderControllerCD:11006` and
+  `LID_STATUS_REQUEST` / `LID_STATUS`.
+- An inspected M3 branch still uses the obsolete combined
+  `TransportControllerCD` / `TRANSPORT_*` Rotary status boundary. That peer
+  implementation must be updated on the M3 side before integration; M1 does
+  not provide a legacy compatibility mapping.
+- `MockControllerCD` remains a regression fixture and is not a production
+  substitute for the eight real Machine Controllers.
 
 ## Start here
 
 1. Read [`docs/INTERFACE_FREEZE_V1.md`](docs/INTERFACE_FREEZE_V1.md).
 2. Read [`docs/VISUALISATION_INTERFACE_V1.md`](docs/VISUALISATION_INTERFACE_V1.md).
 3. Controller owners read [`docs/CONTROLLER_IMPLEMENTATION_GUIDE.md`](docs/CONTROLLER_IMPLEMENTATION_GUIDE.md).
-4. Use `COMPSYS704_Project1_Interface_V1.xlsx` as the quick reference.
+4. Use `COMPSYS704_Interface_V1_Integration_Test_Candidate_M4_V1_2_synced_fixed_28082026.xlsx`
+   as the current quick reference.
 
 ## Architecture
 
@@ -55,13 +74,13 @@ a team design decision.
 ## Repository layout
 
 ```text
-coordinator/    ABS Coordinator SystemJ source and production XML mapping
-pos/            POSCD plus handwritten Java Swing order-entry view
-visualisation/  display Clock Domain, XML and Swing view
-common/         ORDER parser and Coordinator shared state
-docs/           interface contract and implementation guidance
-machines/       real Controller/Plant modules added by their owners
-tests/          test-only Mock, test XML and self-test
+xuqi_coordinator/  ABS Coordinator SystemJ source and production XML mapping
+xuqi_pos/          POSCD plus handwritten Java Swing order-entry view
+visualisation/     display Clock Domain, XML and Swing view
+common/            ORDER parser and Coordinator shared state
+docs/              interface contract and implementation guidance
+machines/          integration locations for owner-supplied Controller/Plant modules
+tests/             regression-only Mock, test XML and self-test
 ```
 
 ## POS V1 protocol
@@ -84,20 +103,20 @@ The order protocol, product batching logic, `START_ORDER`, `FILL_A_RATIO` and
 | POS | `POSCD` | 11000 |
 | Coordinator | `CoordinatorCD` | 11001 |
 | Bottle Loader | `BottleLoaderControllerCD` | 11002 |
-| Conveyor | `ConveyorControllerCD` | 11003 |
+| Rotary Table | `RotaryTableControllerCD` | 11003 |
 | Filler A | `FillerAControllerCD` | 11004 |
 | Filler B | `FillerBControllerCD` | 11005 |
 | Lid Loader | `LidLoaderControllerCD` | 11006 |
 | Capper | `CapperControllerCD` | 11007 |
 | ABS Visualisation | `ABSVisualisationPlantCD` | 11008 |
-| Rotary Turntable | `RotaryTurntableControllerCD` | 11009 |
+| Conveyor | `ConveyorControllerCD` | 11009 |
 | Bottle Unloader | `BottleUnloaderControllerCD` | 11010 |
 
 All local mappings use `127.0.0.1` and the Lab 3
 `SimpleServer`/`SimpleClient` pattern. The test Mock uses port 11002 for all
 machine-facing inputs; that mapping is **TEST ONLY**.
 
-## Reproducible integration test
+## Reproducible regression test
 
 The four-runtime test verifies:
 
@@ -109,8 +128,9 @@ POS -> Coordinator -> Mock final path -> Bottle Unloader BOTTLE_DONE
 ```
 
 See [`tests/README.md`](tests/README.md) for compilation, startup order,
-headless execution and expected evidence for all eight machine states and
-progress `0/2 -> 1/2 -> 2/2`.
+headless execution and expected regression evidence. This path validates M1
+transport and state handling against the test-only Mock; real Controller/Plant
+acceptance remains a separate cross-member integration activity.
 
 ## Prerequisite
 

@@ -57,6 +57,13 @@ MockController(
                         MockStateV1.requiredBottles
                     );
                 }
+                else {
+                    System.out.println(
+                        "[MOCK-LIFECYCLE] ignored START_ORDER=" +
+                        #START_ORDER + " batchActive=" +
+                        MockStateV1.batchActive
+                    );
+                }
             }
             pause;
         }
@@ -95,17 +102,12 @@ MockController(
         emit UNLOADER_STATUS(MockStateV1.unloaderStatus);
     } pause;}}
     ||
-    // Test-only final path: Capper -> Conveyor output -> Bottle Unloader.
+    // Test-only staged pipeline. MockStateV1 derives each REAL status from
+    // test-only mock bottles occupying Loader -> ... -> Unloader stages.
     {
         loop {
             int stage = MockStateV1.advanceBottleStage();
-            if (stage == MockStateV1.CAPPER_STAGE_DONE) {
-                System.out.println("Mock final path: Capper DONE");
-            }
-            else if (stage == MockStateV1.CONVEYOR_OUTPUT_STAGE_DONE) {
-                System.out.println("Mock final path: Conveyor output DONE");
-            }
-            else if (stage == MockStateV1.BOTTLE_COLLECTED) {
+            if (stage == MockStateV1.BOTTLE_COLLECTED) {
                 emit BOTTLE_DONE;
                 System.out.println(
                     "Mock Bottle Unloader emitted BOTTLE_DONE " +

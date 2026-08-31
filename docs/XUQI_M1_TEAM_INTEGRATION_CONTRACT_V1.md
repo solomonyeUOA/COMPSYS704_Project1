@@ -18,7 +18,7 @@ The following current files are the source of truth for this contract:
 - `xuqi_coordinator/coordinator.xml`
 - `xuqi_pos/pos.sysj`
 - `xuqi_pos/pos.xml`
-- `COMPSYS704_Project1_Interface_V1.xlsx`
+- `COMPSYS704_Interface_V1_Integration_Test_Candidate_M4_V1_2_synced_fixed_28082026.xlsx`
 
 The legacy `pos/` and `coordinator/` folders are not part of this contract.
 Controller-to-Controller signals, Controller-to-Plant sensors/actuators, and
@@ -41,7 +41,7 @@ CoordinatorCD
   |
   +-- BottleLoaderControllerCD
   +-- ConveyorControllerCD
-  +-- RotaryTurntableControllerCD
+  +-- RotaryTableControllerCD
   +-- FillerAControllerCD
   +-- FillerBControllerCD
   +-- LidLoaderControllerCD
@@ -64,13 +64,13 @@ The port in each XML mapping belongs to the receiving SystemJ runtime.
 | POS | `POSCD` | `11000` |
 | ABS Coordinator | `CoordinatorCD` | `11001` |
 | Bottle Loader Controller | `BottleLoaderControllerCD` | `11002` |
-| Conveyor Controller | `ConveyorControllerCD` | `11003` |
+| Rotary Table Controller | `RotaryTableControllerCD` | `11003` |
 | Filler A Controller | `FillerAControllerCD` | `11004` |
 | Filler B Controller | `FillerBControllerCD` | `11005` |
 | Lid Loader Controller | `LidLoaderControllerCD` | `11006` |
 | Capper Controller | `CapperControllerCD` | `11007` |
 | ABS Visualisation | `ABSVisualisationPlantCD` | `11008` |
-| Rotary Turntable Controller | `RotaryTurntableControllerCD` | `11009` |
+| Conveyor Controller | `ConveyorControllerCD` | `11009` |
 | Bottle Unloader Controller | `BottleUnloaderControllerCD` | `11010` |
 
 All current local mappings use `127.0.0.1`.
@@ -223,7 +223,7 @@ output Integer signal LOADER_STATUS;
 
 | Signal | Direction | SystemJ type | Receiver Clock Domain | Receiver port | Purpose |
 |---|---|---|---|---:|---|
-| `CONVEYOR_STATUS_REQUEST` | Coordinator → Conveyor | pure signal | `ConveyorControllerCD` | `11003` | Request the current Conveyor status. |
+| `CONVEYOR_STATUS_REQUEST` | Coordinator → Conveyor | pure signal | `ConveyorControllerCD` | `11009` | Request the current Conveyor status. |
 | `CONVEYOR_STATUS` | Conveyor → Coordinator | `Integer` | `CoordinatorCD` | `11001` | Return the current Conveyor status code. |
 
 ### 7.2 Required SystemJ declarations
@@ -246,25 +246,25 @@ output Integer signal CONVEYOR_STATUS;
 
 | Signal | XML element | Destination / listener | Class | IP | Port |
 |---|---|---|---|---|---:|
-| `CONVEYOR_STATUS_REQUEST` | `oSignal` | `ConveyorControllerCD.CONVEYOR_STATUS_REQUEST` | `com.systemj.ipc.SimpleClient` | `127.0.0.1` | `11003` |
+| `CONVEYOR_STATUS_REQUEST` | `oSignal` | `ConveyorControllerCD.CONVEYOR_STATUS_REQUEST` | `com.systemj.ipc.SimpleClient` | `127.0.0.1` | `11009` |
 | `CONVEYOR_STATUS` | `iSignal` | `CoordinatorCD` listener | `com.systemj.ipc.SimpleServer` | `127.0.0.1` | `11001` |
 
 ### 7.4 What the Conveyor owner must implement
 
 - Use the exact Clock Domain name `ConveyorControllerCD`.
-- Receive `CONVEYOR_STATUS_REQUEST` on port `11003`.
+- Receive `CONVEYOR_STATUS_REQUEST` on port `11009`.
 - Send `CONVEYOR_STATUS` to `CoordinatorCD.CONVEYOR_STATUS` on port `11001`.
 - Return the current status without starting or advancing the Conveyor.
 - Keep Conveyor sensors, motors, and Controller-to-Controller events outside
   this M1 contract.
 
-## 8. CoordinatorCD ↔ RotaryTurntableControllerCD
+## 8. CoordinatorCD ↔ RotaryTableControllerCD
 
 ### 8.1 Signals
 
 | Signal | Direction | SystemJ type | Receiver Clock Domain | Receiver port | Purpose |
 |---|---|---|---|---:|---|
-| `ROTARY_STATUS_REQUEST` | Coordinator → Rotary Turntable | pure signal | `RotaryTurntableControllerCD` | `11009` | Request the current Rotary Turntable status. |
+| `ROTARY_STATUS_REQUEST` | Coordinator → Rotary Table | pure signal | `RotaryTableControllerCD` | `11003` | Request the current Rotary Table status. |
 | `ROTARY_STATUS` | Rotary Turntable → Coordinator | `Integer` | `CoordinatorCD` | `11001` | Return the current Rotary Turntable status code. |
 
 ### 8.2 Required SystemJ declarations
@@ -287,13 +287,13 @@ output Integer signal ROTARY_STATUS;
 
 | Signal | XML element | Destination / listener | Class | IP | Port |
 |---|---|---|---|---|---:|
-| `ROTARY_STATUS_REQUEST` | `oSignal` | `RotaryTurntableControllerCD.ROTARY_STATUS_REQUEST` | `com.systemj.ipc.SimpleClient` | `127.0.0.1` | `11009` |
+| `ROTARY_STATUS_REQUEST` | `oSignal` | `RotaryTableControllerCD.ROTARY_STATUS_REQUEST` | `com.systemj.ipc.SimpleClient` | `127.0.0.1` | `11003` |
 | `ROTARY_STATUS` | `iSignal` | `CoordinatorCD` listener | `com.systemj.ipc.SimpleServer` | `127.0.0.1` | `11001` |
 
 ### 8.4 What the Rotary Turntable owner must implement
 
-- Use the exact Clock Domain name `RotaryTurntableControllerCD`.
-- Receive `ROTARY_STATUS_REQUEST` on port `11009`.
+- Use the exact Clock Domain name `RotaryTableControllerCD`.
+- Receive `ROTARY_STATUS_REQUEST` on port `11003`.
 - Send `ROTARY_STATUS` to `CoordinatorCD.ROTARY_STATUS` on port `11001`.
 - Return the current status without rotating or advancing the machine as a
   side effect of polling.
@@ -487,13 +487,19 @@ output Integer signal CAPPER_STATUS;
 |---|---|---|---|---:|---|
 | `UNLOADER_STATUS_REQUEST` | Coordinator → Bottle Unloader | pure signal | `BottleUnloaderControllerCD` | `11010` | Request the current Bottle Unloader status. |
 | `UNLOADER_STATUS` | Bottle Unloader → Coordinator | `Integer` | `CoordinatorCD` | `11001` | Return the current Bottle Unloader status code. |
-| `BOTTLE_DONE` | Bottle Unloader → Coordinator | pure signal | `CoordinatorCD` | `11001` | Report one finished bottle successfully collected/unloaded. |
+| `BOTTLE_DONE` | Bottle Unloader → Coordinator | pure signal | `CoordinatorCD` | `11001` | Report one finished bottle successfully collected/unloaded as one bounded `PRESENT` window followed by an `ABSENT` gap. |
 
 One `BOTTLE_DONE` means one finished bottle has reached the
 collection/unloading stage and has been successfully collected. The
 Coordinator increments the current product's completed-bottle count once for
 each event. A Capper completion or a bottle merely leaving an upstream station
 is not `BOTTLE_DONE`.
+
+The current M1 receiver edge-latches `BOTTLE_DONE`: it counts the rising edge
+once, ignores repeated reactions while the same signal remains `PRESENT`, and
+re-arms only after an `ABSENT` reaction. The integration Mock uses a 500 ms
+default `PRESENT` window. Because this pure signal has no bottle identifier,
+the real Bottle Unloader must not transmit retry copies for the same bottle.
 
 ### 13.2 Required SystemJ declarations
 
@@ -528,6 +534,9 @@ output signal BOTTLE_DONE;
 - Send `UNLOADER_STATUS` to `CoordinatorCD.UNLOADER_STATUS` on port `11001`.
 - Send exactly one `BOTTLE_DONE` to `CoordinatorCD.BOTTLE_DONE` on port `11001`
   for each successfully collected finished bottle.
+- Hold that one logical event `PRESENT` for one bounded observable window and
+  then provide at least one `ABSENT` reaction before the next bottle event.
+  Do not send retry copies for the same collected bottle.
 - Do not use a status poll as a trigger for collection or for `BOTTLE_DONE`.
 
 ## 14. CoordinatorCD → ABSVisualisationPlantCD
@@ -626,7 +635,7 @@ mapping:
 ### 16.1 Xuqi source/XML/Excel
 
 No mismatch was found among the current Xuqi POS SystemJ/XML, current Xuqi
-Coordinator SystemJ/XML, and `COMPSYS704_Project1_Interface_V1.xlsx` for:
+Coordinator SystemJ/XML, and the current master integration workbook for:
 
 - the POS and Coordinator Clock Domains and ports;
 - all eight current Coordinator-facing Machine Controllers;
@@ -637,10 +646,12 @@ Coordinator SystemJ/XML, and `COMPSYS704_Project1_Interface_V1.xlsx` for:
 
 ### 16.2 Member 3 comparison
 
-No Member 3 integration contract or Member 3 module was present in the
-inspected current project, so Member 3's current M3 ↔ M1 boundary cannot be
-verified from the available files. This is an unresolved integration-check
-item, not evidence that Member 3 currently matches or mismatches M1.
+The frozen M3-facing V2.1 contract was previously audited and the current
+master workbook/group report retain its M1-facing result:
+`ROTARY_STATUS_REQUEST` targets `RotaryTableControllerCD:11003`, while the Lid
+boundary remains at `LidLoaderControllerCD:11006`. The M3 contract and real M3
+SystemJ/XML are not currently stored in this repository, so peer implementation
+conformance remains unverifiable even though M1 is aligned to that contract.
 
 The following compatibility requirements are explicit:
 
@@ -658,6 +669,15 @@ The following compatibility requirements are explicit:
 
 Before integration, the Member 3 owner must compare its actual `.sysj` and XML
 against the applicable sections of this contract.
+
+### 16.3 Proposed Labeller monitoring
+
+The latest workbook records proposed `LABELLER_STATUS_REQUEST`,
+`LABELLER_STATUS` and `VIZ_LABELLER_STATUS` rows. They are not part of this
+implemented eight-Controller M1 boundary: no M2 production SystemJ/XML is
+available, and the current Advanced Visualisation report still identifies the
+Label workstation as planned. Team acceptance and peer implementation evidence
+are required before those signals can be added.
 
 ## 17. Minimum Integration Test
 
@@ -691,8 +711,9 @@ Minimum checks:
 3. Every real Machine Controller receives its status poll without changing
    physical operation and replies to `CoordinatorCD` on port `11001` with a
    valid status code from `0` to `4`.
-4. Only `BottleUnloaderControllerCD` sends one `BOTTLE_DONE` per successfully
-   collected bottle.
+4. Only `BottleUnloaderControllerCD` sends one bounded, edge-counted
+   `BOTTLE_DONE` window per successfully collected bottle, with an `ABSENT`
+   gap before the next bottle event.
 5. After all required bottles/products are complete, the Coordinator sends
    `orderId|COMPLETED|completionTimeSeconds` to `POSCD` on port `11000`.
 6. If ABS Visualisation is running, it receives all current status and progress

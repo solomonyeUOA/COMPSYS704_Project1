@@ -23,10 +23,30 @@
                      IP="127.0.0.1" Port="11001" />
             <iSignal Name="BOTTLE_DONE" Class="com.systemj.ipc.SimpleServer"
                      IP="127.0.0.1" Port="11001" />
+            <iSignal Name="FT_FAULT_ALERT"
+                     Class="com.systemj.ipc.SimpleServer"
+                     IP="127.0.0.1" Port="11001" />
+            <iSignal Name="FT_SAFE_STOP_REQUEST"
+                     Class="com.systemj.ipc.SimpleServer"
+                     IP="127.0.0.1" Port="11001" />
+            <iSignal Name="FT_RECOVERY_READY"
+                     Class="com.systemj.ipc.SimpleServer"
+                     IP="127.0.0.1" Port="11001" />
+            <iSignal Name="FT_RECOVERY_FAILED"
+                     Class="com.systemj.ipc.SimpleServer"
+                     IP="127.0.0.1" Port="11001" />
 
             <oSignal Name="ORDER_COMPLETE" To="POSCD.ORDER_COMPLETE"
                      Class="com.systemj.ipc.SimpleClient"
                      IP="127.0.0.1" Port="11000" />
+            <oSignal Name="FT_SAFE_STOP_ACK"
+                     To="FaultSupervisorCD.FT_SAFE_STOP_ACK"
+                     Class="OptionalSimpleClient"
+                     IP="127.0.0.1" Port="13003" />
+            <oSignal Name="FT_RESUME_DECISION"
+                     To="FaultSupervisorCD.FT_RESUME_DECISION"
+                     Class="OptionalSimpleClient"
+                     IP="127.0.0.1" Port="13003" />
 
             <oSignal Name="START_ORDER" To="MockControllerCD.START_ORDER"
                      Class="com.systemj.ipc.SimpleClient"

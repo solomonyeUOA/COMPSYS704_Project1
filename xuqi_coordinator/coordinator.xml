@@ -24,10 +24,34 @@
             <iSignal Name="BOTTLE_DONE" Class="com.systemj.ipc.SimpleServer"
                      IP="127.0.0.1" Port="11001" />
 
+            <!-- M3 FaultSupervisorCD -> CoordinatorCD, frozen V2.1 -->
+            <iSignal Name="FT_FAULT_ALERT"
+                     Class="com.systemj.ipc.SimpleServer"
+                     IP="127.0.0.1" Port="11001" />
+            <iSignal Name="FT_SAFE_STOP_REQUEST"
+                     Class="com.systemj.ipc.SimpleServer"
+                     IP="127.0.0.1" Port="11001" />
+            <iSignal Name="FT_RECOVERY_READY"
+                     Class="com.systemj.ipc.SimpleServer"
+                     IP="127.0.0.1" Port="11001" />
+            <iSignal Name="FT_RECOVERY_FAILED"
+                     Class="com.systemj.ipc.SimpleServer"
+                     IP="127.0.0.1" Port="11001" />
+
             <!-- Coordinator -> POS -->
             <oSignal Name="ORDER_COMPLETE" To="POSCD.ORDER_COMPLETE"
                      Class="com.systemj.ipc.SimpleClient"
                      IP="127.0.0.1" Port="11000" />
+
+            <!-- CoordinatorCD -> M3 FaultSupervisorCD, frozen V2.1 -->
+            <oSignal Name="FT_SAFE_STOP_ACK"
+                     To="FaultSupervisorCD.FT_SAFE_STOP_ACK"
+                     Class="OptionalSimpleClient"
+                     IP="127.0.0.1" Port="13003" />
+            <oSignal Name="FT_RESUME_DECISION"
+                     To="FaultSupervisorCD.FT_RESUME_DECISION"
+                     Class="OptionalSimpleClient"
+                     IP="127.0.0.1" Port="13003" />
 
             <!-- Coordinator -> Bottle Loader Controller -->
             <oSignal Name="START_ORDER"
@@ -39,17 +63,17 @@
                      Class="com.systemj.ipc.SimpleClient"
                      IP="127.0.0.1" Port="11002" />
 
-            <!-- Coordinator -> Conveyor Controller -->
+            <!-- Coordinator -> M2 Conveyor Controller (assigned receiver). -->
             <oSignal Name="CONVEYOR_STATUS_REQUEST"
                      To="ConveyorControllerCD.CONVEYOR_STATUS_REQUEST"
                      Class="com.systemj.ipc.SimpleClient"
-                     IP="127.0.0.1" Port="11003" />
-
-            <!-- Coordinator -> Rotary Turntable Controller -->
-            <oSignal Name="ROTARY_STATUS_REQUEST"
-                     To="RotaryTurntableControllerCD.ROTARY_STATUS_REQUEST"
-                     Class="com.systemj.ipc.SimpleClient"
                      IP="127.0.0.1" Port="11009" />
+
+            <!-- Coordinator -> M3 Rotary Table Controller, frozen V2.1. -->
+            <oSignal Name="ROTARY_STATUS_REQUEST"
+                     To="RotaryTableControllerCD.ROTARY_STATUS_REQUEST"
+                     Class="com.systemj.ipc.SimpleClient"
+                     IP="127.0.0.1" Port="11003" />
 
             <!-- Coordinator -> Filler A Controller -->
             <oSignal Name="FILL_A_RATIO"
