@@ -16,13 +16,19 @@ public final class RotaryControllerModelV1 {
     private int tablePosition = 0;
     private boolean motorEnabled = false;
     private String faultReason = "";
+    private long activeCycleId;
+    private long lastCompletedCycleId;
+    private long faultSequence;
+    private String faultEventId;
 
-    /** Starts a step unless a completed capped bottle blocks position 1. */
-    public boolean requestRotation(boolean capOnBottleAtPosition1) {
-        if (state != State.READY || capOnBottleAtPosition1) {
+    /** Starts one M3-sequenced step after the Plant station barrier passes. */
+    public boolean requestRotation(long cycleId, boolean barrierSatisfied) {
+        if (state != State.READY || !barrierSatisfied || cycleId <= 0 ||
+            cycleId <= lastCompletedCycleId) {
             return false;
         }
 
+        activeCycleId = cycleId;
         state = State.ROTATING;
         stateElapsedMs = 0;
         motorEnabled = true;
@@ -46,6 +52,7 @@ public final class RotaryControllerModelV1 {
         else if (state == State.VERIFYING_ALIGNMENT) {
             if (tableAlignedWithSensor) {
                 tablePosition = (tablePosition + 1) % 6;
+                lastCompletedCycleId = activeCycleId;
                 state = State.DONE;
                 stateElapsedMs = 0;
             }
@@ -66,14 +73,24 @@ public final class RotaryControllerModelV1 {
         return true;
     }
 
-    public boolean resetFault(boolean tableAlignedWithSensor) {
-        if (state != State.FAULT || !tableAlignedWithSensor) {
+    public boolean resetFault(RotaryRecoveryEvidenceV1 evidence) {
+        if (state != State.FAULT || evidence == null ||
+            !evidence.permitsReset()) {
             return false;
         }
         state = State.READY;
         stateElapsedMs = 0;
         faultReason = "";
+        faultEventId = null;
         return true;
+    }
+
+    public long getActiveCycleId() {
+        return activeCycleId;
+    }
+
+    public long getLastCompletedCycleId() {
+        return lastCompletedCycleId;
     }
 
     public int getStatus() {
@@ -106,9 +123,15 @@ public final class RotaryControllerModelV1 {
         return faultReason;
     }
 
+    public String getFaultEventId() {
+        return faultEventId;
+    }
+
     private void fail(String reason) {
         state = State.FAULT;
         motorEnabled = false;
         faultReason = reason;
+        faultSequence++;
+        faultEventId = "ROTARY-" + faultSequence;
     }
 }

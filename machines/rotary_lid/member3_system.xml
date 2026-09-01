@@ -1,32 +1,41 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- Canonical Member 3 runtime: both Controllers and both Plant models. -->
+<!-- Canonical V2.1 M3 runtime: Rotary, Lid Loader, Plants and FT supervisor. -->
 <System xmlns="http://systemjtechnology.com">
     <SubSystem Name="MEMBER3_SS" Local="true">
-        <ClockDomain Name="TransportControllerCD" Class="TransportController">
-            <iSignal Name="TRANSPORT_STATUS_REQUEST" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="11003" />
-            <iSignal Name="ROTATE_REQUEST" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="11003" />
+        <ClockDomain Name="RotaryTableControllerCD" Class="RotaryTableController">
+            <iSignal Name="ROTARY_STATUS_REQUEST" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="11003" />
+            <iSignal Name="ROTATION_READY" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="11003" />
             <iSignal Name="TABLE_ALIGNED_WITH_SENSOR" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="11003" />
-            <iSignal Name="CAP_ON_BOTTLE_AT_POS1" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="11003" />
+            <iSignal Name="ROTARY_BOTTLE_CONTEXT" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="11003" />
             <iSignal Name="ROTARY_FAULT_RESET" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="11003" />
-            <oSignal Name="TRANSPORT_STATUS" To="CoordinatorCD.TRANSPORT_STATUS" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="11001" />
+            <iSignal Name="M1_SAFE_STOP_ACKNOWLEDGED" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="11003" />
+            <iSignal Name="BOTTLE_POSITIONS_RECONCILED" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="11003" />
+            <iSignal Name="INDEPENDENT_POSITION_CONFIRMED" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="11003" />
+            <oSignal Name="ROTARY_STATUS" To="CoordinatorCD.ROTARY_STATUS" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="11001" />
             <oSignal Name="ROTARY_TABLE_TRIGGER" To="RotaryTablePlantCD.ROTARY_TABLE_TRIGGER" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="12003" />
+            <oSignal Name="ROTARY_CONTEXT_TO_PLANT" To="RotaryTablePlantCD.ROTARY_CONTEXT_TO_PLANT" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="12003" />
             <oSignal Name="ROTATION_DONE" To="RotaryTablePlantCD.ROTATION_DONE" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="12003" />
         </ClockDomain>
 
         <ClockDomain Name="RotaryTablePlantCD" Class="RotaryTablePlant">
             <iSignal Name="ROTARY_TABLE_TRIGGER" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="12003" />
+            <iSignal Name="ROTATION_DONE" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="12003" />
+            <iSignal Name="ROTARY_CONTEXT_TO_PLANT" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="12003" />
             <iSignal Name="LOAD_BOTTLE" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="12003" />
             <iSignal Name="MARK_FILLED" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="12003" />
-            <iSignal Name="MARK_LID_PLACED" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="12003" />
+            <iSignal Name="LID_CYCLE_DONE" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="12003" />
             <iSignal Name="MARK_CAPPED" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="12003" />
-            <iSignal Name="REMOVE_BOTTLE" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="12003" />
+            <iSignal Name="MARK_LABELLED" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="12003" />
+            <iSignal Name="P6_CLEAR" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="12003" />
             <iSignal Name="INJECT_ALIGNMENT_FAULT" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="12003" />
             <iSignal Name="CLEAR_ALIGNMENT_FAULT" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="12003" />
-            <iSignal Name="ROTATION_DONE" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="12003" />
-            <oSignal Name="TABLE_ALIGNED_WITH_SENSOR" To="TransportControllerCD.TABLE_ALIGNED_WITH_SENSOR" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="11003" />
-            <oSignal Name="CAP_ON_BOTTLE_AT_POS1" To="TransportControllerCD.CAP_ON_BOTTLE_AT_POS1" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="11003" />
+            <oSignal Name="ROTATION_READY" To="RotaryTableControllerCD.ROTATION_READY" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="11003" />
+            <oSignal Name="TABLE_ALIGNED_WITH_SENSOR" To="RotaryTableControllerCD.TABLE_ALIGNED_WITH_SENSOR" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="11003" />
             <oSignal Name="BOTTLE_AT_LID_POSITION" To="LidLoaderControllerCD.BOTTLE_AT_LID_POSITION" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="11006" />
             <oSignal Name="LID_POSITION_CLEAR" To="LidLoaderControllerCD.LID_POSITION_CLEAR" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="11006" />
+            <oSignal Name="BOTTLE_AT_FILL" To="FillerAControllerCD.BOTTLE_AT_FILL" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="11004" />
+            <oSignal Name="BOTTLE_AT_CAP" To="CapperControllerCD.BOTTLE_AT_CAP" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="11007" />
+            <oSignal Name="BOTTLE_AT_LABEL" To="LabellerControllerCD.BOTTLE_AT_LABEL" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="11013" />
         </ClockDomain>
 
         <ClockDomain Name="LidLoaderControllerCD" Class="LidLoaderController">
@@ -38,11 +47,15 @@
             <iSignal Name="LID_PICKED" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="11006" />
             <iSignal Name="LID_PLACED_SENSOR" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="11006" />
             <iSignal Name="LID_FAULT_RESET" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="11006" />
+            <iSignal Name="LID_ACTUATOR_HOME" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="11006" />
+            <iSignal Name="NO_LID_HELD" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="11006" />
+            <iSignal Name="LID_PLACEMENT_RECONCILED" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="11006" />
+            <iSignal Name="LID_PLACEMENT_SENSOR_HEALTHY" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="11006" />
             <oSignal Name="LID_STATUS" To="CoordinatorCD.LID_STATUS" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="11001" />
             <oSignal Name="PICK_LID_TRIGGER" To="LidLoaderPlantCD.PICK_LID_TRIGGER" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="12006" />
             <oSignal Name="PLACE_LID_TRIGGER" To="LidLoaderPlantCD.PLACE_LID_TRIGGER" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="12006" />
             <oSignal Name="LID_ABORT" To="LidLoaderPlantCD.LID_ABORT" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="12006" />
-            <oSignal Name="LID_CYCLE_DONE" To="RotaryTablePlantCD.MARK_LID_PLACED" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="12003" />
+            <oSignal Name="LID_CYCLE_DONE" To="RotaryTablePlantCD.LID_CYCLE_DONE" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="12003" />
         </ClockDomain>
 
         <ClockDomain Name="LidLoaderPlantCD" Class="LidLoaderPlant">
@@ -58,6 +71,22 @@
             <oSignal Name="LID_MAGAZINE_EMPTY" To="LidLoaderControllerCD.LID_MAGAZINE_EMPTY" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="11006" />
             <oSignal Name="LID_PICKED" To="LidLoaderControllerCD.LID_PICKED" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="11006" />
             <oSignal Name="LID_PLACED_SENSOR" To="LidLoaderControllerCD.LID_PLACED_SENSOR" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="11006" />
+            <oSignal Name="LID_ACTUATOR_HOME" To="LidLoaderControllerCD.LID_ACTUATOR_HOME" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="11006" />
+            <oSignal Name="NO_LID_HELD" To="LidLoaderControllerCD.NO_LID_HELD" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="11006" />
+            <oSignal Name="LID_PLACEMENT_SENSOR_HEALTHY" To="LidLoaderControllerCD.LID_PLACEMENT_SENSOR_HEALTHY" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="11006" />
+        </ClockDomain>
+
+        <ClockDomain Name="FaultSupervisorCD" Class="FaultSupervisor">
+            <iSignal Name="TRANSFER_FAULT_EVENT" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="13003" />
+            <iSignal Name="TRANSFER_RECOVERY_ACK" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="13003" />
+            <iSignal Name="TRANSFER_RECOVERY_RESULT" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="13003" />
+            <iSignal Name="FT_SAFE_STOP_ACK" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="13003" />
+            <iSignal Name="FT_RESUME_DECISION" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="13003" />
+            <oSignal Name="TRANSFER_RECOVERY_REQUEST" To="M2TransferFaultAdapterCD.TRANSFER_RECOVERY_REQUEST" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="13002" />
+            <oSignal Name="FT_FAULT_ALERT" To="CoordinatorCD.FT_FAULT_ALERT" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="11001" />
+            <oSignal Name="FT_SAFE_STOP_REQUEST" To="CoordinatorCD.FT_SAFE_STOP_REQUEST" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="11001" />
+            <oSignal Name="FT_RECOVERY_READY" To="CoordinatorCD.FT_RECOVERY_READY" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="11001" />
+            <oSignal Name="FT_RECOVERY_FAILED" To="CoordinatorCD.FT_RECOVERY_FAILED" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="11001" />
         </ClockDomain>
     </SubSystem>
 </System>

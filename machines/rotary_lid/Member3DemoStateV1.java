@@ -1,130 +1,78 @@
-/** Deterministic action scheduler for the test-only SystemJ demo driver. */
+/** Scheduler state for the test-only integrated SystemJ M3 demonstration. */
 public final class Member3DemoStateV1 {
     public static final int NONE = 0;
-    public static final int LOAD = 1;
-    public static final int ROTATE = 2;
-    public static final int MARK_FILLED = 3;
-    public static final int MARK_CAPPED = 4;
-    public static final int REMOVE = 5;
-    public static final int PASS = 6;
+    public static final int SEND_CONTEXT = 1;
+    public static final int LOAD = 2;
+    public static final int CLEAR_P6 = 3;
+    public static final int PASS = 4;
 
     private static int phase;
     private static long actionAfterMs;
-    private static boolean complete;
-    private static boolean sawRotationBusy;
+    private static String clearBottleId;
+    private static boolean passPublished;
+    private static long contextStartMs;
 
     private Member3DemoStateV1() {
     }
 
     public static synchronized void reset() {
         phase = 0;
-        actionAfterMs = System.currentTimeMillis() + 500;
-        complete = false;
-        sawRotationBusy = false;
+        contextStartMs = System.currentTimeMillis();
+        actionAfterMs = contextStartMs + 500;
+        clearBottleId = null;
+        passPublished = false;
     }
 
     public static synchronized int nextAction() {
         long now = System.currentTimeMillis();
-        if (now < actionAfterMs || complete) {
+        if (now < actionAfterMs) {
             return NONE;
         }
-
-        if (isWaitingForRotation()) {
-            int status = Member3MachineStateV1.getTransportStatus();
-            if (status == Member3MachineStateV1.BUSY) {
-                sawRotationBusy = true;
+        if (phase == 0) {
+            actionAfterMs = now + 100;
+            if (now - contextStartMs >= 1500) {
+                phase = 1;
+                return NONE;
             }
-            else if (sawRotationBusy && status == Member3MachineStateV1.DONE) {
-                advanceAfterRotation(now);
-            }
+            return SEND_CONTEXT;
         }
-
-        switch (phase) {
-            case 0:
-                if (Member3PlantStateV1.positionLabel(0)
-                    .contains("DEMO-B001")) {
-                    phase = 1;
-                    actionAfterMs = now + 150;
-                    return NONE;
-                }
-                actionAfterMs = now + 100;
-                return LOAD;
-            case 1:
+        if (phase == 1) {
+            actionAfterMs = now + 100;
+            if (Member3PlantStateV1.positionLabel(0).contains("DEMO-B001")) {
                 phase = 2;
-                sawRotationBusy = false;
-                return ROTATE;
-            case 3:
-                if (Member3PlantStateV1.positionLabel(1).contains("F")) {
-                    phase = 4;
-                    actionAfterMs = now + 150;
-                    return NONE;
-                }
-                actionAfterMs = now + 100;
-                return MARK_FILLED;
-            case 4:
-                phase = 5;
-                sawRotationBusy = false;
-                return ROTATE;
-            case 6:
-                if (Member3PlantStateV1.positionLabel(2).contains("L")) {
-                    phase = 7;
-                    sawRotationBusy = false;
-                    return ROTATE;
-                }
                 return NONE;
-            case 8:
-                if (Member3PlantStateV1.positionLabel(3).contains("C")) {
-                    phase = 9;
-                    actionAfterMs = now + 150;
-                    return NONE;
-                }
-                actionAfterMs = now + 100;
-                return MARK_CAPPED;
-            case 9:
-                phase = 10;
-                sawRotationBusy = false;
-                return ROTATE;
-            case 11:
-                if ("empty".equals(Member3PlantStateV1.positionLabel(4))) {
-                    phase = 12;
-                    complete = true;
-                    return PASS;
-                }
-                actionAfterMs = now + 100;
-                return REMOVE;
-            default:
-                return NONE;
+            }
+            return LOAD;
         }
-    }
-
-    public static synchronized void onRotationDone() {
-        if (sawRotationBusy) {
-            advanceAfterRotation(System.currentTimeMillis());
-        }
-    }
-
-    private static boolean isWaitingForRotation() {
-        return phase == 2 || phase == 5 || phase == 7 || phase == 10;
-    }
-
-    private static void advanceAfterRotation(long now) {
-        if (phase == 2) {
+        if (phase == 2 && clearBottleId != null) {
             phase = 3;
+            actionAfterMs = now + 100;
+            return CLEAR_P6;
         }
-        else if (phase == 5) {
-            phase = 6;
+        if (phase == 3 && allPositionsEmpty() && !passPublished) {
+            passPublished = true;
+            return PASS;
         }
-        else if (phase == 7) {
-            phase = 8;
-        }
-        else if (phase == 10) {
-            phase = 11;
-        }
-        sawRotationBusy = false;
-        actionAfterMs = now + 100;
+        actionAfterMs = now + 50;
+        return NONE;
     }
 
-    public static synchronized boolean isComplete() {
-        return complete;
+    public static synchronized void onLabelOffered(String bottleId) {
+        BottleContextV1.validateBottleId(bottleId);
+        clearBottleId = bottleId;
+        actionAfterMs = System.currentTimeMillis() + 150;
+    }
+
+    public static synchronized String clearBottleId() {
+        return clearBottleId;
+    }
+
+    private static boolean allPositionsEmpty() {
+        for (int position = 0; position < 6; position++) {
+            if (!"empty".equals(Member3PlantStateV1.positionLabel(position))) {
+                return false;
+            }
+        }
+        return true;
     }
 }

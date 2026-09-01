@@ -14,6 +14,9 @@ LidLoaderPlant(
     output signal LID_MAGAZINE_EMPTY;
     output signal LID_PICKED;
     output signal LID_PLACED_SENSOR;
+    output signal LID_ACTUATOR_HOME;
+    output signal NO_LID_HELD;
+    output signal LID_PLACEMENT_SENSOR_HEALTHY;
 )
 ->{
     Member3Visualisation.start();
@@ -76,6 +79,15 @@ LidLoaderPlant(
         }
         if (Member3PlantStateV1.isLidPlacedSensorActive()) {
             emit LID_PLACED_SENSOR;
+        }
+        if (Member3PlantStateV1.isLidActuatorHome()) {
+            emit LID_ACTUATOR_HOME;
+        }
+        if (Member3PlantStateV1.isNoLidHeld()) {
+            emit NO_LID_HELD;
+        }
+        if (Member3PlantStateV1.isLidPlacementSensorHealthy()) {
+            emit LID_PLACEMENT_SENSOR_HEALTHY;
         }
         pause;
     }}

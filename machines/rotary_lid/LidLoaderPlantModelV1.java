@@ -102,4 +102,16 @@ public final class LidLoaderPlantModelV1 {
     public String getActionName() {
         return action.name();
     }
+
+    public boolean isActuatorHome() {
+        return action == Action.IDLE;
+    }
+
+    public boolean isNoLidHeld() {
+        return action == Action.IDLE || action == Action.PICKING;
+    }
+
+    public boolean isPlacementSensorHealthy() {
+        return !placeFault;
+    }
 }

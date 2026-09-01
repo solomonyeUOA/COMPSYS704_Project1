@@ -1,0 +1,56 @@
+// M3 IP fault supervisor. It never drives transfer, rotary or lid actuators.
+
+FaultSupervisor(
+    input String signal TRANSFER_FAULT_EVENT;
+    input String signal TRANSFER_RECOVERY_ACK;
+    input String signal TRANSFER_RECOVERY_RESULT;
+    input String signal FT_SAFE_STOP_ACK;
+    input String signal FT_RESUME_DECISION;
+
+    output String signal TRANSFER_RECOVERY_REQUEST;
+    output String signal FT_FAULT_ALERT;
+    output String signal FT_SAFE_STOP_REQUEST;
+    output String signal FT_RECOVERY_READY;
+    output String signal FT_RECOVERY_FAILED;
+)
+->{
+    FaultManagementGUI.start();
+    System.out.println("M3 FaultSupervisorCD started on V2.1 boundary");
+
+    {loop {
+        present(TRANSFER_FAULT_EVENT) {
+            FaultSupervisorStateV2_1.onTransferFault(
+                #TRANSFER_FAULT_EVENT
+            );
+        }
+        present(TRANSFER_RECOVERY_ACK) {
+            FaultSupervisorStateV2_1.onRecoveryAck(
+                #TRANSFER_RECOVERY_ACK
+            );
+        }
+        present(TRANSFER_RECOVERY_RESULT) {
+            FaultSupervisorStateV2_1.onRecoveryResult(
+                #TRANSFER_RECOVERY_RESULT
+            );
+        }
+
+        // M1 payload fields are not frozen in V2.1. Presence alone is not
+        // accepted as independent safe-stop or resume evidence.
+        present(FT_SAFE_STOP_ACK) {
+            System.out.println(
+                "FT_SAFE_STOP_ACK ignored until the M1 payload schema is frozen"
+            );
+        }
+        present(FT_RESUME_DECISION) {
+            System.out.println(
+                "FT_RESUME_DECISION recorded by M1; M3 cannot resume the line"
+            );
+        }
+
+        String request = FaultSupervisorStateV2_1.takeRecoveryRequest();
+        if (request != null) {
+            emit TRANSFER_RECOVERY_REQUEST(request);
+        }
+        pause;
+    }}
+}

@@ -1,53 +1,24 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <System xmlns="http://systemjtechnology.com">
     <SubSystem Name="LID_LOADER_SS" Local="true">
-        <ClockDomain Name="LidLoaderControllerCD"
-                     Class="LidLoaderController">
-            <iSignal Name="LID_STATUS_REQUEST"
-                     Class="com.systemj.ipc.SimpleServer"
-                     IP="127.0.0.1" Port="11006" />
-            <iSignal Name="BOTTLE_AT_LID_POSITION"
-                     Class="com.systemj.ipc.SimpleServer"
-                     IP="127.0.0.1" Port="11006" />
-            <iSignal Name="LID_POSITION_CLEAR"
-                     Class="com.systemj.ipc.SimpleServer"
-                     IP="127.0.0.1" Port="11006" />
-            <iSignal Name="LID_AVAILABLE"
-                     Class="com.systemj.ipc.SimpleServer"
-                     IP="127.0.0.1" Port="11006" />
-            <iSignal Name="LID_MAGAZINE_EMPTY"
-                     Class="com.systemj.ipc.SimpleServer"
-                     IP="127.0.0.1" Port="11006" />
-            <iSignal Name="LID_PICKED"
-                     Class="com.systemj.ipc.SimpleServer"
-                     IP="127.0.0.1" Port="11006" />
-            <iSignal Name="LID_PLACED_SENSOR"
-                     Class="com.systemj.ipc.SimpleServer"
-                     IP="127.0.0.1" Port="11006" />
-            <iSignal Name="LID_FAULT_RESET"
-                     Class="com.systemj.ipc.SimpleServer"
-                     IP="127.0.0.1" Port="11006" />
-
-            <oSignal Name="LID_STATUS"
-                     To="CoordinatorCD.LID_STATUS"
-                     Class="com.systemj.ipc.SimpleClient"
-                     IP="127.0.0.1" Port="11001" />
-            <oSignal Name="PICK_LID_TRIGGER"
-                     To="LidLoaderPlantCD.PICK_LID_TRIGGER"
-                     Class="com.systemj.ipc.SimpleClient"
-                     IP="127.0.0.1" Port="12006" />
-            <oSignal Name="PLACE_LID_TRIGGER"
-                     To="LidLoaderPlantCD.PLACE_LID_TRIGGER"
-                     Class="com.systemj.ipc.SimpleClient"
-                     IP="127.0.0.1" Port="12006" />
-            <oSignal Name="LID_ABORT"
-                     To="LidLoaderPlantCD.LID_ABORT"
-                     Class="com.systemj.ipc.SimpleClient"
-                     IP="127.0.0.1" Port="12006" />
-            <oSignal Name="LID_CYCLE_DONE"
-                     To="RotaryTablePlantCD.MARK_LID_PLACED"
-                     Class="com.systemj.ipc.SimpleClient"
-                     IP="127.0.0.1" Port="12003" />
+        <ClockDomain Name="LidLoaderControllerCD" Class="LidLoaderController">
+            <iSignal Name="LID_STATUS_REQUEST" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="11006" />
+            <iSignal Name="BOTTLE_AT_LID_POSITION" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="11006" />
+            <iSignal Name="LID_POSITION_CLEAR" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="11006" />
+            <iSignal Name="LID_AVAILABLE" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="11006" />
+            <iSignal Name="LID_MAGAZINE_EMPTY" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="11006" />
+            <iSignal Name="LID_PICKED" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="11006" />
+            <iSignal Name="LID_PLACED_SENSOR" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="11006" />
+            <iSignal Name="LID_FAULT_RESET" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="11006" />
+            <iSignal Name="LID_ACTUATOR_HOME" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="11006" />
+            <iSignal Name="NO_LID_HELD" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="11006" />
+            <iSignal Name="LID_PLACEMENT_RECONCILED" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="11006" />
+            <iSignal Name="LID_PLACEMENT_SENSOR_HEALTHY" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="11006" />
+            <oSignal Name="LID_STATUS" To="CoordinatorCD.LID_STATUS" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="11001" />
+            <oSignal Name="PICK_LID_TRIGGER" To="LidLoaderPlantCD.PICK_LID_TRIGGER" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="12006" />
+            <oSignal Name="PLACE_LID_TRIGGER" To="LidLoaderPlantCD.PLACE_LID_TRIGGER" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="12006" />
+            <oSignal Name="LID_ABORT" To="LidLoaderPlantCD.LID_ABORT" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="12006" />
+            <oSignal Name="LID_CYCLE_DONE" To="RotaryTablePlantCD.LID_CYCLE_DONE" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="12003" />
         </ClockDomain>
     </SubSystem>
 </System>

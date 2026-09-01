@@ -88,7 +88,7 @@ public final class Member3Visualisation {
             g.drawString("Action: " +
                 Member3PlantStateV1.getLidActionName(), 530, 152);
             g.drawString("Rotary: " + Member3MachineStateV1.statusName(
-                Member3MachineStateV1.getTransportStatus()), 530, 205);
+                Member3MachineStateV1.getRotaryStatus()), 530, 205);
             g.drawString("Lid: " + Member3MachineStateV1.statusName(
                 Member3MachineStateV1.getLidStatus()), 530, 232);
 
@@ -97,8 +97,8 @@ public final class Member3Visualisation {
             g.drawString("P2 Fill", 115, 505);
             g.drawString("P3 Lid", 205, 505);
             g.drawString("P4 Cap", 295, 505);
-            g.drawString("P5 Exit", 385, 505);
-            g.drawString("P6 Unused", 475, 505);
+            g.drawString("P5 Transfer", 385, 505);
+            g.drawString("P6 Label", 485, 505);
             g.dispose();
         }
 
