@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<System xmlns="http://systemjtechnology.com">
+    <SubSystem Name="ROTARY_PLANT_SS" Local="true">
+        <ClockDomain Name="RotaryTablePlantCD" Class="RotaryTablePlant">
+            <iSignal Name="ROTARY_TABLE_TRIGGER" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="12003" />
+            <iSignal Name="ROTATION_DONE" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="12003" />
+            <iSignal Name="ROTARY_CONTEXT_TO_PLANT" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="12003" />
+            <iSignal Name="LOAD_BOTTLE" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="12003" />
+            <iSignal Name="MARK_FILLED" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="12003" />
+            <iSignal Name="LID_CYCLE_DONE" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="12003" />
+            <iSignal Name="MARK_CAPPED" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="12003" />
+            <iSignal Name="MARK_LABELLED" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="12003" />
+            <iSignal Name="P6_CLEAR" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="12003" />
+            <iSignal Name="INJECT_ALIGNMENT_FAULT" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="12003" />
+            <iSignal Name="CLEAR_ALIGNMENT_FAULT" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="12003" />
+            <oSignal Name="ROTATION_READY" To="RotaryTableControllerCD.ROTATION_READY" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="11003" />
+            <oSignal Name="TABLE_ALIGNED_WITH_SENSOR" To="RotaryTableControllerCD.TABLE_ALIGNED_WITH_SENSOR" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="11003" />
+            <oSignal Name="BOTTLE_AT_LID_POSITION" To="LidLoaderControllerCD.BOTTLE_AT_LID_POSITION" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="11006" />
+            <oSignal Name="LID_POSITION_CLEAR" To="LidLoaderControllerCD.LID_POSITION_CLEAR" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="11006" />
+            <oSignal Name="BOTTLE_AT_FILL" To="FillerAControllerCD.BOTTLE_AT_FILL" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="11004" />
+            <oSignal Name="BOTTLE_AT_CAP" To="CapperControllerCD.BOTTLE_AT_CAP" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="11007" />
+            <oSignal Name="BOTTLE_AT_LABEL" To="LabellerControllerCD.BOTTLE_AT_LABEL" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="11013" />
+        </ClockDomain>
+    </SubSystem>
+</System>

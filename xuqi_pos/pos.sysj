@@ -1,0 +1,48 @@
+// COMPSYS704 Project 1 - POS Integration V1 with Swing Visualisation
+//
+// ORDER V1:          orderId|productCount|productId,A%,B%,quantity;...
+// ORDER_COMPLETE V1: orderId|COMPLETED|completionTimeSeconds
+
+POS(
+    input String signal ORDER_COMPLETE;
+    output String signal ORDER;
+)
+->{
+    POSVisualisation.start();
+    System.out.println("POS Integration V1 started");
+
+    loop {
+        String submittedOrder = POSVisualisation.pollSubmittedOrder();
+        if (submittedOrder != null) {
+            // POS validates again at the SystemJ boundary. The Coordinator
+            // performs its own independent validation after receiving ORDER.
+            if (OrderV1.parse(submittedOrder) != null) {
+                emit ORDER(submittedOrder);
+                if (POSVisualisation.isOrderTransmissionStart()) {
+                    POSVisualisation.showSubmitted(submittedOrder);
+                    System.out.println(
+                        "POS sent ORDER: " + submittedOrder
+                    );
+                }
+            }
+            else {
+                POSVisualisation.showValidationError(
+                    "Invalid order was not sent"
+                );
+                System.out.println(
+                    "POS rejected invalid order: " + submittedOrder
+                );
+            }
+        }
+
+        present(ORDER_COMPLETE) {
+            String completionResult =
+                POSVisualisation.handleCompletion(#ORDER_COMPLETE);
+            if (completionResult != null) {
+                System.out.println(completionResult);
+            }
+        }
+
+        pause;
+    }
+}

@@ -1,0 +1,94 @@
+// Timed high-level Plant abstraction based on the Lab 3 lid-loader sequence.
+
+LidLoaderPlant(
+    input signal PICK_LID_TRIGGER;
+    input signal PLACE_LID_TRIGGER;
+    input signal LID_ABORT;
+    input Integer signal REFILL_LIDS;
+    input signal INJECT_PICK_FAULT;
+    input signal CLEAR_PICK_FAULT;
+    input signal INJECT_PLACE_FAULT;
+    input signal CLEAR_PLACE_FAULT;
+
+    output signal LID_AVAILABLE;
+    output signal LID_MAGAZINE_EMPTY;
+    output signal LID_PICKED;
+    output signal LID_PLACED_SENSOR;
+    output signal LID_ACTUATOR_HOME;
+    output signal NO_LID_HELD;
+    output signal LID_PLACEMENT_SENSOR_HEALTHY;
+)
+->{
+    Member3Visualisation.start();
+    System.out.println("Member 3 LidLoaderPlantCD started");
+
+    {loop {present(REFILL_LIDS) {
+        Member3PlantStateV1.refillLids(#REFILL_LIDS);
+    } pause;}}
+    ||
+    {loop {present(INJECT_PICK_FAULT) {
+        Member3PlantStateV1.setPickFault(true);
+    } pause;}}
+    ||
+    {loop {present(CLEAR_PICK_FAULT) {
+        Member3PlantStateV1.setPickFault(false);
+    } pause;}}
+    ||
+    {loop {present(INJECT_PLACE_FAULT) {
+        Member3PlantStateV1.setPlaceFault(true);
+    } pause;}}
+    ||
+    {loop {present(CLEAR_PLACE_FAULT) {
+        Member3PlantStateV1.setPlaceFault(false);
+    } pause;}}
+    ||
+    {loop {present(LID_ABORT) {
+        Member3PlantStateV1.cancelLidAction();
+    } pause;}}
+    ||
+    {loop {
+        present(PICK_LID_TRIGGER) {
+            Member3PlantStateV1.setPickCommand(true);
+        }
+        else {
+            Member3PlantStateV1.setPickCommand(false);
+        }
+        pause;
+    }}
+    ||
+    {loop {
+        present(PLACE_LID_TRIGGER) {
+            Member3PlantStateV1.setPlaceCommand(true);
+        }
+        else {
+            Member3PlantStateV1.setPlaceCommand(false);
+        }
+        pause;
+    }}
+    ||
+    {loop {
+        Member3PlantStateV1.updateLidLoader();
+        if (Member3PlantStateV1.isLidAvailable()) {
+            emit LID_AVAILABLE;
+        }
+        else {
+            emit LID_MAGAZINE_EMPTY;
+        }
+        if (Member3PlantStateV1.isLidPicked()) {
+            emit LID_PICKED;
+        }
+        if (Member3PlantStateV1.isLidPlacedSensorActive()) {
+            emit LID_PLACED_SENSOR;
+        }
+        if (Member3PlantStateV1.isLidActuatorHome()) {
+            emit LID_ACTUATOR_HOME;
+        }
+        if (Member3PlantStateV1.isNoLidHeld()) {
+            emit NO_LID_HELD;
+        }
+        if (Member3PlantStateV1.isLidPlacementSensorHealthy()) {
+            emit LID_PLACEMENT_SENSOR_HEALTHY;
+        }
+        pause;
+    }}
+}

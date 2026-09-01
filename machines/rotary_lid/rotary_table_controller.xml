@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<System xmlns="http://systemjtechnology.com">
+    <SubSystem Name="ROTARY_CONTROLLER_SS" Local="true">
+        <ClockDomain Name="RotaryTableControllerCD" Class="RotaryTableController">
+            <iSignal Name="ROTARY_STATUS_REQUEST" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="11003" />
+            <iSignal Name="ROTATION_READY" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="11003" />
+            <iSignal Name="TABLE_ALIGNED_WITH_SENSOR" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="11003" />
+            <iSignal Name="ROTARY_BOTTLE_CONTEXT" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="11003" />
+            <iSignal Name="ROTARY_FAULT_RESET" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="11003" />
+            <iSignal Name="M1_SAFE_STOP_ACKNOWLEDGED" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="11003" />
+            <iSignal Name="BOTTLE_POSITIONS_RECONCILED" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="11003" />
+            <iSignal Name="INDEPENDENT_POSITION_CONFIRMED" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="11003" />
+            <oSignal Name="ROTARY_STATUS" To="CoordinatorCD.ROTARY_STATUS" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="11001" />
+            <oSignal Name="ROTARY_TABLE_TRIGGER" To="RotaryTablePlantCD.ROTARY_TABLE_TRIGGER" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="12003" />
+            <oSignal Name="ROTARY_CONTEXT_TO_PLANT" To="RotaryTablePlantCD.ROTARY_CONTEXT_TO_PLANT" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="12003" />
+            <oSignal Name="ROTATION_DONE" To="RotaryTablePlantCD.ROTATION_DONE" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="12003" />
+        </ClockDomain>
+    </SubSystem>
+</System>

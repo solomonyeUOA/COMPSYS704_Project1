@@ -1,0 +1,121 @@
+// TEST ONLY - DO NOT USE AS A FINAL MACHINE CONTROLLER.
+//
+// This mock combines the frozen Coordinator-facing interfaces in one Clock
+// Domain so POS -> Coordinator -> BOTTLE_DONE -> POS can be integration tested
+// before real Machine Controllers exist.
+
+MockController(
+    input Integer signal START_ORDER;
+    input Integer signal FILL_A_RATIO;
+    input Integer signal FILL_B_RATIO;
+
+    input signal LOADER_STATUS_REQUEST;
+    input signal CONVEYOR_STATUS_REQUEST;
+    input signal ROTARY_STATUS_REQUEST;
+    input signal FILLER_A_STATUS_REQUEST;
+    input signal FILLER_B_STATUS_REQUEST;
+    input signal LID_STATUS_REQUEST;
+    input signal CAPPER_STATUS_REQUEST;
+    input signal UNLOADER_STATUS_REQUEST;
+
+    output Integer signal LOADER_STATUS;
+    output Integer signal CONVEYOR_STATUS;
+    output Integer signal ROTARY_STATUS;
+    output Integer signal FILLER_A_STATUS;
+    output Integer signal FILLER_B_STATUS;
+    output Integer signal LID_STATUS;
+    output Integer signal CAPPER_STATUS;
+    output Integer signal UNLOADER_STATUS;
+    output signal BOTTLE_DONE;
+)
+->{
+    System.out.println(
+        "MockController started - TEST ONLY, not a real Machine Controller"
+    );
+
+    // Recipe capture and batch start
+    {
+        loop {
+            present(FILL_A_RATIO) {
+                MockStateV1.liquidARatio = #FILL_A_RATIO;
+                System.out.println(
+                    "Mock received FILL_A_RATIO=" +
+                    MockStateV1.liquidARatio
+                );
+            }
+            present(FILL_B_RATIO) {
+                MockStateV1.liquidBRatio = #FILL_B_RATIO;
+                System.out.println(
+                    "Mock received FILL_B_RATIO=" +
+                    MockStateV1.liquidBRatio
+                );
+            }
+            present(START_ORDER) {
+                if (MockStateV1.startOrder(#START_ORDER)) {
+                    System.out.println(
+                        "Mock received START_ORDER=" +
+                        MockStateV1.requiredBottles
+                    );
+                }
+                else {
+                    System.out.println(
+                        "[MOCK-LIFECYCLE] ignored START_ORDER=" +
+                        #START_ORDER + " batchActive=" +
+                        MockStateV1.batchActive
+                    );
+                }
+            }
+            pause;
+        }
+    }
+    ||
+    // Each status interface remains independent, as real Controllers will be.
+    {loop {present(LOADER_STATUS_REQUEST) {
+        emit LOADER_STATUS(MockStateV1.loaderStatus);
+    } pause;}}
+    ||
+    {loop {present(CONVEYOR_STATUS_REQUEST) {
+        emit CONVEYOR_STATUS(MockStateV1.conveyorStatus);
+    } pause;}}
+    ||
+    {loop {present(ROTARY_STATUS_REQUEST) {
+        emit ROTARY_STATUS(MockStateV1.rotaryStatus);
+    } pause;}}
+    ||
+    {loop {present(FILLER_A_STATUS_REQUEST) {
+        emit FILLER_A_STATUS(MockStateV1.fillerAStatus);
+    } pause;}}
+    ||
+    {loop {present(FILLER_B_STATUS_REQUEST) {
+        emit FILLER_B_STATUS(MockStateV1.fillerBStatus);
+    } pause;}}
+    ||
+    {loop {present(LID_STATUS_REQUEST) {
+        emit LID_STATUS(MockStateV1.lidStatus);
+    } pause;}}
+    ||
+    {loop {present(CAPPER_STATUS_REQUEST) {
+        emit CAPPER_STATUS(MockStateV1.capperStatus);
+    } pause;}}
+    ||
+    {loop {present(UNLOADER_STATUS_REQUEST) {
+        emit UNLOADER_STATUS(MockStateV1.unloaderStatus);
+    } pause;}}
+    ||
+    // Test-only staged pipeline. MockStateV1 derives each REAL status from
+    // test-only mock bottles occupying Loader -> ... -> Unloader stages.
+    {
+        loop {
+            int stage = MockStateV1.advanceBottleStage();
+            if (stage == MockStateV1.BOTTLE_COLLECTED) {
+                emit BOTTLE_DONE;
+                System.out.println(
+                    "Mock Bottle Unloader emitted BOTTLE_DONE " +
+                    MockStateV1.emittedBottleDone + "/" +
+                    MockStateV1.requiredBottles
+                );
+            }
+            pause;
+        }
+    }
+}
