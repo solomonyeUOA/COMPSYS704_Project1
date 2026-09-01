@@ -1,48 +1,77 @@
-// Six-position rotary-table Plant model.
+// Six-position rotary Plant with P1/P2/P3/P4/P6 bottle correlation.
 
 RotaryTablePlant(
-    input signal ROTARY_TABLE_TRIGGER;
+    input Integer signal ROTARY_TABLE_TRIGGER;
+    input Integer signal ROTATION_DONE;
+    input String signal ROTARY_CONTEXT_TO_PLANT;
     input String signal LOAD_BOTTLE;
-    input signal MARK_FILLED;
-    input signal MARK_LID_PLACED;
-    input signal MARK_CAPPED;
-    input signal REMOVE_BOTTLE;
+    input String signal MARK_FILLED;
+    input String signal LID_CYCLE_DONE;
+    input String signal MARK_CAPPED;
+    input String signal MARK_LABELLED;
+    input String signal P6_CLEAR;
     input signal INJECT_ALIGNMENT_FAULT;
     input signal CLEAR_ALIGNMENT_FAULT;
-    input signal ROTATION_DONE;
 
+    output signal ROTATION_READY;
     output signal TABLE_ALIGNED_WITH_SENSOR;
-    output signal CAP_ON_BOTTLE_AT_POS1;
-    output signal BOTTLE_AT_LID_POSITION;
+    output String signal BOTTLE_AT_LID_POSITION;
     output signal LID_POSITION_CLEAR;
+    output String signal BOTTLE_AT_FILL;
+    output String signal BOTTLE_AT_CAP;
+    output String signal BOTTLE_AT_LABEL;
 )
 ->{
     Member3Visualisation.start();
     System.out.println("Member 3 RotaryTablePlantCD started");
 
     {loop {present(LOAD_BOTTLE) {
-            if (Member3PlantStateV1.loadBottle(#LOAD_BOTTLE)) {
-                System.out.println("Rotary Plant loaded bottle " + #LOAD_BOTTLE);
-            }
+        if (!Member3PlantStateV1.loadBottle(#LOAD_BOTTLE)) {
+            System.out.println("M3 rejected LOAD_BOTTLE=" + #LOAD_BOTTLE);
+        }
+    } pause;}}
+    ||
+    {loop {present(ROTARY_CONTEXT_TO_PLANT) {
+        if (!Member3PlantStateV1.registerBottleContext(
+            #ROTARY_CONTEXT_TO_PLANT
+        )) {
+            System.out.println("M3 rejected forwarded bottle context");
+        }
+        else {
+            System.out.println("M3 Plant registered bottle context");
+        }
     } pause;}}
     ||
     {loop {present(MARK_FILLED) {
-        Member3PlantStateV1.markFilled();
+        if (!Member3PlantStateV1.markFilled(#MARK_FILLED)) {
+            System.out.println("M3 rejected MARK_FILLED=" + #MARK_FILLED);
+        }
     } pause;}}
     ||
-    {loop {present(MARK_LID_PLACED) {
-        Member3PlantStateV1.markLidPlaced();
+    {loop {present(LID_CYCLE_DONE) {
+        if (!Member3PlantStateV1.markLidPlaced(#LID_CYCLE_DONE)) {
+            System.out.println("M3 rejected LID_CYCLE_DONE=" +
+                #LID_CYCLE_DONE);
+        }
     } pause;}}
     ||
     {loop {present(MARK_CAPPED) {
-        Member3PlantStateV1.markCapped();
+        if (!Member3PlantStateV1.markCapped(#MARK_CAPPED)) {
+            System.out.println("M3 rejected MARK_CAPPED=" + #MARK_CAPPED);
+        }
     } pause;}}
     ||
-    {loop {present(REMOVE_BOTTLE) {
-            BottleStateV1 removed = Member3PlantStateV1.removeBottleAtExit();
-            if (removed != null) {
-                System.out.println("Rotary Plant removed " + removed.getId());
-            }
+    {loop {present(MARK_LABELLED) {
+        if (!Member3PlantStateV1.markLabelled(#MARK_LABELLED)) {
+            System.out.println("M3 rejected MARK_LABELLED=" +
+                #MARK_LABELLED);
+        }
+    } pause;}}
+    ||
+    {loop {present(P6_CLEAR) {
+        if (!Member3PlantStateV1.clearP6(#P6_CLEAR)) {
+            System.out.println("M3 rejected P6_CLEAR=" + #P6_CLEAR);
+        }
     } pause;}}
     ||
     {loop {present(INJECT_ALIGNMENT_FAULT) {
@@ -55,36 +84,55 @@ RotaryTablePlant(
     ||
     {loop {
         present(ROTARY_TABLE_TRIGGER) {
-            Member3PlantStateV1.setRotaryMotor(true);
-        }
-        else {
-            Member3PlantStateV1.setRotaryMotor(false);
-        }
-        pause;
-    }}
-    ||
-    {loop {
-        if (Member3PlantStateV1.updateRotary()) {
-            System.out.println(
-                "Rotary Plant step: " +
-                Member3PlantStateV1.rotarySnapshot()
+            Member3PlantStateV1.setRotaryMotor(
+                true,
+                #ROTARY_TABLE_TRIGGER
             );
         }
+        else {
+            Member3PlantStateV1.setRotaryMotor(false, 0);
+        }
+        present(ROTATION_DONE) {
+            if (!Member3PlantStateV1.commitRotation(#ROTATION_DONE)) {
+                System.out.println("M3 rejected ROTATION_DONE cycle=" +
+                    #ROTATION_DONE);
+            }
+        }
+        Member3PlantStateV1.updateRotary();
         pause;
     }}
     ||
     {loop {
+        if (Member3PlantStateV1.canRotate()) {
+            emit ROTATION_READY;
+        }
         if (Member3PlantStateV1.isTableAligned()) {
             emit TABLE_ALIGNED_WITH_SENSOR;
         }
-        if (Member3PlantStateV1.hasCappedBottleAtPosition1()) {
-            emit CAP_ON_BOTTLE_AT_POS1;
-        }
-        if (Member3PlantStateV1.hasBottleWaitingForLid()) {
-            emit BOTTLE_AT_LID_POSITION;
+
+        String lidBottleId =
+            Member3PlantStateV1.getBottleWaitingForLidId();
+        if (lidBottleId != null) {
+            emit BOTTLE_AT_LID_POSITION(lidBottleId);
         }
         else {
             emit LID_POSITION_CLEAR;
+        }
+
+        String fillOffer = Member3PlantStateV1.takeFillOffer();
+        if (fillOffer != null) {
+            emit BOTTLE_AT_FILL(fillOffer);
+            System.out.println("M3 offered P2 bottle to filler");
+        }
+        String capOffer = Member3PlantStateV1.takeCapOffer();
+        if (capOffer != null) {
+            emit BOTTLE_AT_CAP(capOffer);
+            System.out.println("M3 offered P4 bottle to capper");
+        }
+        String labelOffer = Member3PlantStateV1.takeLabelOffer();
+        if (labelOffer != null) {
+            emit BOTTLE_AT_LABEL(labelOffer);
+            System.out.println("M3 offered P6 bottle to labeller");
         }
         pause;
     }}

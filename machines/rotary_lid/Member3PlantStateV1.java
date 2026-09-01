@@ -17,28 +17,43 @@ public final class Member3PlantStateV1 {
         return rotary.loadBottle(id);
     }
 
-    public static synchronized void setRotaryMotor(boolean enabled) {
-        rotary.setMotorCommand(enabled, System.currentTimeMillis());
+    public static synchronized boolean registerBottleContext(String payload) {
+        return rotary.registerContext(payload);
+    }
+
+    public static synchronized void setRotaryMotor(
+        boolean enabled,
+        long cycleId
+    ) {
+        rotary.setMotorCommand(enabled, cycleId, System.currentTimeMillis());
     }
 
     public static synchronized boolean updateRotary() {
         return rotary.tick(System.currentTimeMillis());
     }
 
-    public static synchronized boolean markFilled() {
-        return rotary.markFilled();
+    public static synchronized boolean commitRotation(long cycleId) {
+        return rotary.commitRotation(cycleId);
     }
 
-    public static synchronized boolean markLidPlaced() {
-        return rotary.markLidPlaced();
+    public static synchronized boolean markFilled(String bottleId) {
+        return rotary.markFilled(bottleId);
     }
 
-    public static synchronized boolean markCapped() {
-        return rotary.markCapped();
+    public static synchronized boolean markLidPlaced(String bottleId) {
+        return rotary.markLidPlaced(bottleId);
     }
 
-    public static synchronized BottleStateV1 removeBottleAtExit() {
-        return rotary.removeBottleAtExit();
+    public static synchronized boolean markCapped(String bottleId) {
+        return rotary.markCapped(bottleId);
+    }
+
+    public static synchronized boolean markLabelled(String bottleId) {
+        return rotary.markLabelled(bottleId);
+    }
+
+    public static synchronized boolean clearP6(String bottleId) {
+        return rotary.clearP6(bottleId);
     }
 
     public static synchronized void setAlignmentFault(boolean active) {
@@ -49,12 +64,24 @@ public final class Member3PlantStateV1 {
         return rotary.isAligned();
     }
 
-    public static synchronized boolean hasCappedBottleAtPosition1() {
-        return rotary.hasCappedBottleAtPosition1();
+    public static synchronized boolean canRotate() {
+        return rotary.canRotate();
     }
 
-    public static synchronized boolean hasBottleWaitingForLid() {
-        return rotary.hasBottleWaitingForLid();
+    public static synchronized String getBottleWaitingForLidId() {
+        return rotary.getBottleWaitingForLidId();
+    }
+
+    public static synchronized String takeFillOffer() {
+        return rotary.takeFillOffer();
+    }
+
+    public static synchronized String takeCapOffer() {
+        return rotary.takeCapOffer();
+    }
+
+    public static synchronized String takeLabelOffer() {
+        return rotary.takeLabelOffer();
     }
 
     public static synchronized String rotarySnapshot() {
@@ -95,6 +122,18 @@ public final class Member3PlantStateV1 {
 
     public static synchronized String getLidActionName() {
         return lid.getActionName();
+    }
+
+    public static synchronized boolean isLidActuatorHome() {
+        return lid.isActuatorHome();
+    }
+
+    public static synchronized boolean isNoLidHeld() {
+        return lid.isNoLidHeld();
+    }
+
+    public static synchronized boolean isLidPlacementSensorHealthy() {
+        return lid.isPlacementSensorHealthy();
     }
 
     public static synchronized void refillLids(int count) {

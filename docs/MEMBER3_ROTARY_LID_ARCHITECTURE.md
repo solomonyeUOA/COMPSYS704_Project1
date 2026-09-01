@@ -1,145 +1,122 @@
 # Member 3 Rotary Table and Lid Loader Architecture
 
-## Design decision
+## Formal diagrams
 
-Interface Freeze V1 exposes a combined `TransportControllerCD` boundary to the
-Coordinator. The project brief separately requires a conveyor clock-domain and
-a rotary-table clock-domain. Both constraints are satisfied by treating
-`TransportControllerCD` as the stable external adapter and keeping the rotary
-rotary behaviour as an independent Controller/Plant pair behind that boundary.
-The conveyor remains owned by Member 2.
+Editable draw.io source and report-ready exports are stored in
+`docs/diagrams/`. The five pages cover the M3 architecture, rotary state
+machine, lid-loader state machine, six-position Plant layout, and integration
+sequence. See `docs/diagrams/README.md` for captions and export guidance.
+
+## V2.1 design boundary
+
+The frozen interface separates M2 conveyor status from M3 rotary status. M3
+therefore implements `RotaryTableControllerCD` directly; it does not expose the
+old combined `TransportControllerCD` adapter.
 
 ```text
 CoordinatorCD
-    |
-    | TRANSPORT_STATUS_REQUEST / TRANSPORT_STATUS (frozen)
+    | ROTARY_STATUS_REQUEST / ROTARY_STATUS (read-only)
     v
-TransportControllerCD (external status adapter)
-    |
-    +-- ConveyorControllerCD (Member 2)
-    `-- Rotary control       (Member 3)
-            |
-            `-- RotaryTablePlantCD (implemented)
+RotaryTableControllerCD :11003
+    | ROTARY_TABLE_TRIGGER / ROTATION_DONE(cycleId)
+    v
+RotaryTablePlantCD :12003
+    |-- P2 BOTTLE_AT_FILL(full context) -> M4
+    |-- P3 BOTTLE_AT_LID_POSITION(bottleId) -> M3 Lid Loader
+    |-- P4 BOTTLE_AT_CAP(full context) -> M4
+    `-- P6 BOTTLE_AT_LABEL(bottleId) -> M2 labelling/unloader
 
 CoordinatorCD
-    |
-    | LID_STATUS_REQUEST / LID_STATUS (frozen)
+    | LID_STATUS_REQUEST / LID_STATUS (read-only)
     v
-LidLoaderControllerCD (Member 3)
-    |
-    `-- LidLoaderPlantCD (implemented)
+LidLoaderControllerCD :11006
+    | PICK_LID_TRIGGER / PLACE_LID_TRIGGER / sensor evidence
+    v
+LidLoaderPlantCD :12006
 ```
-
-The adapter reports the most severe internal state: `FAULT` first, then
-`BUSY`, `DONE`, `READY`, and `IDLE`. It does not issue actuator commands.
-
-## Coordinator boundary
-
-The following interface is frozen and must not be changed locally.
-
-| Clock-domain | Input | Output | Receiver port |
-| --- | --- | --- | ---: |
-| `TransportControllerCD` | `TRANSPORT_STATUS_REQUEST` | `TRANSPORT_STATUS: Integer` | 11003 |
-| `LidLoaderControllerCD` | `LID_STATUS_REQUEST` | `LID_STATUS: Integer` | 11006 |
 
 Status values are `0 IDLE`, `1 READY`, `2 BUSY`, `3 DONE`, and `4 FAULT`.
-Polling reads state only; it must never trigger or advance an operation.
+Polling never starts, acknowledges or advances a physical operation.
 
-## Rotary controller
-
-The controller performs one indexed step at a time.
+## Rotary control and Plant
 
 ```text
-READY
-  | rotate request and exit clear
-  v
-ROTATING -- 500 ms --> VERIFYING_ALIGNMENT
-                            | aligned
-                            v
-                           DONE -- acknowledge --> READY
-                            |
-                            | 250 ms timeout
-                            v
-                           FAULT -- aligned reset --> READY
+READY -- station barrier --> ROTATING -- 500 ms --> VERIFYING_ALIGNMENT
+  ^                                                   | aligned
+  |                                                   v
+  `---------------- acknowledge -------------------- DONE
+                                                      |
+                                             250 ms timeout
+                                                      v
+                                                    FAULT
 ```
 
-Local inputs proposed from neighbouring controllers or the plant:
+The Plant stores P1 load, P2 fill, P3 lid, P4 cap, P5 transfer and P6
+label/unload as six independent slots. A physical movement first becomes
+pending. Slots shift atomically only when the Controller publishes the same
+`cycleId` after sensor-confirmed alignment. The array does not wrap: P6 must be
+cleared before the next step, preventing a completed bottle from re-entering
+P1.
 
-- rotate request;
-- `capOnBottleAtPos1` interlock;
-- `tableAlignedWithSensor` confirmation;
-- elapsed simulation time;
-- done acknowledgement and fault reset.
+Rotation is permitted only when every occupied processing station has its
+required completion evidence. P6 accepts `P6_CLEAR(bottleId)` only after both a
+matching `MARK_LABELLED(bottleId)` and physical-clear report. Wrong, stale and
+duplicate bottle identities are rejected.
 
-Local output: `rotaryTableTrigger`, sustained only while `ROTATING`.
+Alignment timeout de-energises the motor and has no automatic `REHOME` in the
+baseline. Reset requires M1 safe-stop acknowledgement, bottle-position
+reconciliation and independent position confirmation.
 
-Safety invariants:
-
-- the motor is off in `READY`, `VERIFYING_ALIGNMENT`, `DONE`, and `FAULT`;
-- a capped bottle at position 1 blocks a new rotation;
-- a step is not complete until the alignment sensor is present;
-- a missing alignment confirmation produces `FAULT`, not `DONE`;
-- one successful operation advances exactly one of six table positions.
-
-## Lid-loader controller
+## Lid-loader control and Plant
 
 ```text
-READY -- bottle and lid --> PICKING -- picked --> PLACING
-  |                                      | placed
-  | no lid                               v
-  `-----------------> FAULT             DONE -- acknowledge --> READY
-                         ^
-                         `-- pick/place timeout
+READY -- bottleId and lid --> PICKING -- picked --> PLACING
+  ^                                                   | placed
+  `---------------- acknowledge --------------------- DONE
+                                                      |
+                                            timeout/sensor fault
+                                                      v
+                                                    FAULT
 ```
 
-Local inputs proposed from the Lab 3 plant interface:
+The active `bottleId` is retained through pick, placement and
+`LID_CYCLE_DONE(bottleId)`. Both actuators de-energise on fault. Recovery is
+cause-specific:
 
-- bottle present at the lid-placement position;
-- lid available in the magazine;
-- lid picked confirmation;
-- lid placed confirmation;
-- elapsed simulation time, acknowledgement, and reset.
+- magazine empty requires restored lid availability;
+- pick timeout requires lid availability, actuator home and proof that no lid
+  remains held;
+- placement timeout or sensor fault requires actuator home, placement
+  reconciliation and a healthy placement sensor.
 
-The pick and place actuators are de-energised immediately in `DONE` or
-`FAULT`. A no-lid fault can reset only after the magazine is replenished.
+## M4 bottle context
 
-## Controller/plant separation
+M3 validates and forwards the full proposed context:
 
-`RotaryControllerModelV1` and `LidLoaderControllerModelV1` contain decisions
-and sequencing. The implemented Plant clock-domains own physical state, sensor
-generation, actuator delay, six bottle positions, lid inventory, and GUI
-updates. This keeps
-the controller deployable without changing its logic, as required by the
-brief.
+```text
+bottleId|sizeCode|capacityMl|geometryProfileId|packagingProfileId
+```
 
-## Traceability to the brief
+The accepted baseline profiles are `S|200|GEOM_S|PACK_S` and
+`L|500|GEOM_L|PACK_L`. A context is correlated by exact `bottleId`; malformed
+or mismatched data is rejected rather than guessed.
 
-| Requirement | Design evidence |
+## Traceability and acceptance
+
+| Requirement | Implemented evidence |
 | --- | --- |
-| Six-position table | position index wraps from 5 to 0 |
-| 60-degree indexed movement | one request advances exactly one position |
-| Approximately 0.5 s rotation | `ROTATION_TIME_MS = 500` |
-| Verify table alignment | `VERIFYING_ALIGNMENT` state and timeout |
-| Avoid blocked exit | capped-bottle interlock at position 1 |
-| Lid supplied and placed | explicit `PICKING` and `PLACING` states |
-| Controller plus plant | separate Controller and implemented Plant CDs |
-| Status visualisation | frozen status responses, plus plant GUI ownership |
-| Fault handling | alignment, empty-magazine, pick, and place faults |
-| Multiple simultaneous bottles | six plant slots must move atomically per step |
+| Six-position rotary table | six non-wrapping Plant slots |
+| 60-degree indexed movement | one committed `cycleId` shifts all slots once |
+| Approximately 0.5 s movement | `ROTATION_TIME_MS = 500` |
+| Alignment verification | separate verify state and 250 ms timeout |
+| Multiple simultaneous bottles | per-slot identity and process state |
+| Lid loading | explicit pick/place states and Plant sensors |
+| Controller/Plant separation | four SystemJ CDs backed by separate Java models |
+| Status visualisation | read-only status interfaces and Swing Plant view |
+| Fault handling | safe shutdown and evidence-gated reset |
+| Cross-team consistency | exact bottle identity and V2.1 receiver ports |
 
-## Integration acceptance tests
-
-1. Repeated status polling leaves an idle machine in `READY`.
-2. Rotary motor remains on for 500 ms and stops before alignment checking.
-3. Alignment confirmation completes one 60-degree step.
-4. Missing alignment causes `FAULT` and motor shutdown.
-5. A capped bottle at position 1 prevents rotation.
-6. Lid loading cannot start without a bottle.
-7. An empty magazine causes `FAULT`.
-8. Missing pick or placement confirmation causes `FAULT` and actuator shutdown.
-9. Fault reset is rejected while its physical cause remains.
-10. Coordinator receives only frozen status codes and no local plant signal.
-
-The framework-free `Member3ControllerSelfTest` covers tests 1-9 at the model
-level. Final SystemJ integration must repeat them with the real Plant CDs and
-also demonstrate bottle-position visualisation.
+`Member3ControllerSelfTest` verifies sequencing and recovery evidence.
+`Member3PlantSelfTest` verifies six-position flow, multiple bottles, atomic
+movement, identity rejection and P6 interlocks. `FaultSupervisorSelfTest`
+verifies the separate IP protocol and bounded transfer-recovery policy.

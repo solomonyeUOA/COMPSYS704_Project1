@@ -1,0 +1,93 @@
+// M3-owned rotary sequencer and Controller. Coordinator polling is read-only.
+
+RotaryTableController(
+    input signal ROTARY_STATUS_REQUEST;
+    output Integer signal ROTARY_STATUS;
+
+    input signal ROTATION_READY;
+    input signal TABLE_ALIGNED_WITH_SENSOR;
+    input String signal ROTARY_BOTTLE_CONTEXT;
+    input signal ROTARY_FAULT_RESET;
+    input signal M1_SAFE_STOP_ACKNOWLEDGED;
+    input signal BOTTLE_POSITIONS_RECONCILED;
+    input signal INDEPENDENT_POSITION_CONFIRMED;
+
+    output Integer signal ROTARY_TABLE_TRIGGER;
+    output String signal ROTARY_CONTEXT_TO_PLANT;
+    output Integer signal ROTATION_DONE;
+)
+->{
+    System.out.println("Member 3 RotaryTableControllerCD started");
+
+    {loop {
+        present(ROTARY_STATUS_REQUEST) {
+            emit ROTARY_STATUS(Member3MachineStateV1.getRotaryStatus());
+        }
+        pause;
+    }}
+    ||
+    {loop {
+        present(ROTARY_BOTTLE_CONTEXT) {
+            if (BottleContextV1.isValid(#ROTARY_BOTTLE_CONTEXT)) {
+                emit ROTARY_CONTEXT_TO_PLANT(#ROTARY_BOTTLE_CONTEXT);
+                System.out.println("M3 forwarded bottle context to Plant");
+            }
+            else {
+                System.out.println("M3 rejected ROTARY_BOTTLE_CONTEXT");
+            }
+        }
+        pause;
+    }}
+    ||
+    {loop {
+        present(ROTATION_READY) {
+            if (Member3MachineStateV1.getRotaryStatus() ==
+                Member3MachineStateV1.DONE) {
+                Member3MachineStateV1.acknowledgeRotationDone();
+            }
+            if (Member3MachineStateV1.getRotaryStatus() ==
+                Member3MachineStateV1.READY) {
+                Member3MachineStateV1.requestRotation(true);
+            }
+        }
+
+        present(TABLE_ALIGNED_WITH_SENSOR) {
+            Member3MachineStateV1.tickRotaryNow(true);
+        }
+        else {
+            Member3MachineStateV1.tickRotaryNow(false);
+        }
+
+        present(ROTARY_FAULT_RESET) {
+            boolean stopAck = false;
+            boolean reconciled = false;
+            boolean positionEvidence = false;
+            present(M1_SAFE_STOP_ACKNOWLEDGED) { stopAck = true; }
+            present(BOTTLE_POSITIONS_RECONCILED) { reconciled = true; }
+            present(INDEPENDENT_POSITION_CONFIRMED) {
+                positionEvidence = true;
+            }
+            Member3MachineStateV1.resetRotaryFault(
+                new RotaryRecoveryEvidenceV1(
+                    stopAck,
+                    reconciled,
+                    positionEvidence
+                )
+            );
+        }
+
+        if (Member3MachineStateV1.isRotaryMotorEnabled()) {
+            emit ROTARY_TABLE_TRIGGER((int)
+                Member3MachineStateV1.getActiveCycleId());
+        }
+        if (Member3MachineStateV1.takeRotationDoneEvent()) {
+            emit ROTATION_DONE((int)
+                Member3MachineStateV1.getLastCompletedCycleId());
+            System.out.println(
+                "Rotary completed cycle " +
+                Member3MachineStateV1.getLastCompletedCycleId()
+            );
+        }
+        pause;
+    }}
+}

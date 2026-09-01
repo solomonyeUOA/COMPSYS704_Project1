@@ -14,13 +14,19 @@ public final class Member3MachineStateV1 {
     private static long lastLidTickMs = System.currentTimeMillis();
     private static boolean rotationDonePublished;
     private static boolean lidDonePublished;
+    private static long nextCycleId = 1;
 
     private Member3MachineStateV1() {
     }
 
     /** Status polling is observational and must never advance a machine. */
-    public static synchronized int getTransportStatus() {
+    public static synchronized int getRotaryStatus() {
         return rotary.getStatus();
+    }
+
+    /** Compatibility alias for older local tests; not a V2.1 interface name. */
+    public static synchronized int getTransportStatus() {
+        return getRotaryStatus();
     }
 
     /** Status polling is observational and must never advance a machine. */
@@ -29,14 +35,14 @@ public final class Member3MachineStateV1 {
     }
 
     public static synchronized boolean requestRotation(
-        boolean capOnBottleAtPosition1
+        boolean stationBarrierSatisfied
     ) {
-        if (rotary.getStatus() == DONE) {
-            rotary.acknowledgeDone();
-            rotationDonePublished = false;
-        }
-        boolean started = rotary.requestRotation(capOnBottleAtPosition1);
+        boolean started = rotary.requestRotation(
+            nextCycleId,
+            stationBarrierSatisfied
+        );
         if (started) {
+            nextCycleId++;
             lastRotaryTickMs = System.currentTimeMillis();
         }
         return started;
@@ -47,6 +53,7 @@ public final class Member3MachineStateV1 {
         boolean tableAlignedWithSensor
     ) {
         rotary.tick(elapsedMs, tableAlignedWithSensor);
+        reportRotaryFaultIfPresent();
     }
 
     public static synchronized void tickRotaryNow(
@@ -56,6 +63,7 @@ public final class Member3MachineStateV1 {
         rotary.tick(Math.max(0, now - lastRotaryTickMs),
             tableAlignedWithSensor);
         lastRotaryTickMs = now;
+        reportRotaryFaultIfPresent();
     }
 
     public static synchronized boolean takeRotationDoneEvent() {
@@ -67,13 +75,28 @@ public final class Member3MachineStateV1 {
     }
 
     public static synchronized boolean acknowledgeRotationDone() {
-        return rotary.acknowledgeDone();
+        boolean acknowledged = rotary.acknowledgeDone();
+        if (acknowledged) {
+            rotationDonePublished = false;
+        }
+        return acknowledged;
     }
 
     public static synchronized boolean resetRotaryFault(
-        boolean tableAlignedWithSensor
+        RotaryRecoveryEvidenceV1 evidence
     ) {
-        return rotary.resetFault(tableAlignedWithSensor);
+        String eventId = rotary.getFaultEventId();
+        if (!FaultSupervisorStateV2_1.authorizeRotaryReset(
+            eventId,
+            evidence
+        )) {
+            return false;
+        }
+        boolean reset = rotary.resetFault(evidence);
+        if (reset) {
+            FaultSupervisorStateV2_1.resolveLocalFault("ROTARY", eventId);
+        }
+        return reset;
     }
 
     public static synchronized boolean isRotaryMotorEnabled() {
@@ -81,19 +104,20 @@ public final class Member3MachineStateV1 {
     }
 
     public static synchronized boolean requestLidLoad(
-        boolean bottleAtLidPosition,
+        String bottleId,
         boolean lidAvailable
     ) {
         if (lidLoader.getStatus() == DONE) {
             return false;
         }
         boolean started = lidLoader.requestLoad(
-            bottleAtLidPosition,
+            bottleId,
             lidAvailable
         );
         if (started) {
             lastLidTickMs = System.currentTimeMillis();
         }
+        reportLidFaultIfPresent();
         return started;
     }
 
@@ -103,6 +127,7 @@ public final class Member3MachineStateV1 {
         boolean lidPlaced
     ) {
         lidLoader.tick(elapsedMs, lidPicked, lidPlaced);
+        reportLidFaultIfPresent();
     }
 
     public static synchronized void tickLidLoaderNow(
@@ -113,14 +138,22 @@ public final class Member3MachineStateV1 {
         lidLoader.tick(Math.max(0, now - lastLidTickMs),
             lidPicked, lidPlaced);
         lastLidTickMs = now;
+        reportLidFaultIfPresent();
     }
 
     public static synchronized boolean takeLidDoneEvent() {
+        return takeLidDoneBottleId() != null;
+    }
+
+    public static synchronized String takeLidDoneBottleId() {
         if (lidLoader.getStatus() != DONE || lidDonePublished) {
-            return false;
+            return null;
         }
-        lidDonePublished = true;
-        return true;
+        String bottleId = lidLoader.takeCompletedBottleId();
+        if (bottleId != null) {
+            lidDonePublished = true;
+        }
+        return bottleId;
     }
 
     public static synchronized boolean isLidPickEnabled() {
@@ -139,8 +172,23 @@ public final class Member3MachineStateV1 {
         return acknowledged;
     }
 
-    public static synchronized boolean resetLidFault(boolean lidAvailable) {
-        return lidLoader.resetFault(lidAvailable);
+    public static synchronized boolean resetLidFault(
+        LidRecoveryEvidenceV1 evidence
+    ) {
+        String eventId = lidLoader.getFaultEventId();
+        LidLoaderControllerModelV1.Fault fault = lidLoader.getFault();
+        if (!FaultSupervisorStateV2_1.authorizeLidReset(
+            eventId,
+            fault,
+            evidence
+        )) {
+            return false;
+        }
+        boolean reset = lidLoader.resetFault(evidence);
+        if (reset) {
+            FaultSupervisorStateV2_1.resolveLocalFault("LID", eventId);
+        }
+        return reset;
     }
 
     /** Restores deterministic state before a simulation or test run. */
@@ -151,6 +199,16 @@ public final class Member3MachineStateV1 {
         lastLidTickMs = System.currentTimeMillis();
         rotationDonePublished = false;
         lidDonePublished = false;
+        nextCycleId = 1;
+        FaultSupervisorStateV2_1.reset();
+    }
+
+    public static synchronized long getActiveCycleId() {
+        return rotary.getActiveCycleId();
+    }
+
+    public static synchronized long getLastCompletedCycleId() {
+        return rotary.getLastCompletedCycleId();
     }
 
     public static String statusName(int status) {
@@ -167,6 +225,24 @@ public final class Member3MachineStateV1 {
                 return "FAULT";
             default:
                 return "UNKNOWN";
+        }
+    }
+
+    private static void reportRotaryFaultIfPresent() {
+        if (rotary.getStatus() == FAULT) {
+            FaultSupervisorStateV2_1.observeRotaryFault(
+                rotary.getFaultEventId(),
+                rotary.getFaultReason()
+            );
+        }
+    }
+
+    private static void reportLidFaultIfPresent() {
+        if (lidLoader.getStatus() == FAULT) {
+            FaultSupervisorStateV2_1.observeLidFault(
+                lidLoader.getFaultEventId(),
+                lidLoader.getFault()
+            );
         }
     }
 
