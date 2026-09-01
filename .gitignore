@@ -22,6 +22,7 @@ visualisation/ABSVisualisationPlant.java
 ~$*
 .DS_Store
 Thumbs.db
+*.iml
 
 /pos/
 /coordinator/

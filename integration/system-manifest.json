@@ -1,0 +1,55 @@
+{
+  "contractVersion": "2.1",
+  "statusCodes": {
+    "0": "IDLE",
+    "1": "READY",
+    "2": "BUSY",
+    "3": "DONE",
+    "4": "FAULT"
+  },
+  "canonicalConfigs": [
+    "xuqi_pos/pos.xml",
+    "xuqi_coordinator/coordinator.xml",
+    "visualisation/abs_visualisation_plant.xml",
+    "machines/rotary_lid/member3_system.xml"
+  ],
+  "receivers": [
+    {"clockDomain": "POSCD", "owner": "M1", "port": 11000, "status": "implemented"},
+    {"clockDomain": "CoordinatorCD", "owner": "M1", "port": 11001, "status": "implemented"},
+    {"clockDomain": "BottleLoaderControllerCD", "owner": "M2", "port": 11002, "status": "pending"},
+    {"clockDomain": "RotaryTableControllerCD", "owner": "M3", "port": 11003, "status": "implemented"},
+    {"clockDomain": "FillerAControllerCD", "owner": "M4", "port": 11004, "status": "pending"},
+    {"clockDomain": "FillerBControllerCD", "owner": "M4", "port": 11005, "status": "pending"},
+    {"clockDomain": "LidLoaderControllerCD", "owner": "M3", "port": 11006, "status": "implemented"},
+    {"clockDomain": "CapperControllerCD", "owner": "M4", "port": 11007, "status": "pending"},
+    {"clockDomain": "ABSVisualisationPlantCD", "owner": "M1", "port": 11008, "status": "implemented"},
+    {"clockDomain": "ConveyorControllerCD", "owner": "M2", "port": 11009, "status": "pending"},
+    {"clockDomain": "BottleUnloaderControllerCD", "owner": "M2", "port": 11010, "status": "pending"},
+    {"clockDomain": "BottleContextRegistryCD", "owner": "M4", "port": 11011, "status": "proposed"},
+    {"clockDomain": "SortPackControllerCD", "owner": "M4", "port": 11012, "status": "proposed"},
+    {"clockDomain": "LabellerControllerCD", "owner": "M2", "port": 11013, "status": "pending"},
+    {"clockDomain": "RotaryTablePlantCD", "owner": "M3", "port": 12003, "status": "implemented"},
+    {"clockDomain": "LidLoaderPlantCD", "owner": "M3", "port": 12006, "status": "implemented"},
+    {"clockDomain": "M2TransferFaultAdapterCD", "owner": "M2", "port": 13002, "status": "pending"},
+    {"clockDomain": "FaultSupervisorCD", "owner": "M3", "port": 13003, "status": "implemented"}
+  ],
+  "requiredImplementedInputs": {
+    "CoordinatorCD": [
+      "ORDER", "LOADER_STATUS", "CONVEYOR_STATUS", "ROTARY_STATUS",
+      "FILLER_A_STATUS", "FILLER_B_STATUS", "LID_STATUS",
+      "CAPPER_STATUS", "UNLOADER_STATUS", "BOTTLE_DONE",
+      "FT_FAULT_ALERT", "FT_SAFE_STOP_REQUEST", "FT_RECOVERY_READY",
+      "FT_RECOVERY_FAILED"
+    ],
+    "RotaryTableControllerCD": ["ROTARY_STATUS_REQUEST"],
+    "RotaryTablePlantCD": [
+      "LOAD_BOTTLE", "MARK_FILLED", "LID_CYCLE_DONE", "MARK_CAPPED",
+      "MARK_LABELLED", "P6_CLEAR"
+    ],
+    "LidLoaderControllerCD": ["LID_STATUS_REQUEST", "BOTTLE_AT_LID_POSITION"],
+    "FaultSupervisorCD": [
+      "TRANSFER_FAULT_EVENT", "TRANSFER_RECOVERY_ACK",
+      "TRANSFER_RECOVERY_RESULT", "FT_SAFE_STOP_ACK", "FT_RESUME_DECISION"
+    ]
+  }
+}
