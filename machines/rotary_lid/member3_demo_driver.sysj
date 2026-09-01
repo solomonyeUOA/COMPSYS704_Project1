@@ -1,0 +1,70 @@
+// TEST ONLY: simulates M2/M4 hand-offs for one complete six-position bottle.
+
+Member3DemoDriver(
+    input Integer signal ROTARY_STATUS;
+    input Integer signal LID_STATUS;
+    input String signal BOTTLE_AT_FILL;
+    input String signal BOTTLE_AT_CAP;
+    input String signal BOTTLE_AT_LABEL;
+
+    output signal ROTARY_STATUS_REQUEST;
+    output signal LID_STATUS_REQUEST;
+    output String signal ROTARY_BOTTLE_CONTEXT;
+    output String signal LOAD_BOTTLE;
+    output String signal MARK_FILLED;
+    output String signal MARK_CAPPED;
+    output String signal MARK_LABELLED;
+    output String signal P6_CLEAR;
+)
+->{
+    Member3MachineStateV1.reset();
+    Member3PlantStateV1.reset();
+    Member3DemoStateV1.reset();
+    System.out.println("Member 3 V2.1 demo driver started");
+
+    {loop {
+        int action = Member3DemoStateV1.nextAction();
+        if (action == Member3DemoStateV1.SEND_CONTEXT) {
+            emit ROTARY_BOTTLE_CONTEXT(
+                "DEMO-B001|S|200|GEOM_S|PACK_S"
+            );
+            System.out.println("Demo: send bottle context");
+        }
+        else if (action == Member3DemoStateV1.LOAD) {
+            emit LOAD_BOTTLE("DEMO-B001");
+            System.out.println("Demo: load bottle");
+        }
+        else if (action == Member3DemoStateV1.CLEAR_P6) {
+            emit P6_CLEAR(Member3DemoStateV1.clearBottleId());
+        }
+        else if (action == Member3DemoStateV1.PASS) {
+            System.out.println("MEMBER3 SYSTEMJ DEMO PASSED");
+        }
+        pause;
+    }}
+    ||
+    {loop {
+        present(BOTTLE_AT_FILL) {
+            String bottleId = #BOTTLE_AT_FILL.split("\\|", -1)[0];
+            emit MARK_FILLED(bottleId);
+            System.out.println("Demo: confirm fill " + bottleId);
+        }
+        present(BOTTLE_AT_CAP) {
+            String bottleId = #BOTTLE_AT_CAP.split("\\|", -1)[0];
+            emit MARK_CAPPED(bottleId);
+            System.out.println("Demo: confirm cap " + bottleId);
+        }
+        present(BOTTLE_AT_LABEL) {
+            emit MARK_LABELLED(#BOTTLE_AT_LABEL);
+            Member3DemoStateV1.onLabelOffered(#BOTTLE_AT_LABEL);
+            System.out.println("Demo: confirm label " + #BOTTLE_AT_LABEL);
+        }
+        pause;
+    }}
+    ||
+    {loop {
+        emit ROTARY_STATUS_REQUEST;
+        emit LID_STATUS_REQUEST;
+        pause;
+    }}
+}

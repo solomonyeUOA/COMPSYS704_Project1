@@ -1,0 +1,127 @@
+// Bottle-correlated M3 Lid Loader Controller with cause-specific reset evidence.
+
+LidLoaderController(
+    input signal LID_STATUS_REQUEST;
+    output Integer signal LID_STATUS;
+
+    input String signal BOTTLE_AT_LID_POSITION;
+    input signal LID_POSITION_CLEAR;
+    input signal LID_AVAILABLE;
+    input signal LID_MAGAZINE_EMPTY;
+    input signal LID_PICKED;
+    input signal LID_PLACED_SENSOR;
+    input signal LID_FAULT_RESET;
+    input signal LID_ACTUATOR_HOME;
+    input signal NO_LID_HELD;
+    input signal LID_PLACEMENT_RECONCILED;
+    input signal LID_PLACEMENT_SENSOR_HEALTHY;
+
+    output signal PICK_LID_TRIGGER;
+    output signal PLACE_LID_TRIGGER;
+    output String signal LID_CYCLE_DONE;
+    output signal LID_ABORT;
+)
+->{
+    System.out.println("Member 3 LidLoaderControllerCD started");
+
+    {loop {
+        present(LID_STATUS_REQUEST) {
+            emit LID_STATUS(Member3MachineStateV1.getLidStatus());
+        }
+        pause;
+    }}
+    ||
+    {loop {
+        present(BOTTLE_AT_LID_POSITION) {
+            present(LID_MAGAZINE_EMPTY) {
+                Member3MachineStateV1.requestLidLoad(
+                    #BOTTLE_AT_LID_POSITION,
+                    false
+                );
+            }
+            else {
+                present(LID_AVAILABLE) {
+                    Member3MachineStateV1.requestLidLoad(
+                        #BOTTLE_AT_LID_POSITION,
+                        true
+                    );
+                }
+            }
+        }
+        pause;
+    }}
+    ||
+    {loop {
+        present(LID_POSITION_CLEAR) {
+            Member3MachineStateV1.acknowledgeLidDone();
+        }
+        pause;
+    }}
+    ||
+    {loop {
+        present(LID_PICKED) {
+            present(LID_PLACED_SENSOR) {
+                Member3MachineStateV1.tickLidLoaderNow(true, true);
+            }
+            else {
+                Member3MachineStateV1.tickLidLoaderNow(true, false);
+            }
+        }
+        else {
+            present(LID_PLACED_SENSOR) {
+                Member3MachineStateV1.tickLidLoaderNow(false, true);
+            }
+            else {
+                Member3MachineStateV1.tickLidLoaderNow(false, false);
+            }
+        }
+        pause;
+    }}
+    ||
+    {loop {
+        present(LID_FAULT_RESET) {
+            boolean available = false;
+            boolean home = false;
+            boolean noLidHeld = false;
+            boolean reconciled = false;
+            boolean sensorHealthy = false;
+            present(LID_AVAILABLE) { available = true; }
+            present(LID_ACTUATOR_HOME) { home = true; }
+            present(NO_LID_HELD) { noLidHeld = true; }
+            present(LID_PLACEMENT_RECONCILED) { reconciled = true; }
+            present(LID_PLACEMENT_SENSOR_HEALTHY) {
+                sensorHealthy = true;
+            }
+            Member3MachineStateV1.resetLidFault(
+                new LidRecoveryEvidenceV1(
+                    available,
+                    home,
+                    noLidHeld,
+                    reconciled,
+                    sensorHealthy
+                )
+            );
+        }
+        pause;
+    }}
+    ||
+    {loop {
+        if (Member3MachineStateV1.isLidPickEnabled()) {
+            emit PICK_LID_TRIGGER;
+        }
+        if (Member3MachineStateV1.isLidPlaceEnabled()) {
+            emit PLACE_LID_TRIGGER;
+        }
+        if (Member3MachineStateV1.getLidStatus() ==
+            Member3MachineStateV1.FAULT) {
+            emit LID_ABORT;
+        }
+        String completedBottleId =
+            Member3MachineStateV1.takeLidDoneBottleId();
+        if (completedBottleId != null) {
+            emit LID_CYCLE_DONE(completedBottleId);
+            System.out.println("Lid loader completed " + completedBottleId);
+        }
+        pause;
+    }}
+}

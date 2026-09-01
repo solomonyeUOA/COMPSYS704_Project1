@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<System xmlns="http://systemjtechnology.com">
+    <SubSystem Name="LID_PLANT_SS" Local="true">
+        <ClockDomain Name="LidLoaderPlantCD" Class="LidLoaderPlant">
+            <iSignal Name="PICK_LID_TRIGGER" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="12006" />
+            <iSignal Name="PLACE_LID_TRIGGER" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="12006" />
+            <iSignal Name="LID_ABORT" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="12006" />
+            <iSignal Name="REFILL_LIDS" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="12006" />
+            <iSignal Name="INJECT_PICK_FAULT" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="12006" />
+            <iSignal Name="CLEAR_PICK_FAULT" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="12006" />
+            <iSignal Name="INJECT_PLACE_FAULT" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="12006" />
+            <iSignal Name="CLEAR_PLACE_FAULT" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="12006" />
+            <oSignal Name="LID_AVAILABLE" To="LidLoaderControllerCD.LID_AVAILABLE" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="11006" />
+            <oSignal Name="LID_MAGAZINE_EMPTY" To="LidLoaderControllerCD.LID_MAGAZINE_EMPTY" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="11006" />
+            <oSignal Name="LID_PICKED" To="LidLoaderControllerCD.LID_PICKED" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="11006" />
+            <oSignal Name="LID_PLACED_SENSOR" To="LidLoaderControllerCD.LID_PLACED_SENSOR" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="11006" />
+            <oSignal Name="LID_ACTUATOR_HOME" To="LidLoaderControllerCD.LID_ACTUATOR_HOME" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="11006" />
+            <oSignal Name="NO_LID_HELD" To="LidLoaderControllerCD.NO_LID_HELD" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="11006" />
+            <oSignal Name="LID_PLACEMENT_SENSOR_HEALTHY" To="LidLoaderControllerCD.LID_PLACEMENT_SENSOR_HEALTHY" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="11006" />
+        </ClockDomain>
+    </SubSystem>
+</System>
