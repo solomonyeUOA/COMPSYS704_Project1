@@ -2,8 +2,8 @@
 
 Before implementing a Controller, read:
 
-- `../docs/INTERFACE_FREEZE_V1.md`
-- `../docs/CONTROLLER_IMPLEMENTATION_GUIDE.md`
+- [`../docs/interfaces/INTERFACE_FREEZE_V1.md`](../docs/interfaces/INTERFACE_FREEZE_V1.md)
+- [`../docs/guides/CONTROLLER_IMPLEMENTATION_GUIDE.md`](../docs/guides/CONTROLLER_IMPLEMENTATION_GUIDE.md)
 
 Coordinator-facing signal names, types, status codes, Clock Domains and ports
 form the current development integration baseline. Machine implementations

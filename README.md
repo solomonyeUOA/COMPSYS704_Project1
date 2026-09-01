@@ -7,6 +7,13 @@ Visualisation and regression tests. The unified Mock Controller is test-only;
 real Machine Controller/Plant modules remain owned and integrated by their
 respective team members.
 
+The authoritative quick-reference interface is
+[`COMPSYS704_Interface_V1_Integration_Test_Candidate_M4_V1_2_synced_fixed_28082026.xlsx`](COMPSYS704_Interface_V1_Integration_Test_Candidate_M4_V1_2_synced_fixed_28082026.xlsx)
+at the repository root. Current supporting contracts are in
+[`docs/interfaces/`](docs/interfaces/). Files in
+[`docs/archive/`](docs/archive/) are historical/reference-only and are **not**
+authoritative.
+
 The V1 freeze is a team-agreed baseline, not a forever-immutable API. Proposed
 changes must be agreed and applied consistently to source, XML, tests and docs.
 
@@ -18,22 +25,23 @@ changes must be agreed and applied consistently to source, XML, tests and docs.
   mapping uses `ConveyorControllerCD:11009` and
   `RotaryTableControllerCD:11003` with separate `CONVEYOR_*` and `ROTARY_*`
   status interfaces.
-- The available M3 Lid interface matches `LidLoaderControllerCD:11006` and
-  `LID_STATUS_REQUEST` / `LID_STATUS`.
-- An inspected M3 branch still uses the obsolete combined
-  `TransportControllerCD` / `TRANSPORT_*` Rotary status boundary. That peer
-  implementation must be updated on the M3 side before integration; M1 does
-  not provide a legacy compatibility mapping.
 - `MockControllerCD` remains a regression fixture and is not a production
   substitute for the eight real Machine Controllers.
+- `ABSVisualisationPlantCD` is display-only. It does not control machines,
+  actuators or physical Plant state.
+- The obsolete combined `TransportControllerCD` / `TRANSPORT_*` status
+  boundary is not part of the current M1 architecture.
 
 ## Start here
 
-1. Read [`docs/INTERFACE_FREEZE_V1.md`](docs/INTERFACE_FREEZE_V1.md).
-2. Read [`docs/VISUALISATION_INTERFACE_V1.md`](docs/VISUALISATION_INTERFACE_V1.md).
-3. Controller owners read [`docs/CONTROLLER_IMPLEMENTATION_GUIDE.md`](docs/CONTROLLER_IMPLEMENTATION_GUIDE.md).
-4. Use `COMPSYS704_Interface_V1_Integration_Test_Candidate_M4_V1_2_synced_fixed_28082026.xlsx`
-   as the current quick reference.
+1. Use
+   [`COMPSYS704_Interface_V1_Integration_Test_Candidate_M4_V1_2_synced_fixed_28082026.xlsx`](COMPSYS704_Interface_V1_Integration_Test_Candidate_M4_V1_2_synced_fixed_28082026.xlsx)
+   as the authoritative quick reference.
+2. Read [`docs/interfaces/INTERFACE_FREEZE_V1.md`](docs/interfaces/INTERFACE_FREEZE_V1.md).
+3. Read [`docs/interfaces/XUQI_M1_TEAM_INTEGRATION_CONTRACT_V1.md`](docs/interfaces/XUQI_M1_TEAM_INTEGRATION_CONTRACT_V1.md).
+4. Read [`docs/interfaces/VISUALISATION_INTERFACE_V1.md`](docs/interfaces/VISUALISATION_INTERFACE_V1.md).
+5. Controller owners read
+   [`docs/guides/CONTROLLER_IMPLEMENTATION_GUIDE.md`](docs/guides/CONTROLLER_IMPLEMENTATION_GUIDE.md).
 
 ## Architecture
 
@@ -74,14 +82,22 @@ a team design decision.
 ## Repository layout
 
 ```text
-xuqi_coordinator/  ABS Coordinator SystemJ source and production XML mapping
-xuqi_pos/          POSCD plus handwritten Java Swing order-entry view
-visualisation/     display Clock Domain, XML and Swing view
-common/            ORDER parser and Coordinator shared state
-docs/              interface contract and implementation guidance
-machines/          integration locations for owner-supplied Controller/Plant modules
-tests/             regression-only Mock, test XML and self-test
+xuqi_pos/          POS implementation
+xuqi_coordinator/  ABS Coordinator
+common/            shared order/state helpers
+visualisation/     display-only hierarchical Visualisation IP
+tests/             regression-only tests and Mock
+machines/          integration locations for team-owned machine modules
+
+docs/interfaces/   current interface contracts
+docs/guides/       implementation guidance
+docs/diagrams/     current M1/IP diagrams
+docs/reports/      report deliverables
+docs/archive/      superseded/reference-only material
 ```
+
+The master interface workbook remains at the repository root. Do not use an
+archived workbook or reference diagram as the current integration contract.
 
 ## POS V1 protocol
 
