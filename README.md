@@ -6,15 +6,10 @@ display-only Visualisation together with M3's Rotary Table, Lid Loader and
 Fault Supervisor. The unified Mock Controller is test-only; real M2 and M4
 Controller/Plant modules remain owned by their respective members.
 
-The authoritative quick-reference interface is
-[`docs/interfaces/COMPSYS704_Interface_Interim_Final.xlsx`](docs/interfaces/COMPSYS704_Interface_Interim_Final.xlsx).
-Current supporting contracts are in
-[`docs/interfaces/`](docs/interfaces/). Files in
-[`docs/archive/`](docs/archive/) are historical/reference-only and are **not**
-authoritative.
-
-The V1 freeze is a team-agreed baseline, not a forever-immutable API. Proposed
-changes must be agreed and applied consistently to source, XML, tests and docs.
+The executable integration topology and receiver allocation are maintained in
+[`integration/`](integration/), with the actual `.sysj`, `.xml` and Java
+implementations as the source of truth. Proposed interface changes must be
+agreed and applied consistently to source, XML and tests.
 
 ## Current integration status
 
@@ -38,15 +33,12 @@ changes must be agreed and applied consistently to source, XML, tests and docs.
 
 ## Start here
 
-1. Use [`docs/interfaces/COMPSYS704_Interface_Interim_Final.xlsx`](docs/interfaces/COMPSYS704_Interface_Interim_Final.xlsx)
-   as the authoritative quick reference.
-2. Read [`integration/README.md`](integration/README.md) for the integration
+1. Read [`integration/README.md`](integration/README.md) for the integration
    topology, ownership boundaries and merge order.
-3. Read [`docs/interfaces/INTERFACE_FREEZE_V1.md`](docs/interfaces/INTERFACE_FREEZE_V1.md).
-4. Read [`docs/interfaces/XUQI_M1_TEAM_INTEGRATION_CONTRACT_V1.md`](docs/interfaces/XUQI_M1_TEAM_INTEGRATION_CONTRACT_V1.md).
-5. Read [`docs/interfaces/VISUALISATION_INTERFACE_V1.md`](docs/interfaces/VISUALISATION_INTERFACE_V1.md).
-6. Controller owners read
-   [`docs/guides/CONTROLLER_IMPLEMENTATION_GUIDE.md`](docs/guides/CONTROLLER_IMPLEMENTATION_GUIDE.md).
+2. Read [`tests/README.md`](tests/README.md) for the Java 8/SystemJ build and
+   regression procedure.
+3. Read [`machines/rotary_lid/README.md`](machines/rotary_lid/README.md) for
+   the implemented M3 Controller/Plant and self-test details.
 
 ## Architecture
 
@@ -97,16 +89,7 @@ machines/rotary_lid/        M3 production modules and self-tests
 machines/filling_capping/   M4 integration slot (pending peer source)
 integration/                topology, port manifest and merge checklist
 tools/                      structural integration validation
-
-docs/interfaces/   current interface contracts
-docs/guides/       implementation guidance
-docs/diagrams/     current M1/IP diagrams
-docs/reports/      report deliverables
-docs/archive/      superseded/reference-only material
 ```
-
-Do not use an archived workbook or reference diagram as the current
-integration contract.
 
 ## POS V1 protocol
 
