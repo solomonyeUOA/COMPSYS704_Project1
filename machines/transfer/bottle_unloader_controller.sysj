@@ -1,0 +1,80 @@
+// M2 P6 Unloader. It is the exclusive BOTTLE_DONE owner.
+
+BottleUnloaderController(
+    input signal UNLOADER_STATUS_REQUEST;
+    input String signal UNLOAD_READY;
+    input String signal UNLOAD_PROFILE;
+    input String signal REMOVAL_CONFIRMED;
+
+    output Integer signal UNLOADER_STATUS;
+    output String signal UNLOAD_CMD;
+    output String signal P6_CLEAR;
+    output signal BOTTLE_DONE;
+    output String signal BOTTLE_READY_FOR_SORT;
+    output String signal WORKPIECE_TWIN_UPDATE;
+    output String signal RESOURCE_TWIN_UPDATE;
+)
+->{
+    System.out.println("M2 BottleUnloaderControllerCD started");
+
+    {loop {
+        present(UNLOADER_STATUS_REQUEST) {
+            emit UNLOADER_STATUS(M2MachineStateV1.getUnloaderStatus());
+        }
+        pause;
+    }}
+    ||
+    {loop {
+        present(UNLOAD_READY) {
+            M2MachineStateV1.acceptUnloadReady(#UNLOAD_READY);
+        }
+        present(UNLOAD_PROFILE) {
+            if (!M2MachineStateV1.acceptUnloadProfile(#UNLOAD_PROFILE)) {
+                System.out.println("M2 Unloader rejected UNLOAD_PROFILE");
+            }
+        }
+        present(REMOVAL_CONFIRMED) {
+            if (!M2MachineStateV1.acceptRemovalConfirmed(
+                #REMOVAL_CONFIRMED,
+                System.currentTimeMillis()
+            )) {
+                System.out.println("M2 Unloader rejected removal evidence");
+            }
+        }
+        pause;
+    }}
+    ||
+    {loop {
+        String command = M2MachineStateV1.takeUnloadCommand();
+        if (command != null) {
+            emit UNLOAD_CMD(command);
+        }
+        String clear = M2MachineStateV1.takeP6Clear();
+        if (clear != null) {
+            emit P6_CLEAR(clear);
+        }
+        String sortContext = M2MachineStateV1.takeSortContext();
+        if (sortContext != null) {
+            emit BOTTLE_READY_FOR_SORT(sortContext);
+        }
+        if (M2MachineStateV1.isBottleDonePresent(
+            System.currentTimeMillis()
+        )) {
+            emit BOTTLE_DONE;
+        }
+        pause;
+    }}
+    ||
+    {loop {
+        String workpiece =
+            M2MachineStateV1.takeUnloaderWorkpieceUpdate();
+        if (workpiece != null) {
+            emit WORKPIECE_TWIN_UPDATE(workpiece);
+        }
+        String resource = M2MachineStateV1.takeUnloaderResourceUpdate();
+        if (resource != null) {
+            emit RESOURCE_TWIN_UPDATE(resource);
+        }
+        pause;
+    }}
+}

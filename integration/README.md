@@ -12,32 +12,32 @@ receiver and hand-off contract before merge.
 ```text
 POSCD (11000)
   <-> CoordinatorCD (11001)
-        |-- BottleLoaderControllerCD (11002)       [M2 pending]
-        |-- ConveyorControllerCD (11009)           [M2 pending]
+        |-- BottleLoaderControllerCD (11002)       [M2 implemented]
+        |-- ConveyorControllerCD (11009)           [M2 implemented]
         |-- RotaryTableControllerCD (11003)        [M3 implemented]
         |-- FillerAControllerCD (11004)            [M4 pending]
         |-- FillerBControllerCD (11005)            [M4 pending]
         |-- LidLoaderControllerCD (11006)           [M3 implemented]
         |-- CapperControllerCD (11007)              [M4 pending]
-        |-- BottleUnloaderControllerCD (11010)      [M2 pending]
+        |-- BottleUnloaderControllerCD (11010)      [M2 implemented]
         `-- ABSVisualisationPlantCD (11008)         [M1 implemented]
 
-M2TransferFaultAdapterCD (13002)
+M2TransferFaultAdapterCD (13002)                   [M2 implemented]
   <-> FaultSupervisorCD (13003)                    [M3 implemented]
 
 RotaryTablePlantCD (12003)                         [M3 implemented]
   receives bottle-correlated P1/P2/P3/P4/P6 events
 ```
 
-`LabellerControllerCD:11013`, M4 Registry/SortPack and their Plant ports are
-listed in the manifest, but remain proposed or peer-owned until their source
-branches are merged and accepted.
+`LabellerControllerCD:11013`, the four M2 Plant Clock Domains and
+`DigitalTwinCD:14002` are implemented in `machines/transfer/`. M4
+Registry/SortPack remains proposed and peer-owned until M4 source is supplied.
 
 ## Merge order
 
 1. Merge this skeleton after M1 and M3 tests pass independently.
-2. M2 adds production source/XML under `machines/transfer/` and changes its
-   receiver `status` values from `pending` to `implemented` in the manifest.
+2. M2 production source/XML under `machines/transfer/` passes its deterministic
+   tests and the M2/M3 contract test.
 3. M4 adds production source/XML under `machines/filling_capping/` and updates
    its manifest entries.
 4. Run `tools/validate_integration.py` and all member self-tests.

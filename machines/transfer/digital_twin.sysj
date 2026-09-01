@@ -1,0 +1,101 @@
+// Read-only M2 Digital Twin owner. This Clock Domain emits no Plant command.
+
+DigitalTwin(
+    input String signal TWIN_BATCH_CONTEXT;
+    input String signal LOADER_WORKPIECE_TWIN_UPDATE;
+    input String signal LOADER_RESOURCE_TWIN_UPDATE;
+    input String signal CONVEYOR_WORKPIECE_TWIN_UPDATE;
+    input String signal CONVEYOR_RESOURCE_TWIN_UPDATE;
+    input String signal LABELLER_WORKPIECE_TWIN_UPDATE;
+    input String signal LABELLER_RESOURCE_TWIN_UPDATE;
+    input String signal UNLOADER_WORKPIECE_TWIN_UPDATE;
+    input String signal UNLOADER_RESOURCE_TWIN_UPDATE;
+    input String signal WORKPIECE_TWIN_UPDATE;
+    input String signal RESOURCE_TWIN_UPDATE;
+    input String signal TWIN_CONTEXT_REQUEST;
+
+    output String signal TWIN_CONTEXT_SNAPSHOT;
+)
+->{
+    System.out.println("M2 DigitalTwinCD started (read-only)");
+
+    {loop {present(TWIN_BATCH_CONTEXT) {
+        DigitalTwinStateV1.acceptBatchContext(#TWIN_BATCH_CONTEXT);
+    } pause;}}
+    ||
+    {loop {present(LOADER_WORKPIECE_TWIN_UPDATE) {
+        DigitalTwinStateV1.acceptWorkpieceUpdate(
+            #LOADER_WORKPIECE_TWIN_UPDATE
+        );
+    } pause;}}
+    ||
+    {loop {present(LOADER_RESOURCE_TWIN_UPDATE) {
+        DigitalTwinStateV1.acceptResourceUpdate(
+            #LOADER_RESOURCE_TWIN_UPDATE
+        );
+    } pause;}}
+    ||
+    {loop {present(CONVEYOR_WORKPIECE_TWIN_UPDATE) {
+        DigitalTwinStateV1.acceptWorkpieceUpdate(
+            #CONVEYOR_WORKPIECE_TWIN_UPDATE
+        );
+    } pause;}}
+    ||
+    {loop {present(CONVEYOR_RESOURCE_TWIN_UPDATE) {
+        DigitalTwinStateV1.acceptResourceUpdate(
+            #CONVEYOR_RESOURCE_TWIN_UPDATE
+        );
+    } pause;}}
+    ||
+    {loop {present(LABELLER_WORKPIECE_TWIN_UPDATE) {
+        DigitalTwinStateV1.acceptWorkpieceUpdate(
+            #LABELLER_WORKPIECE_TWIN_UPDATE
+        );
+    } pause;}}
+    ||
+    {loop {present(LABELLER_RESOURCE_TWIN_UPDATE) {
+        DigitalTwinStateV1.acceptResourceUpdate(
+            #LABELLER_RESOURCE_TWIN_UPDATE
+        );
+    } pause;}}
+    ||
+    {loop {present(UNLOADER_WORKPIECE_TWIN_UPDATE) {
+        DigitalTwinStateV1.acceptWorkpieceUpdate(
+            #UNLOADER_WORKPIECE_TWIN_UPDATE
+        );
+    } pause;}}
+    ||
+    {loop {present(UNLOADER_RESOURCE_TWIN_UPDATE) {
+        DigitalTwinStateV1.acceptResourceUpdate(
+            #UNLOADER_RESOURCE_TWIN_UPDATE
+        );
+    } pause;}}
+    ||
+    {loop {present(WORKPIECE_TWIN_UPDATE) {
+        if (!DigitalTwinStateV1.acceptWorkpieceUpdate(
+            #WORKPIECE_TWIN_UPDATE
+        )) {
+            System.out.println("DigitalTwinCD rejected workpiece update");
+        }
+    } pause;}}
+    ||
+    {loop {present(RESOURCE_TWIN_UPDATE) {
+        if (!DigitalTwinStateV1.acceptResourceUpdate(
+            #RESOURCE_TWIN_UPDATE
+        )) {
+            System.out.println("DigitalTwinCD rejected resource update");
+        }
+    } pause;}}
+    ||
+    {loop {present(TWIN_CONTEXT_REQUEST) {
+        DigitalTwinStateV1.requestSnapshot(#TWIN_CONTEXT_REQUEST);
+    } pause;}}
+    ||
+    {loop {
+        String snapshot = DigitalTwinStateV1.takeSnapshot();
+        if (snapshot != null) {
+            emit TWIN_CONTEXT_SNAPSHOT(snapshot);
+        }
+        pause;
+    }}
+}

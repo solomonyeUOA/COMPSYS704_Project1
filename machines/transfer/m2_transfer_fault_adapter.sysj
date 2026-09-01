@@ -1,0 +1,55 @@
+// M2 side of the frozen V2.1 four-message transfer-fault protocol.
+
+M2TransferFaultAdapter(
+    input String signal LOCAL_TRANSFER_FAULT;
+    input String signal TRANSFER_RECOVERY_REQUEST;
+    input String signal LOCAL_RECOVERY_EVIDENCE;
+
+    output String signal TRANSFER_FAULT_EVENT;
+    output String signal TRANSFER_RECOVERY_ACK;
+    output String signal TRANSFER_RECOVERY_RESULT;
+    output String signal LOCAL_RECOVERY_INTENT;
+)
+->{
+    System.out.println("M2 M2TransferFaultAdapterCD started");
+
+    {loop {
+        present(LOCAL_TRANSFER_FAULT) {
+            M2TransferFaultAdapterStateV2_1.onLocalFault(
+                #LOCAL_TRANSFER_FAULT
+            );
+        }
+        present(TRANSFER_RECOVERY_REQUEST) {
+            M2TransferFaultAdapterStateV2_1.onRecoveryRequest(
+                #TRANSFER_RECOVERY_REQUEST
+            );
+        }
+        present(LOCAL_RECOVERY_EVIDENCE) {
+            M2TransferFaultAdapterStateV2_1.onLocalRecoveryEvidence(
+                #LOCAL_RECOVERY_EVIDENCE
+            );
+        }
+        pause;
+    }}
+    ||
+    {loop {
+        String event =
+            M2TransferFaultAdapterStateV2_1.takeFaultEvent();
+        if (event != null) {
+            emit TRANSFER_FAULT_EVENT(event);
+        }
+        String ack = M2TransferFaultAdapterStateV2_1.takeAck();
+        if (ack != null) {
+            emit TRANSFER_RECOVERY_ACK(ack);
+        }
+        String intent = M2TransferFaultAdapterStateV2_1.takeIntent();
+        if (intent != null) {
+            emit LOCAL_RECOVERY_INTENT(intent);
+        }
+        String result = M2TransferFaultAdapterStateV2_1.takeResult();
+        if (result != null) {
+            emit TRANSFER_RECOVERY_RESULT(result);
+        }
+        pause;
+    }}
+}

@@ -1,0 +1,80 @@
+// M2 Bottle Loader Controller. Coordinator polling is strictly read-only.
+
+BottleLoaderController(
+    input Integer signal START_ORDER;
+    input String signal LOAD_PROFILE;
+    input signal LOADER_STATUS_REQUEST;
+    input String signal LOAD_CONFIRMED;
+    input signal CONVEYOR_ENTRY_AVAILABLE;
+
+    output Integer signal LOADER_STATUS;
+    output String signal LOAD_CMD;
+    output String signal BOTTLE_AT_CONVEYOR;
+    output String signal WORKPIECE_TWIN_UPDATE;
+    output String signal RESOURCE_TWIN_UPDATE;
+)
+->{
+    System.out.println("M2 BottleLoaderControllerCD started");
+
+    {loop {
+        present(LOADER_STATUS_REQUEST) {
+            emit LOADER_STATUS(M2MachineStateV1.getLoaderStatus());
+        }
+        pause;
+    }}
+    ||
+    {loop {
+        present(START_ORDER) {
+            if (!M2MachineStateV1.startLoaderBatch(#START_ORDER)) {
+                System.out.println("M2 Loader rejected START_ORDER=" +
+                    #START_ORDER);
+            }
+        }
+        present(LOAD_PROFILE) {
+            if (!M2MachineStateV1.acceptLoadProfile(#LOAD_PROFILE)) {
+                System.out.println("M2 Loader rejected LOAD_PROFILE");
+            }
+        }
+        pause;
+    }}
+    ||
+    {loop {
+        present(LOAD_CONFIRMED) {
+            if (!M2MachineStateV1.confirmLoaded(#LOAD_CONFIRMED)) {
+                System.out.println("M2 Loader rejected LOAD_CONFIRMED=" +
+                    #LOAD_CONFIRMED);
+            }
+        }
+        pause;
+    }}
+    ||
+    {loop {
+        boolean entryAvailable = false;
+        present(CONVEYOR_ENTRY_AVAILABLE) {
+            entryAvailable = true;
+        }
+        String loadCommand =
+            M2MachineStateV1.takeLoadCommand(entryAvailable);
+        if (loadCommand != null) {
+            emit LOAD_CMD(loadCommand);
+        }
+        String loadedContext = M2MachineStateV1.takeLoadedContext();
+        if (loadedContext != null) {
+            emit BOTTLE_AT_CONVEYOR(loadedContext);
+        }
+        pause;
+    }}
+    ||
+    {loop {
+        String workpiece =
+            M2MachineStateV1.takeLoaderWorkpieceUpdate();
+        if (workpiece != null) {
+            emit WORKPIECE_TWIN_UPDATE(workpiece);
+        }
+        String resource = M2MachineStateV1.takeLoaderResourceUpdate();
+        if (resource != null) {
+            emit RESOURCE_TWIN_UPDATE(resource);
+        }
+        pause;
+    }}
+}

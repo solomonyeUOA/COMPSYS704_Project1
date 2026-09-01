@@ -1,0 +1,94 @@
+// M2 entry Conveyor. LOAD_BOTTLE is evidence-gated and bottle-correlated.
+
+ConveyorController(
+    input signal CONVEYOR_STATUS_REQUEST;
+    input String signal BOTTLE_AT_CONVEYOR;
+    input String signal P1_FEEDBACK;
+    input String signal LOCAL_RECOVERY_INTENT;
+
+    output Integer signal CONVEYOR_STATUS;
+    output signal CONVEYOR_ENTRY_AVAILABLE;
+    output String signal CONVEYOR_TRANSFER;
+    output Boolean signal MOTOR_CMD;
+    output String signal HANDOFF_COMMITTED;
+    output String signal LOAD_BOTTLE;
+    output String signal LOCAL_TRANSFER_FAULT;
+    output String signal LOCAL_RECOVERY_EVIDENCE;
+    output String signal WORKPIECE_TWIN_UPDATE;
+    output String signal RESOURCE_TWIN_UPDATE;
+)
+->{
+    System.out.println("M2 ConveyorControllerCD started");
+
+    {loop {
+        present(CONVEYOR_STATUS_REQUEST) {
+            emit CONVEYOR_STATUS(M2MachineStateV1.getConveyorStatus());
+        }
+        pause;
+    }}
+    ||
+    {loop {
+        present(BOTTLE_AT_CONVEYOR) {
+            if (!M2MachineStateV1.offerConveyorBottle(
+                #BOTTLE_AT_CONVEYOR
+            )) {
+                System.out.println("M2 Conveyor rejected bottle context");
+            }
+        }
+        present(P1_FEEDBACK) {
+            M2MachineStateV1.acceptP1Feedback(#P1_FEEDBACK);
+        }
+        present(LOCAL_RECOVERY_INTENT) {
+            M2MachineStateV1.acceptConveyorRecoveryIntent(
+                #LOCAL_RECOVERY_INTENT,
+                System.currentTimeMillis()
+            );
+        }
+        pause;
+    }}
+    ||
+    {loop {
+        if (M2MachineStateV1.isConveyorEntryAvailable()) {
+            emit CONVEYOR_ENTRY_AVAILABLE;
+        }
+
+        String transferContext =
+            M2MachineStateV1.takeConveyorTransferContext();
+        if (transferContext != null) {
+            emit CONVEYOR_TRANSFER(transferContext);
+            M2MachineStateV1.startConveyor(System.currentTimeMillis());
+        }
+        emit MOTOR_CMD(M2MachineStateV1.isConveyorMotorEnabled());
+
+        M2MachineStateV1.tickConveyor(System.currentTimeMillis());
+        String fault = M2MachineStateV1.takeConveyorFault();
+        if (fault != null) {
+            emit LOCAL_TRANSFER_FAULT(fault);
+        }
+
+        String bottleId = M2MachineStateV1.takeLoadBottle();
+        if (bottleId != null) {
+            emit LOAD_BOTTLE(bottleId);
+            emit HANDOFF_COMMITTED(bottleId);
+        }
+        String evidence =
+            M2MachineStateV1.takeConveyorRecoveryEvidence();
+        if (evidence != null) {
+            emit LOCAL_RECOVERY_EVIDENCE(evidence);
+        }
+        pause;
+    }}
+    ||
+    {loop {
+        String workpiece =
+            M2MachineStateV1.takeConveyorWorkpieceUpdate();
+        if (workpiece != null) {
+            emit WORKPIECE_TWIN_UPDATE(workpiece);
+        }
+        String resource = M2MachineStateV1.takeConveyorResourceUpdate();
+        if (resource != null) {
+            emit RESOURCE_TWIN_UPDATE(resource);
+        }
+        pause;
+    }}
+}
