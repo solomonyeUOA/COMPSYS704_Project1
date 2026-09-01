@@ -14,5 +14,15 @@ visualisation/ABSVisualisationPlant.java
 *.log
 .idea/
 .vscode/
+.settings/
+.project
+.classpath
+.factorypath
+*.tmp
+~$*
 .DS_Store
 Thumbs.db
+*.iml
+
+/pos/
+/coordinator/

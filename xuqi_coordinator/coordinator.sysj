@@ -7,33 +7,47 @@ Coordinator(
     input String signal ORDER;
     output String signal ORDER_COMPLETE;
 
+    // Frozen M3-facing V2.1 safety-coordination boundary.
+    input String signal FT_FAULT_ALERT;
+    input String signal FT_SAFE_STOP_REQUEST;
+    input String signal FT_RECOVERY_READY;
+    input String signal FT_RECOVERY_FAILED;
+    output String signal FT_SAFE_STOP_ACK;
+    output String signal FT_RESUME_DECISION;
+
     output Integer signal START_ORDER;
     output Integer signal FILL_A_RATIO;
     output Integer signal FILL_B_RATIO;
 
     output signal LOADER_STATUS_REQUEST;
-    output signal TRANSPORT_STATUS_REQUEST;
+    output signal CONVEYOR_STATUS_REQUEST;
+    output signal ROTARY_STATUS_REQUEST;
     output signal FILLER_A_STATUS_REQUEST;
     output signal FILLER_B_STATUS_REQUEST;
     output signal LID_STATUS_REQUEST;
     output signal CAPPER_STATUS_REQUEST;
+    output signal UNLOADER_STATUS_REQUEST;
 
     // Coordinator -> Overall ABS Visualisation Plant only.
     output Integer signal VIZ_LOADER_STATUS;
-    output Integer signal VIZ_TRANSPORT_STATUS;
+    output Integer signal VIZ_CONVEYOR_STATUS;
+    output Integer signal VIZ_ROTARY_STATUS;
     output Integer signal VIZ_FILLER_A_STATUS;
     output Integer signal VIZ_FILLER_B_STATUS;
     output Integer signal VIZ_LID_STATUS;
     output Integer signal VIZ_CAPPER_STATUS;
+    output Integer signal VIZ_UNLOADER_STATUS;
     output Integer signal VIZ_REQUIRED_BOTTLES;
     output Integer signal VIZ_COMPLETED_BOTTLES;
 
     input Integer signal LOADER_STATUS;
-    input Integer signal TRANSPORT_STATUS;
+    input Integer signal CONVEYOR_STATUS;
+    input Integer signal ROTARY_STATUS;
     input Integer signal FILLER_A_STATUS;
     input Integer signal FILLER_B_STATUS;
     input Integer signal LID_STATUS;
     input Integer signal CAPPER_STATUS;
+    input Integer signal UNLOADER_STATUS;
 
     input signal BOTTLE_DONE;
 )
@@ -46,12 +60,31 @@ Coordinator(
             present(ORDER) {
                 String receivedOrder = #ORDER;
 
-                if (CoordinatorStateV1.orderActive ||
-                    CoordinatorStateV1.completionPending) {
+                if (CoordinatorStateV1.ftCoordinationHold) {
                     System.out.println(
-                        "Coordinator rejected ORDER while active: " +
-                        receivedOrder
+                        "Coordinator rejected ORDER while FT HOLD is active: " +
+                        receivedOrder + " [COORD-FT] " +
+                        CoordinatorStateV1.ftSnapshot()
                     );
+                }
+                else if (CoordinatorStateV1.orderActive) {
+                    if (!CoordinatorStateV1.isDuplicateOfLastAcceptedOrder(
+                        receivedOrder
+                    )) {
+                        System.out.println(
+                            "Coordinator rejected ORDER while active: " +
+                            receivedOrder + " [COORD-LIFECYCLE] " +
+                            CoordinatorStateV1.lifecycleSnapshot()
+                        );
+                    }
+                }
+                else if (
+                    CoordinatorStateV1.isDuplicateOfLastAcceptedOrder(
+                        receivedOrder
+                    )
+                ) {
+                    // A late transport copy of an already accepted order is
+                    // idempotently ignored and never restarts production.
                 }
                 else if (!CoordinatorStateV1.accept(receivedOrder)) {
                     System.out.println(
@@ -84,6 +117,10 @@ Coordinator(
                         ", B=" +
                         CoordinatorStateV1.currentLiquidBRatio
                     );
+                    System.out.println(
+                        "[COORD-LIFECYCLE] accepted " +
+                        CoordinatorStateV1.lifecycleSnapshot()
+                    );
                 }
             }
             pause;
@@ -97,11 +134,13 @@ Coordinator(
             if (System.currentTimeMillis() >=
                 CoordinatorStateV1.nextStatusPollMillis) {
                 emit LOADER_STATUS_REQUEST;
-                emit TRANSPORT_STATUS_REQUEST;
+                emit CONVEYOR_STATUS_REQUEST;
+                emit ROTARY_STATUS_REQUEST;
                 emit FILLER_A_STATUS_REQUEST;
                 emit FILLER_B_STATUS_REQUEST;
                 emit LID_STATUS_REQUEST;
                 emit CAPPER_STATUS_REQUEST;
+                emit UNLOADER_STATUS_REQUEST;
                 emit VIZ_REQUIRED_BOTTLES(
                     CoordinatorStateV1.requiredBottles
                 );
@@ -128,16 +167,29 @@ Coordinator(
             emit VIZ_LOADER_STATUS(CoordinatorStateV1.loaderStatus);
         } pause;}}
         ||
-        {loop {present(TRANSPORT_STATUS) {
-            if (CoordinatorStateV1.transportStatus != #TRANSPORT_STATUS) {
-                CoordinatorStateV1.transportStatus = #TRANSPORT_STATUS;
+        {loop {present(CONVEYOR_STATUS) {
+            if (CoordinatorStateV1.conveyorStatus != #CONVEYOR_STATUS) {
+                CoordinatorStateV1.conveyorStatus = #CONVEYOR_STATUS;
                 System.out.println(
-                    "Coordinator TRANSPORT_STATUS=" +
-                    CoordinatorStateV1.transportStatus
+                    "Coordinator CONVEYOR_STATUS=" +
+                    CoordinatorStateV1.conveyorStatus
                 );
             }
-            emit VIZ_TRANSPORT_STATUS(
-                CoordinatorStateV1.transportStatus
+            emit VIZ_CONVEYOR_STATUS(
+                CoordinatorStateV1.conveyorStatus
+            );
+        } pause;}}
+        ||
+        {loop {present(ROTARY_STATUS) {
+            if (CoordinatorStateV1.rotaryStatus != #ROTARY_STATUS) {
+                CoordinatorStateV1.rotaryStatus = #ROTARY_STATUS;
+                System.out.println(
+                    "Coordinator ROTARY_STATUS=" +
+                    CoordinatorStateV1.rotaryStatus
+                );
+            }
+            emit VIZ_ROTARY_STATUS(
+                CoordinatorStateV1.rotaryStatus
             );
         } pause;}}
         ||
@@ -184,6 +236,19 @@ Coordinator(
             }
             emit VIZ_CAPPER_STATUS(CoordinatorStateV1.capperStatus);
         } pause;}}
+        ||
+        {loop {present(UNLOADER_STATUS) {
+            if (CoordinatorStateV1.unloaderStatus != #UNLOADER_STATUS) {
+                CoordinatorStateV1.unloaderStatus = #UNLOADER_STATUS;
+                System.out.println(
+                    "Coordinator UNLOADER_STATUS=" +
+                    CoordinatorStateV1.unloaderStatus
+                );
+            }
+            emit VIZ_UNLOADER_STATUS(
+                CoordinatorStateV1.unloaderStatus
+            );
+        } pause;}}
     }
     ||
     // Send completion after the BOTTLE_DONE reaction has settled. Separating
@@ -191,16 +256,20 @@ Coordinator(
     // the POS notification transport.
     {
         loop {
-            if (CoordinatorStateV1.completionPending &&
-                System.currentTimeMillis() >=
-                CoordinatorStateV1.completionSendAfterMillis) {
+            if (CoordinatorStateV1.completionPending) {
                 String completionPayload =
                     CoordinatorStateV1.nextCompletionTransmission();
-                emit ORDER_COMPLETE(completionPayload);
-                System.out.println(
-                    "Coordinator sent ORDER_COMPLETE: " +
-                    completionPayload
-                );
+                if (completionPayload != null) {
+                    emit ORDER_COMPLETE(completionPayload);
+                    if (CoordinatorStateV1.completionTransmissionStarted) {
+                        System.out.println(
+                            "[COORD-LIFECYCLE] ORDER_COMPLETE attempt=" +
+                            CoordinatorStateV1.lastCompletionAttempt + " " +
+                            completionPayload + " " +
+                            CoordinatorStateV1.lifecycleSnapshot()
+                        );
+                    }
+                }
             }
             pause;
         }
@@ -210,7 +279,8 @@ Coordinator(
     {
         loop {
             present(BOTTLE_DONE) {
-                if (CoordinatorStateV1.orderActive) {
+                if (CoordinatorStateV1.consumeBottleDoneEdge(true) &&
+                    CoordinatorStateV1.orderActive) {
                     boolean productComplete =
                         CoordinatorStateV1.recordBottleDone();
                     System.out.println(
@@ -225,7 +295,15 @@ Coordinator(
                     );
 
                     if (productComplete) {
-                        if (CoordinatorStateV1.hasNextProduct()) {
+                        if (CoordinatorStateV1.hasNextProduct() &&
+                            CoordinatorStateV1.ftCoordinationHold) {
+                            CoordinatorStateV1.ftBatchTransitionHeld = true;
+                            System.out.println(
+                                "[COORD-FT] next product dispatch held; " +
+                                CoordinatorStateV1.ftSnapshot()
+                            );
+                        }
+                        else if (CoordinatorStateV1.hasNextProduct()) {
                             CoordinatorStateV1.advanceToNextProduct();
 
                             emit START_ORDER(
@@ -255,11 +333,72 @@ Coordinator(
                                 "Coordinator completed final bottle for " +
                                 CoordinatorStateV1.activeOrder.orderId
                             );
+                            System.out.println(
+                                "[COORD-LIFECYCLE] completeOrder " +
+                                CoordinatorStateV1.lifecycleSnapshot()
+                            );
                         }
                     }
                 }
             }
+            else {
+                CoordinatorStateV1.consumeBottleDoneEdge(false);
+            }
             pause;
         }
+    }
+    ||
+    // M3-facing V2.1 safety inputs. The current M1 implementation records
+    // events and holds new order/batch dispatch. It does not have an approved
+    // physical safe-stop confirmation signal, so it deliberately emits
+    // neither FT_SAFE_STOP_ACK nor FT_RESUME_DECISION yet.
+    {
+        {loop {present(FT_FAULT_ALERT) {
+            if (CoordinatorStateV1.recordFtFaultAlert(#FT_FAULT_ALERT)) {
+                System.out.println(
+                    "[COORD-FT] FT_FAULT_ALERT recorded payload=" +
+                    #FT_FAULT_ALERT + " " + CoordinatorStateV1.ftSnapshot()
+                );
+            }
+        } pause;}}
+        ||
+        {loop {present(FT_SAFE_STOP_REQUEST) {
+            if (CoordinatorStateV1.recordFtSafeStopRequest(
+                #FT_SAFE_STOP_REQUEST
+            )) {
+                System.out.println(
+                    "[COORD-FT] FT_SAFE_STOP_REQUEST recorded; " +
+                    "FT_SAFE_STOP_ACK withheld until independent physical " +
+                    "safe-stop evidence exists. payload=" +
+                    #FT_SAFE_STOP_REQUEST + " " +
+                    CoordinatorStateV1.ftSnapshot()
+                );
+            }
+        } pause;}}
+        ||
+        {loop {present(FT_RECOVERY_READY) {
+            if (CoordinatorStateV1.recordFtRecoveryReady(
+                #FT_RECOVERY_READY
+            )) {
+                System.out.println(
+                    "[COORD-FT] FT_RECOVERY_READY recorded; HOLD retained " +
+                    "and no automatic resume performed. payload=" +
+                    #FT_RECOVERY_READY + " " +
+                    CoordinatorStateV1.ftSnapshot()
+                );
+            }
+        } pause;}}
+        ||
+        {loop {present(FT_RECOVERY_FAILED) {
+            if (CoordinatorStateV1.recordFtRecoveryFailed(
+                #FT_RECOVERY_FAILED
+            )) {
+                System.out.println(
+                    "[COORD-FT] FT_RECOVERY_FAILED recorded; HOLD retained. " +
+                    "payload=" + #FT_RECOVERY_FAILED + " " +
+                    CoordinatorStateV1.ftSnapshot()
+                );
+            }
+        } pause;}}
     }
 }

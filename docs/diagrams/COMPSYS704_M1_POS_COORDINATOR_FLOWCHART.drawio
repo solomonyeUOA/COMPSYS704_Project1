@@ -1,0 +1,301 @@
+<mxfile host="app.diagrams.net" modified="2026-08-19T00:00:00.000Z" agent="Codex" version="26.0.9" type="device" compressed="false" pages="1">
+  <diagram id="pos-coordinator-integrated" name="POS-Coordinator Integrated Flow">
+    <mxGraphModel dx="2300" dy="1850" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="2300" pageHeight="1850" math="0" shadow="0" background="#FFFFFF">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+
+        <mxCell id="lane-pos" value="POS" style="swimlane;horizontal=1;startSize=48;rounded=1;html=1;fillColor=#1F4E78;swimlaneFillColor=#F4F8FD;strokeColor=#6C8EBF;fontColor=#FFFFFF;fontStyle=1;fontSize=18;collapsible=0;" vertex="1" parent="1">
+          <mxGeometry x="30" y="100" width="420" height="1710" as="geometry"/>
+        </mxCell>
+        <mxCell id="lane-coordinator" value="ABS Coordinator" style="swimlane;horizontal=1;startSize=48;rounded=1;html=1;fillColor=#2F5597;swimlaneFillColor=#F7F9FC;strokeColor=#7392C2;fontColor=#FFFFFF;fontStyle=1;fontSize=18;collapsible=0;" vertex="1" parent="1">
+          <mxGeometry x="470" y="100" width="950" height="1710" as="geometry"/>
+        </mxCell>
+        <mxCell id="lane-machines" value="Machine Controllers" style="swimlane;horizontal=1;startSize=48;rounded=1;html=1;fillColor=#9C6500;swimlaneFillColor=#FFF8E8;strokeColor=#D6A64A;fontColor=#FFFFFF;fontStyle=1;fontSize=18;collapsible=0;" vertex="1" parent="1">
+          <mxGeometry x="1440" y="100" width="400" height="1710" as="geometry"/>
+        </mxCell>
+        <mxCell id="lane-viz" value="ABS Visualisation (read-only)" style="swimlane;horizontal=1;startSize=48;rounded=1;html=1;fillColor=#2E7D32;swimlaneFillColor=#F3FAF5;strokeColor=#75A978;fontColor=#FFFFFF;fontStyle=1;fontSize=18;collapsible=0;" vertex="1" parent="1">
+          <mxGeometry x="1860" y="100" width="410" height="1710" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="title" value="POS–Coordinator Integrated ABS Flow" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=26;fontStyle=1;fontColor=#243247;" vertex="1" parent="1">
+          <mxGeometry x="620" y="20" width="1060" height="36" as="geometry"/>
+        </mxCell>
+        <mxCell id="subtitle" value="Order submission → coordination → machine production → status visualisation → completion returned to POS" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=13;fontColor=#5B6B82;" vertex="1" parent="1">
+          <mxGeometry x="560" y="58" width="1180" height="26" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="pos-start" value="Start" style="rounded=1;arcSize=50;whiteSpace=wrap;html=1;fillColor=#E2E8F0;strokeColor=#40546A;fontColor=#223047;fontStyle=1;fontSize=13;" vertex="1" parent="1">
+          <mxGeometry x="165" y="155" width="150" height="38" as="geometry"/>
+        </mxCell>
+        <mxCell id="pos-start-viz" value="Start POSVisualisation&lt;br&gt;&lt;font style=&quot;font-size:11px&quot;&gt;POSVisualisation.start()&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#6C8EBF;fontColor=#223047;fontSize=13;" vertex="1" parent="1">
+          <mxGeometry x="90" y="207" width="300" height="50" as="geometry"/>
+        </mxCell>
+        <mxCell id="pos-input" value="User enters order data&lt;br&gt;&lt;font style=&quot;font-size:11px&quot;&gt;Order ID • Product ID • Quantity&lt;br&gt;Liquid A ratio • Liquid B ratio&lt;/font&gt;" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fillColor=#EAF3FC;strokeColor=#4D79A7;fontColor=#223047;fontSize=13;" vertex="1" parent="1">
+          <mxGeometry x="75" y="272" width="330" height="72" as="geometry"/>
+        </mxCell>
+        <mxCell id="pos-submit" value="Submit Order" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DDEBF7;strokeColor=#4472C4;fontColor=#223047;fontStyle=1;fontSize=13;" vertex="1" parent="1">
+          <mxGeometry x="125" y="360" width="230" height="42" as="geometry"/>
+        </mxCell>
+        <mxCell id="pos-validate-gui" value="Validate GUI input&lt;br&gt;&lt;font style=&quot;font-size:11px&quot;&gt;queueOrderFromForm()&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#6C8EBF;fontColor=#223047;fontSize=13;" vertex="1" parent="1">
+          <mxGeometry x="95" y="417" width="290" height="48" as="geometry"/>
+        </mxCell>
+        <mxCell id="pos-valid-input" value="Valid input?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#FFF2CC;strokeColor=#D6A100;fontColor=#5B4300;fontStyle=1;fontSize=13;" vertex="1" parent="1">
+          <mxGeometry x="160" y="480" width="160" height="70" as="geometry"/>
+        </mxCell>
+        <mxCell id="pos-gui-error" value="Show validation error&lt;br&gt;&lt;font style=&quot;font-size:11px&quot;&gt;Return to input&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FDE9E7;strokeColor=#C94C4C;fontColor=#8B1E1E;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="48" y="570" width="160" height="52" as="geometry"/>
+        </mxCell>
+        <mxCell id="pos-generate" value="Generate ORDER V1 payload&lt;br&gt;&lt;font style=&quot;font-size:11px&quot;&gt;orderId|count|productId,A,B,quantity;…&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#6C8EBF;fontColor=#223047;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="220" y="570" width="205" height="58" as="geometry"/>
+        </mxCell>
+        <mxCell id="pos-poll" value="Poll submitted order&lt;br&gt;&lt;font style=&quot;font-size:11px&quot;&gt;pollSubmittedOrder()&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F3E8FF;strokeColor=#805AD5;fontColor=#3E2863;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="220" y="645" width="205" height="48" as="geometry"/>
+        </mxCell>
+        <mxCell id="pos-parse" value="SystemJ boundary validation&lt;br&gt;&lt;font style=&quot;font-size:11px&quot;&gt;OrderV1.parse(submittedOrder)&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F3E8FF;strokeColor=#805AD5;fontColor=#3E2863;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="220" y="710" width="205" height="52" as="geometry"/>
+        </mxCell>
+        <mxCell id="pos-valid-v1" value="Valid Order V1?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#FFF2CC;strokeColor=#D6A100;fontColor=#5B4300;fontStyle=1;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="242" y="778" width="160" height="68" as="geometry"/>
+        </mxCell>
+        <mxCell id="pos-reject-v1" value="Reject / do not send&lt;br&gt;&lt;font style=&quot;font-size:11px&quot;&gt;showValidationError()&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FDE9E7;strokeColor=#C94C4C;fontColor=#8B1E1E;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="48" y="790" width="165" height="52" as="geometry"/>
+        </mxCell>
+        <mxCell id="pos-emit-order" value="Send order to Coordinator&lt;br&gt;&lt;b&gt;emit ORDER(submittedOrder)&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#D6EAF8;strokeColor=#1565C0;strokeWidth=2.5;fontColor=#123E66;fontStyle=1;fontSize=13;" vertex="1" parent="1">
+          <mxGeometry x="220" y="865" width="205" height="58" as="geometry"/>
+        </mxCell>
+        <mxCell id="pos-wait-complete" value="Wait / remain reactive for completion" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fillColor=#EAF3FC;strokeColor=#4D79A7;fontColor=#223047;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="105" y="950" width="270" height="48" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="coord-parallel" value="Parallel SystemJ behaviours: order handling • polling • status listeners • bottle counting • delayed POS notification" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#EAF0FA;strokeColor=#7392C2;fontColor=#2F4770;fontSize=12;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="500" y="158" width="880" height="44" as="geometry"/>
+        </mxCell>
+        <mxCell id="coord-poll-decision" value="≈ 1 s polling time reached?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#FFF2CC;strokeColor=#D6A100;fontColor=#5B4300;fontStyle=1;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="520" y="225" width="190" height="76" as="geometry"/>
+        </mxCell>
+        <mxCell id="coord-poll-pause" value="NO: pause / repeat" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F2F4F7;strokeColor=#8B98A8;fontColor=#44546A;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="510" y="325" width="150" height="42" as="geometry"/>
+        </mxCell>
+        <mxCell id="coord-status-request" value="Emit eight status requests&lt;br&gt;&lt;b&gt;*_STATUS_REQUEST&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:10px&quot;&gt;LOADER • CONVEYOR • ROTARY • FILLER_A • FILLER_B • LID • CAPPER • UNLOADER&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF2CC;strokeColor=#C88700;strokeWidth=2;fontColor=#654900;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="735" y="218" width="195" height="80" as="geometry"/>
+        </mxCell>
+        <mxCell id="coord-progress-refresh" value="Refresh batch progress&lt;br&gt;&lt;font style=&quot;font-size:11px&quot;&gt;VIZ_REQUIRED_BOTTLES&lt;br&gt;VIZ_COMPLETED_BOTTLES&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8F5E9;strokeColor=#4F9A58;fontColor=#205B2A;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="735" y="325" width="195" height="72" as="geometry"/>
+        </mxCell>
+        <mxCell id="coord-receive-status" value="Receive controller reply&lt;br&gt;&lt;font style=&quot;font-size:11px&quot;&gt;present(XXX_STATUS)&lt;br&gt;#XXX_STATUS&lt;/font&gt;" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fillColor=#E8F1F8;strokeColor=#4E7C98;fontColor=#24485F;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="975" y="225" width="220" height="72" as="geometry"/>
+        </mxCell>
+        <mxCell id="coord-store-status" value="Compare with previous state&lt;br&gt;Store latest value in CoordinatorStateV1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#7392C2;fontColor=#223047;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="975" y="325" width="220" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="coord-forward-status" value="Forward current state&lt;br&gt;&lt;b&gt;emit VIZ_XXX_STATUS(...)&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8F5E9;strokeColor=#4F9A58;strokeWidth=2;fontColor=#205B2A;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="975" y="410" width="220" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="coord-poll-note" value="Polling only: *_STATUS_REQUEST must not start or advance a physical machine operation." style="shape=note;whiteSpace=wrap;html=1;fillColor=#FFF9E6;strokeColor=#D6A64A;fontColor=#654900;fontSize=11;size=14;" vertex="1" parent="1">
+          <mxGeometry x="1215" y="315" width="175" height="105" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="coord-order-section" value="ORDER reception and initial batch dispatch" style="text;html=1;align=left;verticalAlign=middle;whiteSpace=wrap;fontSize=14;fontStyle=1;fontColor=#2F5597;" vertex="1" parent="1">
+          <mxGeometry x="500" y="650" width="450" height="30" as="geometry"/>
+        </mxCell>
+        <mxCell id="coord-present-order" value="Receive ORDER&lt;br&gt;&lt;b&gt;present(ORDER)&lt;/b&gt;" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fillColor=#EAF3FC;strokeColor=#1565C0;strokeWidth=2.5;fontColor=#123E66;fontSize=13;" vertex="1" parent="1">
+          <mxGeometry x="500" y="705" width="200" height="62" as="geometry"/>
+        </mxCell>
+        <mxCell id="coord-read-order" value="Read payload&lt;br&gt;&lt;font style=&quot;font-size:11px&quot;&gt;receivedOrder = #ORDER&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#7392C2;fontColor=#223047;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="735" y="710" width="190" height="52" as="geometry"/>
+        </mxCell>
+        <mxCell id="coord-active-decision" value="orderActive ||&lt;br&gt;completionPending?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#FFF2CC;strokeColor=#D6A100;fontColor=#5B4300;fontStyle=1;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="970" y="690" width="200" height="88" as="geometry"/>
+        </mxCell>
+        <mxCell id="coord-reject-active" value="Reject ORDER while active&lt;br&gt;&lt;font style=&quot;font-size:11px&quot;&gt;Return to wait state&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FDE9E7;strokeColor=#C94C4C;fontColor=#8B1E1E;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="1200" y="705" width="185" height="58" as="geometry"/>
+        </mxCell>
+        <mxCell id="coord-accept" value="Parse and accept&lt;br&gt;&lt;font style=&quot;font-size:11px&quot;&gt;CoordinatorStateV1.accept(receivedOrder)&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#7392C2;fontColor=#223047;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="970" y="805" width="200" height="58" as="geometry"/>
+        </mxCell>
+        <mxCell id="coord-valid-order" value="Valid order?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#FFF2CC;strokeColor=#D6A100;fontColor=#5B4300;fontStyle=1;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="990" y="890" width="160" height="72" as="geometry"/>
+        </mxCell>
+        <mxCell id="coord-reject-invalid" value="Reject invalid ORDER&lt;br&gt;&lt;font style=&quot;font-size:11px&quot;&gt;Return to wait state&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FDE9E7;strokeColor=#C94C4C;fontColor=#8B1E1E;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="1200" y="898" width="185" height="56" as="geometry"/>
+        </mxCell>
+        <mxCell id="coord-accept-batch" value="Accept current product / batch&lt;br&gt;&lt;font style=&quot;font-size:11px&quot;&gt;quantity + Liquid A/B ratios loaded&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#7392C2;fontColor=#223047;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="935" y="990" width="270" height="58" as="geometry"/>
+        </mxCell>
+        <mxCell id="coord-initial-dispatch" value="Initial batch dispatch&lt;br&gt;&lt;b&gt;START_ORDER(requiredBottles)&lt;br&gt;FILL_A_RATIO / FILL_B_RATIO&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:10px&quot;&gt;+ VIZ_REQUIRED_BOTTLES / VIZ_COMPLETED_BOTTLES = 0&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFE8CC;strokeColor=#C46A00;strokeWidth=2.5;fontColor=#713B00;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="915" y="1070" width="310" height="88" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="machine-status-request" value="Receive polling event&lt;br&gt;&lt;b&gt;*_STATUS_REQUEST&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF2CC;strokeColor=#C88700;strokeWidth=2;fontColor=#654900;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="1480" y="210" width="320" height="62" as="geometry"/>
+        </mxCell>
+        <mxCell id="machine-status-reply" value="Reply with current integer state&lt;br&gt;&lt;b&gt;*_STATUS : Integer&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8F1F8;strokeColor=#4E7C98;strokeWidth=2;fontColor=#24485F;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="1480" y="305" width="320" height="62" as="geometry"/>
+        </mxCell>
+        <mxCell id="machine-group" value="&lt;b&gt;ABS Machine Controllers&lt;/b&gt;&lt;br&gt;&lt;br&gt;Bottle Loader&lt;br&gt;Conveyor&lt;br&gt;Rotary Table&lt;br&gt;Filler A&lt;br&gt;Filler B&lt;br&gt;Lid Loader&lt;br&gt;Capper&lt;br&gt;Bottle Unloader&lt;br&gt;&lt;br&gt;&lt;font style=&quot;font-size:11px&quot;&gt;Controllers own machine-level execution and Plant control.&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF4D6;strokeColor=#C88700;strokeWidth=2;fontColor=#654900;fontSize=13;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="1480" y="425" width="320" height="360" as="geometry"/>
+        </mxCell>
+        <mxCell id="machine-receive-command" value="Receive production command / recipe&lt;br&gt;&lt;b&gt;START_ORDER + FILL_A_RATIO + FILL_B_RATIO&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFE8CC;strokeColor=#C46A00;strokeWidth=2.5;fontColor=#713B00;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="1480" y="1045" width="320" height="72" as="geometry"/>
+        </mxCell>
+        <mxCell id="machine-final-event" value="Final machine / Bottle Unloader&lt;br&gt;&lt;b&gt;emit BOTTLE_DONE&lt;/b&gt;" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fillColor=#E5F4E7;strokeColor=#388E3C;strokeWidth=2.5;fontColor=#1B5E20;fontSize=13;" vertex="1" parent="1">
+          <mxGeometry x="1480" y="1200" width="320" height="72" as="geometry"/>
+        </mxCell>
+        <mxCell id="machine-pipeline-note" value="Bottle flow remains pipelined; the Coordinator does not sequence individual mechanical actions." style="shape=note;whiteSpace=wrap;html=1;fillColor=#FFF9E6;strokeColor=#D6A64A;fontColor=#654900;fontSize=11;size=14;" vertex="1" parent="1">
+          <mxGeometry x="1495" y="1335" width="290" height="95" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="viz-status-list" value="Receive machine state signals&lt;br&gt;&lt;font style=&quot;font-size:11px&quot;&gt;VIZ_LOADER_STATUS&lt;br&gt;VIZ_CONVEYOR_STATUS&lt;br&gt;VIZ_ROTARY_STATUS&lt;br&gt;VIZ_FILLER_A_STATUS&lt;br&gt;VIZ_FILLER_B_STATUS&lt;br&gt;VIZ_LID_STATUS&lt;br&gt;VIZ_CAPPER_STATUS&lt;br&gt;VIZ_UNLOADER_STATUS&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8F5E9;strokeColor=#4F9A58;strokeWidth=2;fontColor=#205B2A;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="1900" y="200" width="330" height="280" as="geometry"/>
+        </mxCell>
+        <mxCell id="viz-status-display" value="Symbolic machine status" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DDF2E0;strokeColor=#388E3C;fontColor=#1B5E20;fontStyle=1;fontSize=13;" vertex="1" parent="1">
+          <mxGeometry x="1940" y="510" width="250" height="52" as="geometry"/>
+        </mxCell>
+        <mxCell id="viz-progress-list" value="Receive batch progress&lt;br&gt;&lt;b&gt;VIZ_REQUIRED_BOTTLES&lt;br&gt;VIZ_COMPLETED_BOTTLES&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8F5E9;strokeColor=#4F9A58;strokeWidth=2;fontColor=#205B2A;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="1900" y="625" width="330" height="78" as="geometry"/>
+        </mxCell>
+        <mxCell id="viz-progress-display" value="Batch progress display" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DDF2E0;strokeColor=#388E3C;fontColor=#1B5E20;fontStyle=1;fontSize=13;" vertex="1" parent="1">
+          <mxGeometry x="1940" y="735" width="250" height="52" as="geometry"/>
+        </mxCell>
+        <mxCell id="viz-readonly-note" value="&lt;b&gt;Read-only boundary&lt;/b&gt;&lt;br&gt;Visualisation receives information from the Coordinator; it does not poll or control Machine Controllers directly." style="shape=note;whiteSpace=wrap;html=1;fillColor=#F2FBF3;strokeColor=#75A978;fontColor=#205B2A;fontSize=12;size=16;" vertex="1" parent="1">
+          <mxGeometry x="1900" y="845" width="330" height="125" as="geometry"/>
+        </mxCell>
+        <mxCell id="viz-reset-update" value="Receive next-product progress reset&lt;br&gt;&lt;font style=&quot;font-size:11px&quot;&gt;VIZ_REQUIRED_BOTTLES&lt;br&gt;VIZ_COMPLETED_BOTTLES = 0&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8F5E9;strokeColor=#4F9A58;strokeWidth=2;fontColor=#205B2A;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="1900" y="1555" width="330" height="82" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="coord-bottle-section" value="Bottle completion, next-product dispatch and final POS notification" style="text;html=1;align=left;verticalAlign=middle;whiteSpace=wrap;fontSize=14;fontStyle=1;fontColor=#2F5597;" vertex="1" parent="1">
+          <mxGeometry x="500" y="1175" width="600" height="30" as="geometry"/>
+        </mxCell>
+        <mxCell id="label-bottle-done" value="BOTTLE_DONE" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;fontSize=14;fontStyle=1;fontColor=#1B5E20;labelBackgroundColor=#FFFFFF;" vertex="1" parent="1">
+          <mxGeometry x="1305" y="1172" width="145" height="28" as="geometry"/>
+        </mxCell>
+        <mxCell id="coord-bottle-done" value="Receive completion event&lt;br&gt;&lt;b&gt;present(BOTTLE_DONE)&lt;/b&gt;" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fillColor=#E5F4E7;strokeColor=#388E3C;strokeWidth=2.5;fontColor=#1B5E20;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="500" y="1220" width="200" height="66" as="geometry"/>
+        </mxCell>
+        <mxCell id="coord-record-done" value="Record one bottle&lt;br&gt;&lt;font style=&quot;font-size:11px&quot;&gt;recordBottleDone()&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#7392C2;fontColor=#223047;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="735" y="1225" width="175" height="56" as="geometry"/>
+        </mxCell>
+        <mxCell id="coord-increment" value="Increment completedBottles&lt;br&gt;&lt;b&gt;emit VIZ_COMPLETED_BOTTLES&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8F5E9;strokeColor=#4F9A58;fontColor=#205B2A;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="945" y="1220" width="205" height="66" as="geometry"/>
+        </mxCell>
+        <mxCell id="coord-batch-complete" value="Current product&lt;br&gt;batch complete?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#FFF2CC;strokeColor=#D6A100;fontColor=#5B4300;fontStyle=1;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="1190" y="1208" width="180" height="90" as="geometry"/>
+        </mxCell>
+        <mxCell id="coord-wait-next-bottle" value="NO: wait for next&lt;br&gt;BOTTLE_DONE" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F2F4F7;strokeColor=#8B98A8;fontColor=#44546A;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="1205" y="1325" width="150" height="52" as="geometry"/>
+        </mxCell>
+        <mxCell id="coord-has-next" value="Has next product?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#FFF2CC;strokeColor=#D6A100;fontColor=#5B4300;fontStyle=1;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="945" y="1320" width="190" height="82" as="geometry"/>
+        </mxCell>
+        <mxCell id="coord-advance" value="Advance to next product&lt;br&gt;&lt;font style=&quot;font-size:11px&quot;&gt;advanceToNextProduct()&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#7392C2;fontColor=#223047;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="1165" y="1415" width="210" height="58" as="geometry"/>
+        </mxCell>
+        <mxCell id="coord-next-dispatch" value="Send new START_ORDER&lt;br&gt;+ FILL_A_RATIO + FILL_B_RATIO" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFE8CC;strokeColor=#C46A00;strokeWidth=2;fontColor=#713B00;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="1165" y="1495" width="210" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="coord-reset-progress" value="Reset batch visualisation&lt;br&gt;&lt;font style=&quot;font-size:11px&quot;&gt;VIZ_REQUIRED_BOTTLES&lt;br&gt;VIZ_COMPLETED_BOTTLES = 0&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8F5E9;strokeColor=#4F9A58;fontColor=#205B2A;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="1165" y="1575" width="210" height="72" as="geometry"/>
+        </mxCell>
+        <mxCell id="coord-complete-order" value="Complete logical order&lt;br&gt;&lt;font style=&quot;font-size:11px&quot;&gt;completeOrder() builds&lt;br&gt;orderId|COMPLETED|seconds&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F3E8FF;strokeColor=#805AD5;fontColor=#3E2863;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="710" y="1415" width="205" height="72" as="geometry"/>
+        </mxCell>
+        <mxCell id="coord-completion-delay" value="completionPending = true&lt;br&gt;&lt;font style=&quot;font-size:11px&quot;&gt;First send after ≈250 ms&lt;br&gt;three transport copies, later ≈500 ms apart&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F3E8FF;strokeColor=#805AD5;fontColor=#3E2863;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="710" y="1505" width="205" height="78" as="geometry"/>
+        </mxCell>
+        <mxCell id="coord-next-transmission" value="Get stored completion payload&lt;br&gt;&lt;font style=&quot;font-size:11px&quot;&gt;nextCompletionTransmission()&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F3E8FF;strokeColor=#805AD5;fontColor=#3E2863;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="500" y="1510" width="180" height="66" as="geometry"/>
+        </mxCell>
+        <mxCell id="coord-emit-complete" value="Notify POS&lt;br&gt;&lt;b&gt;emit ORDER_COMPLETE(completionPayload)&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#D6EAF8;strokeColor=#1565C0;strokeWidth=2.5;fontColor=#123E66;fontStyle=1;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="735" y="1600" width="225" height="66" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="pos-receive-complete" value="Receive completion&lt;br&gt;&lt;b&gt;present(ORDER_COMPLETE)&lt;/b&gt;" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fillColor=#D6EAF8;strokeColor=#1565C0;strokeWidth=2.5;fontColor=#123E66;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="210" y="1600" width="215" height="66" as="geometry"/>
+        </mxCell>
+        <mxCell id="pos-read-complete" value="Read #ORDER_COMPLETE" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#6C8EBF;fontColor=#223047;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="45" y="1608" width="145" height="50" as="geometry"/>
+        </mxCell>
+        <mxCell id="pos-handle-complete" value="Validate and de-duplicate&lt;br&gt;&lt;font style=&quot;font-size:11px&quot;&gt;handleCompletion(...)&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#6C8EBF;fontColor=#223047;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="45" y="1680" width="165" height="56" as="geometry"/>
+        </mxCell>
+        <mxCell id="pos-display-complete" value="Display completion&lt;br&gt;&lt;font style=&quot;font-size:11px&quot;&gt;Order ID • COMPLETED status&lt;br&gt;Completion time&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8F5E9;strokeColor=#4F9A58;fontColor=#205B2A;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="230" y="1675" width="190" height="68" as="geometry"/>
+        </mxCell>
+        <mxCell id="pos-ready" value="Ready for next order" style="rounded=1;arcSize=50;whiteSpace=wrap;html=1;fillColor=#E2E8F0;strokeColor=#40546A;fontColor=#223047;fontStyle=1;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="245" y="1760" width="160" height="42" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="e-p1-p2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#44546A;endArrow=block;endFill=1;" edge="1" parent="1" source="pos-start" target="pos-start-viz"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e-p2-p3" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#44546A;endArrow=block;endFill=1;" edge="1" parent="1" source="pos-start-viz" target="pos-input"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e-p3-p4" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#44546A;endArrow=block;endFill=1;" edge="1" parent="1" source="pos-input" target="pos-submit"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e-p4-p5" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#44546A;endArrow=block;endFill=1;" edge="1" parent="1" source="pos-submit" target="pos-validate-gui"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e-p5-p6" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#44546A;endArrow=block;endFill=1;" edge="1" parent="1" source="pos-validate-gui" target="pos-valid-input"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e-p6-no" value="NO" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#C94C4C;fontColor=#8B1E1E;fontStyle=1;labelBackgroundColor=#FFFFFF;endArrow=block;endFill=1;exitX=0;exitY=0.5;" edge="1" parent="1" source="pos-valid-input" target="pos-gui-error"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e-p7-loop" value="correct input" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;dashed=1;strokeColor=#C94C4C;fontColor=#8B1E1E;labelBackgroundColor=#FFFFFF;endArrow=block;endFill=1;exitX=0;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="pos-gui-error" target="pos-input"><mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="42" y="596"/><mxPoint x="42" y="308"/></Array></mxGeometry></mxCell>
+        <mxCell id="e-p6-yes" value="YES" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#388E3C;fontColor=#1B5E20;fontStyle=1;labelBackgroundColor=#FFFFFF;endArrow=block;endFill=1;exitX=1;exitY=0.5;entryX=0.5;entryY=0;" edge="1" parent="1" source="pos-valid-input" target="pos-generate"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e-p8-p9" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#44546A;endArrow=block;endFill=1;" edge="1" parent="1" source="pos-generate" target="pos-poll"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e-p9-p10" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#44546A;endArrow=block;endFill=1;" edge="1" parent="1" source="pos-poll" target="pos-parse"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e-p10-p11" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#44546A;endArrow=block;endFill=1;" edge="1" parent="1" source="pos-parse" target="pos-valid-v1"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e-p11-no" value="NO" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#C94C4C;fontColor=#8B1E1E;fontStyle=1;labelBackgroundColor=#FFFFFF;endArrow=block;endFill=1;exitX=0;exitY=0.5;" edge="1" parent="1" source="pos-valid-v1" target="pos-reject-v1"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e-p12-loop" value="return to loop" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;dashed=1;strokeColor=#C94C4C;fontColor=#8B1E1E;labelBackgroundColor=#FFFFFF;endArrow=block;endFill=1;exitX=0;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="pos-reject-v1" target="pos-poll"><mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="38" y="816"/><mxPoint x="38" y="669"/><mxPoint x="210" y="669"/></Array></mxGeometry></mxCell>
+        <mxCell id="e-p11-yes" value="YES" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#388E3C;fontColor=#1B5E20;fontStyle=1;labelBackgroundColor=#FFFFFF;endArrow=block;endFill=1;exitX=0.5;exitY=1;" edge="1" parent="1" source="pos-valid-v1" target="pos-emit-order"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e-order-cross" value="ORDER : String" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#1565C0;strokeWidth=3;fontColor=#123E66;fontStyle=1;fontSize=14;labelBackgroundColor=#FFFFFF;endArrow=block;endFill=1;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="pos-emit-order" target="coord-present-order"><mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="455" y="894"/><mxPoint x="455" y="736"/></Array></mxGeometry></mxCell>
+        <mxCell id="e-pos-wait" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#44546A;endArrow=block;endFill=1;" edge="1" parent="1" source="pos-emit-order" target="pos-wait-complete"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e-wait-receive" value="completion event" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;dashed=1;strokeColor=#6C8EBF;fontColor=#40546A;fontSize=11;labelBackgroundColor=#FFFFFF;endArrow=block;endFill=1;exitX=1;exitY=0.5;entryX=1;entryY=0;" edge="1" parent="1" source="pos-wait-complete" target="pos-receive-complete"><mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="435" y="974"/><mxPoint x="435" y="1580"/><mxPoint x="425" y="1580"/></Array></mxGeometry></mxCell>
+
+        <mxCell id="e-c1-c2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#44546A;endArrow=block;endFill=1;" edge="1" parent="1" source="coord-present-order" target="coord-read-order"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e-c2-c3" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#44546A;endArrow=block;endFill=1;" edge="1" parent="1" source="coord-read-order" target="coord-active-decision"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e-c3-yes" value="YES" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#C94C4C;fontColor=#8B1E1E;fontStyle=1;labelBackgroundColor=#FFFFFF;endArrow=block;endFill=1;" edge="1" parent="1" source="coord-active-decision" target="coord-reject-active"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e-c4-loop" value="wait" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;dashed=1;strokeColor=#C94C4C;fontColor=#8B1E1E;labelBackgroundColor=#FFFFFF;endArrow=block;endFill=1;exitX=1;exitY=0.5;entryX=1;entryY=0.5;" edge="1" parent="1" source="coord-reject-active" target="coord-present-order"><mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="1400" y="734"/><mxPoint x="1400" y="620"/><mxPoint x="490" y="620"/><mxPoint x="490" y="736"/></Array></mxGeometry></mxCell>
+        <mxCell id="e-c3-no" value="NO" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#388E3C;fontColor=#1B5E20;fontStyle=1;labelBackgroundColor=#FFFFFF;endArrow=block;endFill=1;exitX=0.5;exitY=1;" edge="1" parent="1" source="coord-active-decision" target="coord-accept"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e-c5-c6" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#44546A;endArrow=block;endFill=1;" edge="1" parent="1" source="coord-accept" target="coord-valid-order"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e-c6-no" value="NO" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#C94C4C;fontColor=#8B1E1E;fontStyle=1;labelBackgroundColor=#FFFFFF;endArrow=block;endFill=1;" edge="1" parent="1" source="coord-valid-order" target="coord-reject-invalid"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e-c7-loop" value="wait" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;dashed=1;strokeColor=#C94C4C;fontColor=#8B1E1E;labelBackgroundColor=#FFFFFF;endArrow=block;endFill=1;exitX=1;exitY=0.5;entryX=1;entryY=0.5;" edge="1" parent="1" source="coord-reject-invalid" target="coord-present-order"><mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="1400" y="926"/><mxPoint x="1400" y="620"/><mxPoint x="490" y="620"/><mxPoint x="490" y="736"/></Array></mxGeometry></mxCell>
+        <mxCell id="e-c6-yes" value="YES" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#388E3C;fontColor=#1B5E20;fontStyle=1;labelBackgroundColor=#FFFFFF;endArrow=block;endFill=1;exitX=0.5;exitY=1;" edge="1" parent="1" source="coord-valid-order" target="coord-accept-batch"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e-c8-c9" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#44546A;endArrow=block;endFill=1;" edge="1" parent="1" source="coord-accept-batch" target="coord-initial-dispatch"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e-command-cross" value="START_ORDER / ratios" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#C46A00;strokeWidth=3;fontColor=#713B00;fontStyle=1;fontSize=13;labelBackgroundColor=#FFFFFF;endArrow=block;endFill=1;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="coord-initial-dispatch" target="machine-receive-command"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e-machine-command-group" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#C46A00;strokeWidth=2;endArrow=block;endFill=1;exitX=0.5;exitY=0;entryX=0.5;entryY=1;" edge="1" parent="1" source="machine-receive-command" target="machine-group"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e-machine-production" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#C88700;strokeWidth=2;endArrow=block;endFill=1;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="1" source="machine-group" target="machine-final-event"><mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="1818" y="805"/><mxPoint x="1818" y="1175"/><mxPoint x="1640" y="1175"/></Array></mxGeometry></mxCell>
+
+        <mxCell id="e-poll-yes" value="YES" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#C88700;fontColor=#654900;fontStyle=1;labelBackgroundColor=#FFFFFF;endArrow=block;endFill=1;" edge="1" parent="1" source="coord-poll-decision" target="coord-status-request"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e-poll-no" value="NO" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#8B98A8;fontColor=#44546A;fontStyle=1;labelBackgroundColor=#FFFFFF;endArrow=block;endFill=1;exitX=0.5;exitY=1;" edge="1" parent="1" source="coord-poll-decision" target="coord-poll-pause"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e-poll-repeat" value="repeat" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;dashed=1;strokeColor=#8B98A8;fontColor=#44546A;labelBackgroundColor=#FFFFFF;endArrow=block;endFill=1;exitX=0;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="coord-poll-pause" target="coord-poll-decision"><mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="490" y="346"/><mxPoint x="490" y="263"/></Array></mxGeometry></mxCell>
+        <mxCell id="e-status-request-cross" value="*_STATUS_REQUEST" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#C88700;strokeWidth=3;fontColor=#654900;fontStyle=1;fontSize=13;labelBackgroundColor=#FFFFFF;endArrow=block;endFill=1;exitX=1;exitY=0;entryX=0;entryY=0;" edge="1" parent="1" source="coord-status-request" target="machine-status-request"><mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="950" y="210"/><mxPoint x="1460" y="210"/></Array></mxGeometry></mxCell>
+        <mxCell id="e-status-machine" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#C88700;endArrow=block;endFill=1;" edge="1" parent="1" source="machine-status-request" target="machine-status-reply"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e-status-reply-cross" value="*_STATUS : Integer" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#4E7C98;strokeWidth=3;fontColor=#24485F;fontStyle=1;fontSize=13;labelBackgroundColor=#FFFFFF;endArrow=block;endFill=1;exitX=0;exitY=0;entryX=1;entryY=0.5;" edge="1" parent="1" source="machine-status-reply" target="coord-receive-status"><mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="1460" y="300"/><mxPoint x="1205" y="300"/></Array></mxGeometry></mxCell>
+        <mxCell id="e-status-store" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#44546A;endArrow=block;endFill=1;" edge="1" parent="1" source="coord-receive-status" target="coord-store-status"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e-status-forward" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#388E3C;endArrow=block;endFill=1;" edge="1" parent="1" source="coord-store-status" target="coord-forward-status"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e-viz-status-cross" value="VIZ_*_STATUS : Integer" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#388E3C;strokeWidth=3;fontColor=#1B5E20;fontStyle=1;fontSize=13;labelBackgroundColor=#FFFFFF;endArrow=block;endFill=1;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="coord-forward-status" target="viz-status-list"><mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="1410" y="440"/><mxPoint x="1410" y="395"/><mxPoint x="1880" y="395"/><mxPoint x="1880" y="340"/></Array></mxGeometry></mxCell>
+        <mxCell id="e-viz-status-display" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#388E3C;endArrow=block;endFill=1;" edge="1" parent="1" source="viz-status-list" target="viz-status-display"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e-poll-progress" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#4F9A58;endArrow=block;endFill=1;" edge="1" parent="1" source="coord-status-request" target="coord-progress-refresh"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e-viz-progress-cross" value="VIZ_REQUIRED_BOTTLES + VIZ_COMPLETED_BOTTLES" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#388E3C;strokeWidth=3;fontColor=#1B5E20;fontStyle=1;fontSize=12;labelBackgroundColor=#FFFFFF;endArrow=block;endFill=1;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="coord-progress-refresh" target="viz-progress-list"><mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="950" y="815"/><mxPoint x="1880" y="815"/><mxPoint x="1880" y="664"/></Array></mxGeometry></mxCell>
+        <mxCell id="e-viz-progress-display" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#388E3C;endArrow=block;endFill=1;" edge="1" parent="1" source="viz-progress-list" target="viz-progress-display"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e-poll-loop" value="next poll ≈ 1 s" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;dashed=1;strokeColor=#8B98A8;fontColor=#44546A;labelBackgroundColor=#FFFFFF;endArrow=block;endFill=1;exitX=0;exitY=1;entryX=0;entryY=0.5;" edge="1" parent="1" source="coord-progress-refresh" target="coord-poll-decision"><mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="715" y="385"/><mxPoint x="715" y="430"/><mxPoint x="490" y="430"/><mxPoint x="490" y="263"/></Array></mxGeometry></mxCell>
+
+        <mxCell id="e-bottle-cross" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#388E3C;strokeWidth=3;endArrow=block;endFill=1;exitX=0;exitY=0.5;entryX=1;entryY=0.5;" edge="1" parent="1" source="machine-final-event" target="coord-bottle-done"><mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="1460" y="1236"/><mxPoint x="1460" y="1206"/><mxPoint x="715" y="1206"/><mxPoint x="715" y="1253"/></Array></mxGeometry></mxCell>
+        <mxCell id="e-b1-b2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#44546A;endArrow=block;endFill=1;" edge="1" parent="1" source="coord-bottle-done" target="coord-record-done"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e-b2-b3" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#44546A;endArrow=block;endFill=1;" edge="1" parent="1" source="coord-record-done" target="coord-increment"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e-b3-b4" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#44546A;endArrow=block;endFill=1;" edge="1" parent="1" source="coord-increment" target="coord-batch-complete"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e-b3-viz" value="VIZ_COMPLETED_BOTTLES" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#388E3C;strokeWidth=3;fontColor=#1B5E20;fontStyle=1;fontSize=12;labelBackgroundColor=#FFFFFF;endArrow=block;endFill=1;exitX=1;exitY=0.2;entryX=0;entryY=0.8;" edge="1" parent="1" source="coord-increment" target="viz-progress-list"><mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="1170" y="1307"/><mxPoint x="1878" y="1307"/><mxPoint x="1878" y="687"/></Array></mxGeometry></mxCell>
+        <mxCell id="e-b4-no" value="NO" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#8B98A8;fontColor=#44546A;fontStyle=1;labelBackgroundColor=#FFFFFF;endArrow=block;endFill=1;exitX=0.5;exitY=1;" edge="1" parent="1" source="coord-batch-complete" target="coord-wait-next-bottle"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e-b4-yes" value="YES" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#388E3C;fontColor=#1B5E20;fontStyle=1;labelBackgroundColor=#FFFFFF;endArrow=block;endFill=1;exitX=0;exitY=1;entryX=1;entryY=0.5;" edge="1" parent="1" source="coord-batch-complete" target="coord-has-next"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e-next-yes" value="YES" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#388E3C;fontColor=#1B5E20;fontStyle=1;labelBackgroundColor=#FFFFFF;endArrow=block;endFill=1;exitX=1;exitY=0.5;entryX=0.5;entryY=0;" edge="1" parent="1" source="coord-has-next" target="coord-advance"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e-advance-dispatch" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#C46A00;endArrow=block;endFill=1;" edge="1" parent="1" source="coord-advance" target="coord-next-dispatch"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e-next-command-cross" value="new START_ORDER / ratios" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#C46A00;strokeWidth=3;fontColor=#713B00;fontStyle=1;fontSize=12;labelBackgroundColor=#FFFFFF;endArrow=block;endFill=1;exitX=1;exitY=0.5;entryX=0.5;entryY=1;" edge="1" parent="1" source="coord-next-dispatch" target="machine-receive-command"><mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="1410" y="1525"/><mxPoint x="1410" y="1140"/><mxPoint x="1640" y="1140"/></Array></mxGeometry></mxCell>
+        <mxCell id="e-dispatch-reset" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#388E3C;endArrow=block;endFill=1;" edge="1" parent="1" source="coord-next-dispatch" target="coord-reset-progress"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e-reset-viz" value="VIZ progress reset" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#388E3C;strokeWidth=2.5;fontColor=#1B5E20;fontStyle=1;fontSize=11;labelBackgroundColor=#FFFFFF;endArrow=block;endFill=1;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="coord-reset-progress" target="viz-reset-update"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e-next-no" value="NO" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#805AD5;fontColor=#3E2863;fontStyle=1;labelBackgroundColor=#FFFFFF;endArrow=block;endFill=1;exitX=0;exitY=0.5;entryX=1;entryY=0.5;" edge="1" parent="1" source="coord-has-next" target="coord-complete-order"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e-complete-delay" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#805AD5;endArrow=block;endFill=1;" edge="1" parent="1" source="coord-complete-order" target="coord-completion-delay"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e-delay-next" value="delay reached" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#805AD5;fontColor=#3E2863;labelBackgroundColor=#FFFFFF;endArrow=block;endFill=1;exitX=0;exitY=0.5;entryX=1;entryY=0.5;" edge="1" parent="1" source="coord-completion-delay" target="coord-next-transmission"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e-next-emit" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#805AD5;endArrow=block;endFill=1;" edge="1" parent="1" source="coord-next-transmission" target="coord-emit-complete"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e-complete-cross" value="ORDER_COMPLETE : String" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#1565C0;strokeWidth=3;fontColor=#123E66;fontStyle=1;fontSize=14;labelBackgroundColor=#FFFFFF;endArrow=block;endFill=1;exitX=0;exitY=0.5;entryX=1;entryY=0.5;" edge="1" parent="1" source="coord-emit-complete" target="pos-receive-complete"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e-pos-receive-read" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#44546A;endArrow=block;endFill=1;exitX=0;exitY=0.5;entryX=1;entryY=0.5;" edge="1" parent="1" source="pos-receive-complete" target="pos-read-complete"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e-pos-read-handle" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#44546A;endArrow=block;endFill=1;" edge="1" parent="1" source="pos-read-complete" target="pos-handle-complete"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e-pos-handle-display" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#388E3C;endArrow=block;endFill=1;" edge="1" parent="1" source="pos-handle-complete" target="pos-display-complete"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e-pos-display-ready" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#388E3C;endArrow=block;endFill=1;" edge="1" parent="1" source="pos-display-complete" target="pos-ready"><mxGeometry relative="1" as="geometry"/></mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

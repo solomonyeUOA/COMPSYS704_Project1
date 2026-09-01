@@ -12,7 +12,10 @@
             <iSignal Name="LOADER_STATUS_REQUEST"
                      Class="com.systemj.ipc.SimpleServer"
                      IP="127.0.0.1" Port="11002" />
-            <iSignal Name="TRANSPORT_STATUS_REQUEST"
+            <iSignal Name="CONVEYOR_STATUS_REQUEST"
+                     Class="com.systemj.ipc.SimpleServer"
+                     IP="127.0.0.1" Port="11002" />
+            <iSignal Name="ROTARY_STATUS_REQUEST"
                      Class="com.systemj.ipc.SimpleServer"
                      IP="127.0.0.1" Port="11002" />
             <iSignal Name="FILLER_A_STATUS_REQUEST"
@@ -27,12 +30,19 @@
             <iSignal Name="CAPPER_STATUS_REQUEST"
                      Class="com.systemj.ipc.SimpleServer"
                      IP="127.0.0.1" Port="11002" />
+            <iSignal Name="UNLOADER_STATUS_REQUEST"
+                     Class="com.systemj.ipc.SimpleServer"
+                     IP="127.0.0.1" Port="11002" />
 
             <oSignal Name="LOADER_STATUS" To="CoordinatorCD.LOADER_STATUS"
                      Class="com.systemj.ipc.SimpleClient"
                      IP="127.0.0.1" Port="11001" />
-            <oSignal Name="TRANSPORT_STATUS"
-                     To="CoordinatorCD.TRANSPORT_STATUS"
+            <oSignal Name="CONVEYOR_STATUS"
+                     To="CoordinatorCD.CONVEYOR_STATUS"
+                     Class="com.systemj.ipc.SimpleClient"
+                     IP="127.0.0.1" Port="11001" />
+            <oSignal Name="ROTARY_STATUS"
+                     To="CoordinatorCD.ROTARY_STATUS"
                      Class="com.systemj.ipc.SimpleClient"
                      IP="127.0.0.1" Port="11001" />
             <oSignal Name="FILLER_A_STATUS"
@@ -47,6 +57,10 @@
                      Class="com.systemj.ipc.SimpleClient"
                      IP="127.0.0.1" Port="11001" />
             <oSignal Name="CAPPER_STATUS" To="CoordinatorCD.CAPPER_STATUS"
+                     Class="com.systemj.ipc.SimpleClient"
+                     IP="127.0.0.1" Port="11001" />
+            <oSignal Name="UNLOADER_STATUS"
+                     To="CoordinatorCD.UNLOADER_STATUS"
                      Class="com.systemj.ipc.SimpleClient"
                      IP="127.0.0.1" Port="11001" />
             <oSignal Name="BOTTLE_DONE" To="CoordinatorCD.BOTTLE_DONE"

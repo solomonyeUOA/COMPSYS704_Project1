@@ -5,11 +5,13 @@
 
 ABSVisualisationPlant(
     input Integer signal VIZ_LOADER_STATUS;
-    input Integer signal VIZ_TRANSPORT_STATUS;
+    input Integer signal VIZ_CONVEYOR_STATUS;
+    input Integer signal VIZ_ROTARY_STATUS;
     input Integer signal VIZ_FILLER_A_STATUS;
     input Integer signal VIZ_FILLER_B_STATUS;
     input Integer signal VIZ_LID_STATUS;
     input Integer signal VIZ_CAPPER_STATUS;
+    input Integer signal VIZ_UNLOADER_STATUS;
     input Integer signal VIZ_REQUIRED_BOTTLES;
     input Integer signal VIZ_COMPLETED_BOTTLES;
 )
@@ -23,9 +25,15 @@ ABSVisualisationPlant(
         );
     } pause;}}
     ||
-    {loop {present(VIZ_TRANSPORT_STATUS) {
+    {loop {present(VIZ_CONVEYOR_STATUS) {
         ABSVisualisation.updateStatus(
-            "Transport", #VIZ_TRANSPORT_STATUS
+            "Conveyor", #VIZ_CONVEYOR_STATUS
+        );
+    } pause;}}
+    ||
+    {loop {present(VIZ_ROTARY_STATUS) {
+        ABSVisualisation.updateStatus(
+            "Rotary Turntable", #VIZ_ROTARY_STATUS
         );
     } pause;}}
     ||
@@ -50,6 +58,12 @@ ABSVisualisationPlant(
     {loop {present(VIZ_CAPPER_STATUS) {
         ABSVisualisation.updateStatus(
             "Capper", #VIZ_CAPPER_STATUS
+        );
+    } pause;}}
+    ||
+    {loop {present(VIZ_UNLOADER_STATUS) {
+        ABSVisualisation.updateStatus(
+            "Bottle Unloader", #VIZ_UNLOADER_STATUS
         );
     } pause;}}
     ||

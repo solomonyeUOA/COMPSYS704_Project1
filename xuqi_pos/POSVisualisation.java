@@ -9,7 +9,9 @@ import java.awt.Insets;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
 
 import javax.swing.BorderFactory;
@@ -20,7 +22,6 @@ import javax.swing.JPanel;
 import javax.swing.JTextField;
 import javax.swing.SwingConstants;
 import javax.swing.SwingUtilities;
-import javax.swing.Timer;
 
 /**
  * Handwritten Swing UI for POSCD. This class never opens a network socket;
@@ -28,15 +29,55 @@ import javax.swing.Timer;
  */
 public final class POSVisualisation {
     private static final String TEST_ORDER_PROPERTY = "abs.pos.testOrder";
-    private static final long TEST_ORDER_DELAY_MILLIS = 5000;
+    private static final long TEST_ORDER_DELAY_MILLIS = Long.getLong(
+        "abs.pos.testOrderDelayMillis",
+        Long.valueOf(5000)
+    ).longValue();
+    private static final int TEST_ORDER_COUNT = Math.max(
+        1,
+        Integer.getInteger("abs.pos.testOrderCount", 1).intValue()
+    );
+    private static final long TEST_ORDER_INTERVAL_MILLIS = Math.max(
+        0L,
+        Long.getLong(
+            "abs.pos.testOrderIntervalMillis",
+            Long.valueOf(1000L)
+        ).longValue()
+    );
+    private static final int ORDER_TRANSMISSION_ATTEMPTS = 3;
+    private static final long ORDER_RETRY_MILLIS = Math.max(
+        1L,
+        Long.getLong(
+            "abs.pos.orderRetryMillis",
+            Long.valueOf(250L)
+        ).longValue()
+    );
+    private static final long ORDER_SIGNAL_HOLD_MILLIS = Math.max(
+        1L,
+        Long.getLong(
+            "abs.pos.orderSignalHoldMillis",
+            Long.valueOf(500L)
+        ).longValue()
+    );
     private static final long START_MILLIS = System.currentTimeMillis();
     private static final AtomicReference<String> PENDING_ORDER =
         new AtomicReference<String>();
 
     private static volatile POSVisualisation instance;
-    private static boolean testOrderReturned = false;
-    private static String activeOrderId = "";
-    private static String handledCompletionPayload = "";
+    private static int testOrdersReturned = 0;
+    private static long nextTestOrderMillis =
+        START_MILLIS + TEST_ORDER_DELAY_MILLIS;
+    private static int nextOrderNumber = 1;
+    private static String activeOrderId = null;
+    private static String pendingTransmissionPayload = null;
+    private static int orderTransmissionsRemaining = 0;
+    private static int lastOrderTransmissionAttempt = 0;
+    private static long nextOrderTransmissionMillis = 0L;
+    private static String activeTransmissionPayload = null;
+    private static long activeTransmissionUntilMillis = 0L;
+    private static boolean transmissionStartedThisPoll = false;
+    private static final Set<String> COMPLETED_ORDER_IDS =
+        new HashSet<String>();
 
     private final JFrame frame;
     private final JTextField orderIdField;
@@ -63,7 +104,9 @@ public final class POSVisualisation {
         GridBagConstraints constraints = baseConstraints();
 
         addFormLabel(form, constraints, 0, "Order ID");
-        orderIdField = new JTextField("PO001", 18);
+        orderIdField = new JTextField(nextOrderId(), 18);
+        orderIdField.setEditable(false);
+        orderIdField.setFocusable(false);
         addFormField(form, constraints, 0, orderIdField);
 
         productRows = new ArrayList<ProductInputRow>();
@@ -137,29 +180,111 @@ public final class POSVisualisation {
 
     /**
      * Returns one UI order, or a delayed test-only order supplied with
-     * -Dabs.pos.testOrder=... . Normal GUI runs have no automatic order.
+     * -Dabs.pos.testOrder=... . The default five-second delay can be extended
+     * with -Dabs.pos.testOrderDelayMillis=... for network integration tests.
+     * Normal GUI runs have no automatic order.
      */
     public static synchronized String pollSubmittedOrder() {
-        String pendingOrder = PENDING_ORDER.getAndSet(null);
-        if (pendingOrder != null) {
-            return pendingOrder;
+        long now = System.currentTimeMillis();
+        transmissionStartedThisPoll = false;
+
+        // Keep one logical transport copy PRESENT for a bounded wall-clock
+        // window. A one-reaction network pulse can otherwise be overwritten
+        // by SimpleClient's following ABSENT before the remote Clock Domain
+        // samples it.
+        if (activeTransmissionPayload != null) {
+            if (now < activeTransmissionUntilMillis) {
+                return activeTransmissionPayload;
+            }
+            activeTransmissionPayload = null;
+            activeTransmissionUntilMillis = 0L;
+            return null;
         }
 
-        String testOrder = System.getProperty(TEST_ORDER_PROPERTY, "").trim();
-        if (!testOrderReturned && testOrder.length() > 0 &&
-            System.currentTimeMillis() >=
-            START_MILLIS + TEST_ORDER_DELAY_MILLIS) {
-            testOrderReturned = true;
-            return testOrder;
+        if (pendingTransmissionPayload != null) {
+            if (now < nextOrderTransmissionMillis) {
+                return null;
+            }
+            return takeNextOrderTransmission(now);
         }
-        return null;
+
+        String pendingOrder = PENDING_ORDER.getAndSet(null);
+        if (pendingOrder == null) {
+            String testOrder =
+                System.getProperty(TEST_ORDER_PROPERTY, "").trim();
+            if (testOrder.length() > 0 &&
+                testOrdersReturned < TEST_ORDER_COUNT &&
+                activeOrderId == null &&
+                now >= nextTestOrderMillis) {
+                int separator = testOrder.indexOf('|');
+                if (separator <= 0) {
+                    testOrdersReturned = TEST_ORDER_COUNT;
+                    pendingOrder = testOrder;
+                }
+                else {
+                    testOrdersReturned++;
+                    pendingOrder =
+                        nextOrderId() + testOrder.substring(separator);
+                }
+            }
+        }
+
+        if (pendingOrder == null) {
+            return null;
+        }
+
+        pendingTransmissionPayload = pendingOrder;
+        orderTransmissionsRemaining = ORDER_TRANSMISSION_ATTEMPTS;
+        lastOrderTransmissionAttempt = 0;
+        nextOrderTransmissionMillis = now;
+        return takeNextOrderTransmission(now);
+    }
+
+    private static String takeNextOrderTransmission(long now) {
+        String payload = pendingTransmissionPayload;
+        lastOrderTransmissionAttempt =
+            ORDER_TRANSMISSION_ATTEMPTS - orderTransmissionsRemaining + 1;
+        orderTransmissionsRemaining--;
+        activeTransmissionPayload = payload;
+        activeTransmissionUntilMillis = now + ORDER_SIGNAL_HOLD_MILLIS;
+        transmissionStartedThisPoll = true;
+        if (orderTransmissionsRemaining == 0) {
+            pendingTransmissionPayload = null;
+            nextOrderTransmissionMillis = 0L;
+        }
+        else {
+            nextOrderTransmissionMillis =
+                activeTransmissionUntilMillis + ORDER_RETRY_MILLIS;
+        }
+        return payload;
+    }
+
+    /** True only on the first logical reaction of a transport copy. */
+    public static synchronized boolean isOrderTransmissionStart() {
+        return transmissionStartedThisPoll;
     }
 
     public static synchronized void showSubmitted(final String payload) {
         int separator = payload.indexOf('|');
-        activeOrderId = separator > 0 ? payload.substring(0, separator) : "";
-        handledCompletionPayload = "";
-        updateSubmissionStatus("Order submitted: " + activeOrderId, false);
+        String transmittedOrderId =
+            separator > 0 ? payload.substring(0, separator) : null;
+        if (activeOrderId == null ||
+            !activeOrderId.equals(transmittedOrderId)) {
+            activeOrderId = transmittedOrderId;
+            System.out.println(
+                "[POS-LIFECYCLE] submit attempt=" +
+                lastOrderTransmissionAttempt + " order=" + activeOrderId +
+                " nextOrderNumber=" + nextOrderNumber +
+                " completedIds=" + COMPLETED_ORDER_IDS.size()
+            );
+            updateSubmissionStatus("Order submitted: " + activeOrderId, false);
+        }
+        else {
+            System.out.println(
+                "[POS-LIFECYCLE] ORDER retry attempt=" +
+                lastOrderTransmissionAttempt + " order=" + activeOrderId
+            );
+        }
     }
 
     public static void showValidationError(final String message) {
@@ -172,10 +297,6 @@ public final class POSVisualisation {
      * for a duplicate transport copy already handled by the POS.
      */
     public static synchronized String handleCompletion(String payload) {
-        if (payload != null && payload.equals(handledCompletionPayload)) {
-            return null;
-        }
-
         String completedOrderId = "";
         String completionState = "";
         String completionSeconds = "";
@@ -199,14 +320,49 @@ public final class POSVisualisation {
             validSeconds = false;
         }
 
-        if (!completedOrderId.equals(activeOrderId) ||
-            !"COMPLETED".equals(completionState) || !validSeconds) {
-            showValidationError("Invalid ORDER_COMPLETE received");
+        if (!"COMPLETED".equals(completionState) || !validSeconds) {
             return "POS received invalid ORDER_COMPLETE: " + payload;
         }
 
-        handledCompletionPayload = payload;
-        showCompletion(completedOrderId, completionState, completionSeconds);
+        if (COMPLETED_ORDER_IDS.contains(completedOrderId)) {
+            return null;
+        }
+
+        if (activeOrderId == null ||
+            !completedOrderId.equals(activeOrderId)) {
+            return "POS ignored ORDER_COMPLETE for non-active order: " +
+                payload;
+        }
+
+        COMPLETED_ORDER_IDS.add(completedOrderId);
+        if (pendingTransmissionPayload != null &&
+            pendingTransmissionPayload.startsWith(completedOrderId + "|")) {
+            pendingTransmissionPayload = null;
+            orderTransmissionsRemaining = 0;
+            nextOrderTransmissionMillis = 0L;
+        }
+        if (activeTransmissionPayload != null &&
+            activeTransmissionPayload.startsWith(completedOrderId + "|")) {
+            activeTransmissionPayload = null;
+            activeTransmissionUntilMillis = 0L;
+            transmissionStartedThisPoll = false;
+        }
+        activeOrderId = null;
+        nextOrderNumber++;
+        nextTestOrderMillis =
+            System.currentTimeMillis() + TEST_ORDER_INTERVAL_MILLIS;
+        System.out.println(
+            "[POS-LIFECYCLE] complete order=" + completedOrderId +
+            " activeOrderId=null nextOrderNumber=" + nextOrderNumber +
+            " completedIds=" + COMPLETED_ORDER_IDS.size()
+        );
+        String preparedOrderId = nextOrderId();
+        showCompletion(
+            completedOrderId,
+            completionState,
+            completionSeconds,
+            preparedOrderId
+        );
         return "POS received completion: orderId=" + completedOrderId +
             ", status=" + completionState +
             ", completionTime=" + completionSeconds + " seconds";
@@ -282,7 +438,8 @@ public final class POSVisualisation {
     private static void showCompletion(
         final String orderId,
         final String state,
-        final String seconds
+        final String seconds,
+        final String preparedOrderId
     ) {
         final POSVisualisation ui = instance;
         if (ui == null) {
@@ -291,26 +448,27 @@ public final class POSVisualisation {
         SwingUtilities.invokeLater(new Runnable() {
             @Override
             public void run() {
+                ui.orderIdField.setText(preparedOrderId);
                 ui.completionStatus.setText(
                     "<html><div style='text-align:center'>" +
+                    "<b>Previous completed order</b><br>" +
                     "Order ID: " + orderId + "<br>" +
                     "Status: " + state + "<br>" +
                     "Completion Time: " + seconds + " seconds" +
                     "</div></html>"
                 );
                 ui.completionStatus.setForeground(new Color(20, 120, 55));
-                ui.submissionStatus.setText("Order completed");
-
-                Timer enableTimer = new Timer(1500, new ActionListener() {
-                    @Override
-                    public void actionPerformed(ActionEvent event) {
-                        ui.submitButton.setEnabled(true);
-                    }
-                });
-                enableTimer.setRepeats(false);
-                enableTimer.start();
+                ui.submissionStatus.setForeground(new Color(20, 120, 55));
+                ui.submissionStatus.setText(
+                    "Order completed - ready for " + preparedOrderId
+                );
+                ui.submitButton.setEnabled(true);
             }
         });
+    }
+
+    private static String nextOrderId() {
+        return String.format("PO%04d", nextOrderNumber);
     }
 
     private static void updateSubmissionStatus(

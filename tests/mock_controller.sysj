@@ -10,18 +10,22 @@ MockController(
     input Integer signal FILL_B_RATIO;
 
     input signal LOADER_STATUS_REQUEST;
-    input signal TRANSPORT_STATUS_REQUEST;
+    input signal CONVEYOR_STATUS_REQUEST;
+    input signal ROTARY_STATUS_REQUEST;
     input signal FILLER_A_STATUS_REQUEST;
     input signal FILLER_B_STATUS_REQUEST;
     input signal LID_STATUS_REQUEST;
     input signal CAPPER_STATUS_REQUEST;
+    input signal UNLOADER_STATUS_REQUEST;
 
     output Integer signal LOADER_STATUS;
-    output Integer signal TRANSPORT_STATUS;
+    output Integer signal CONVEYOR_STATUS;
+    output Integer signal ROTARY_STATUS;
     output Integer signal FILLER_A_STATUS;
     output Integer signal FILLER_B_STATUS;
     output Integer signal LID_STATUS;
     output Integer signal CAPPER_STATUS;
+    output Integer signal UNLOADER_STATUS;
     output signal BOTTLE_DONE;
 )
 ->{
@@ -53,6 +57,13 @@ MockController(
                         MockStateV1.requiredBottles
                     );
                 }
+                else {
+                    System.out.println(
+                        "[MOCK-LIFECYCLE] ignored START_ORDER=" +
+                        #START_ORDER + " batchActive=" +
+                        MockStateV1.batchActive
+                    );
+                }
             }
             pause;
         }
@@ -63,8 +74,12 @@ MockController(
         emit LOADER_STATUS(MockStateV1.loaderStatus);
     } pause;}}
     ||
-    {loop {present(TRANSPORT_STATUS_REQUEST) {
-        emit TRANSPORT_STATUS(MockStateV1.transportStatus);
+    {loop {present(CONVEYOR_STATUS_REQUEST) {
+        emit CONVEYOR_STATUS(MockStateV1.conveyorStatus);
+    } pause;}}
+    ||
+    {loop {present(ROTARY_STATUS_REQUEST) {
+        emit ROTARY_STATUS(MockStateV1.rotaryStatus);
     } pause;}}
     ||
     {loop {present(FILLER_A_STATUS_REQUEST) {
@@ -83,13 +98,19 @@ MockController(
         emit CAPPER_STATUS(MockStateV1.capperStatus);
     } pause;}}
     ||
-    // Test-only bottle completion simulator
+    {loop {present(UNLOADER_STATUS_REQUEST) {
+        emit UNLOADER_STATUS(MockStateV1.unloaderStatus);
+    } pause;}}
+    ||
+    // Test-only staged pipeline. MockStateV1 derives each REAL status from
+    // test-only mock bottles occupying Loader -> ... -> Unloader stages.
     {
         loop {
-            if (MockStateV1.advanceBottleTick()) {
+            int stage = MockStateV1.advanceBottleStage();
+            if (stage == MockStateV1.BOTTLE_COLLECTED) {
                 emit BOTTLE_DONE;
                 System.out.println(
-                    "Mock emitted BOTTLE_DONE " +
+                    "Mock Bottle Unloader emitted BOTTLE_DONE " +
                     MockStateV1.emittedBottleDone + "/" +
                     MockStateV1.requiredBottles
                 );

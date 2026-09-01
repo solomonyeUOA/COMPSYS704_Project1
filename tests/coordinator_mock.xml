@@ -7,7 +7,9 @@
                      IP="127.0.0.1" Port="11001" />
             <iSignal Name="LOADER_STATUS" Class="com.systemj.ipc.SimpleServer"
                      IP="127.0.0.1" Port="11001" />
-            <iSignal Name="TRANSPORT_STATUS" Class="com.systemj.ipc.SimpleServer"
+            <iSignal Name="CONVEYOR_STATUS" Class="com.systemj.ipc.SimpleServer"
+                     IP="127.0.0.1" Port="11001" />
+            <iSignal Name="ROTARY_STATUS" Class="com.systemj.ipc.SimpleServer"
                      IP="127.0.0.1" Port="11001" />
             <iSignal Name="FILLER_A_STATUS" Class="com.systemj.ipc.SimpleServer"
                      IP="127.0.0.1" Port="11001" />
@@ -17,12 +19,34 @@
                      IP="127.0.0.1" Port="11001" />
             <iSignal Name="CAPPER_STATUS" Class="com.systemj.ipc.SimpleServer"
                      IP="127.0.0.1" Port="11001" />
+            <iSignal Name="UNLOADER_STATUS" Class="com.systemj.ipc.SimpleServer"
+                     IP="127.0.0.1" Port="11001" />
             <iSignal Name="BOTTLE_DONE" Class="com.systemj.ipc.SimpleServer"
+                     IP="127.0.0.1" Port="11001" />
+            <iSignal Name="FT_FAULT_ALERT"
+                     Class="com.systemj.ipc.SimpleServer"
+                     IP="127.0.0.1" Port="11001" />
+            <iSignal Name="FT_SAFE_STOP_REQUEST"
+                     Class="com.systemj.ipc.SimpleServer"
+                     IP="127.0.0.1" Port="11001" />
+            <iSignal Name="FT_RECOVERY_READY"
+                     Class="com.systemj.ipc.SimpleServer"
+                     IP="127.0.0.1" Port="11001" />
+            <iSignal Name="FT_RECOVERY_FAILED"
+                     Class="com.systemj.ipc.SimpleServer"
                      IP="127.0.0.1" Port="11001" />
 
             <oSignal Name="ORDER_COMPLETE" To="POSCD.ORDER_COMPLETE"
                      Class="com.systemj.ipc.SimpleClient"
                      IP="127.0.0.1" Port="11000" />
+            <oSignal Name="FT_SAFE_STOP_ACK"
+                     To="FaultSupervisorCD.FT_SAFE_STOP_ACK"
+                     Class="OptionalSimpleClient"
+                     IP="127.0.0.1" Port="13003" />
+            <oSignal Name="FT_RESUME_DECISION"
+                     To="FaultSupervisorCD.FT_RESUME_DECISION"
+                     Class="OptionalSimpleClient"
+                     IP="127.0.0.1" Port="13003" />
 
             <oSignal Name="START_ORDER" To="MockControllerCD.START_ORDER"
                      Class="com.systemj.ipc.SimpleClient"
@@ -37,8 +61,12 @@
                      To="MockControllerCD.LOADER_STATUS_REQUEST"
                      Class="com.systemj.ipc.SimpleClient"
                      IP="127.0.0.1" Port="11002" />
-            <oSignal Name="TRANSPORT_STATUS_REQUEST"
-                     To="MockControllerCD.TRANSPORT_STATUS_REQUEST"
+            <oSignal Name="CONVEYOR_STATUS_REQUEST"
+                     To="MockControllerCD.CONVEYOR_STATUS_REQUEST"
+                     Class="com.systemj.ipc.SimpleClient"
+                     IP="127.0.0.1" Port="11002" />
+            <oSignal Name="ROTARY_STATUS_REQUEST"
+                     To="MockControllerCD.ROTARY_STATUS_REQUEST"
                      Class="com.systemj.ipc.SimpleClient"
                      IP="127.0.0.1" Port="11002" />
             <oSignal Name="FILLER_A_STATUS_REQUEST"
@@ -57,14 +85,22 @@
                      To="MockControllerCD.CAPPER_STATUS_REQUEST"
                      Class="com.systemj.ipc.SimpleClient"
                      IP="127.0.0.1" Port="11002" />
+            <oSignal Name="UNLOADER_STATUS_REQUEST"
+                     To="MockControllerCD.UNLOADER_STATUS_REQUEST"
+                     Class="com.systemj.ipc.SimpleClient"
+                     IP="127.0.0.1" Port="11002" />
 
             <!-- Coordinator -> Overall ABS Visualisation Plant -->
             <oSignal Name="VIZ_LOADER_STATUS"
                      To="ABSVisualisationPlantCD.VIZ_LOADER_STATUS"
                      Class="com.systemj.ipc.SimpleClient"
                      IP="127.0.0.1" Port="11008" />
-            <oSignal Name="VIZ_TRANSPORT_STATUS"
-                     To="ABSVisualisationPlantCD.VIZ_TRANSPORT_STATUS"
+            <oSignal Name="VIZ_CONVEYOR_STATUS"
+                     To="ABSVisualisationPlantCD.VIZ_CONVEYOR_STATUS"
+                     Class="com.systemj.ipc.SimpleClient"
+                     IP="127.0.0.1" Port="11008" />
+            <oSignal Name="VIZ_ROTARY_STATUS"
+                     To="ABSVisualisationPlantCD.VIZ_ROTARY_STATUS"
                      Class="com.systemj.ipc.SimpleClient"
                      IP="127.0.0.1" Port="11008" />
             <oSignal Name="VIZ_FILLER_A_STATUS"
@@ -81,6 +117,10 @@
                      IP="127.0.0.1" Port="11008" />
             <oSignal Name="VIZ_CAPPER_STATUS"
                      To="ABSVisualisationPlantCD.VIZ_CAPPER_STATUS"
+                     Class="com.systemj.ipc.SimpleClient"
+                     IP="127.0.0.1" Port="11008" />
+            <oSignal Name="VIZ_UNLOADER_STATUS"
+                     To="ABSVisualisationPlantCD.VIZ_UNLOADER_STATUS"
                      Class="com.systemj.ipc.SimpleClient"
                      IP="127.0.0.1" Port="11008" />
             <oSignal Name="VIZ_REQUIRED_BOTTLES"
