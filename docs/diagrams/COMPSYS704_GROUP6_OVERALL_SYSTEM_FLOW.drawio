@@ -1,0 +1,137 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<mxfile host="app.diagrams.net" agent="OpenAI Codex" version="24.7.17" type="device" compressed="false" pages="1">
+  <diagram id="group6-overall-flow-colour" name="Overall Project System Flow">
+    <mxGraphModel dx="1700" dy="1050" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1650" pageHeight="1000" background="#FFFFFF" math="0" shadow="0">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+        <mxCell id="lane_a" parent="1" value="&lt;b&gt;LAYER A - ORDER / COORDINATION&lt;/b&gt;" style="rounded=1;arcSize=12;whiteSpace=wrap;html=1;fillColor=#F4F8FC;strokeColor=#A9BAC9;strokeWidth=1.5;fontFamily=Arial;fontSize=17;fontColor=#1F2933;align=left;verticalAlign=top;spacing=6;spacingTop=8;" vertex="1">
+          <mxGeometry x="25" y="80" width="1600" height="245" as="geometry"/>
+        </mxCell>
+        <mxCell id="lane_b" parent="1" value="&lt;b&gt;LAYER B - PHYSICAL PRODUCTION FLOW&lt;/b&gt;" style="rounded=1;arcSize=12;whiteSpace=wrap;html=1;fillColor=#F8FAF8;strokeColor=#B5C3B8;strokeWidth=1.5;fontFamily=Arial;fontSize=17;fontColor=#1F2933;align=left;verticalAlign=top;spacing=6;spacingTop=8;" vertex="1">
+          <mxGeometry x="25" y="340" width="1600" height="455" as="geometry"/>
+        </mxCell>
+        <mxCell id="lane_c" parent="1" value="&lt;b&gt;LAYER C - LOCAL CONTROL / PLANT AUTHORITY&lt;/b&gt;" style="rounded=1;arcSize=12;whiteSpace=wrap;html=1;fillColor=#F7F8FA;strokeColor=#B7BDC5;strokeWidth=1.5;fontFamily=Arial;fontSize=17;fontColor=#1F2933;align=left;verticalAlign=top;spacing=6;spacingTop=8;" vertex="1">
+          <mxGeometry x="25" y="815" width="1600" height="155" as="geometry"/>
+        </mxCell>
+        <mxCell id="pos" parent="1" value="&lt;b&gt;Purchase Order System&lt;/b&gt;&lt;br&gt;M1 POS&lt;br&gt;Customer / order boundary" style="rounded=1;arcSize=12;whiteSpace=wrap;html=1;fillColor=#DCEEFF;strokeColor=#4F81BD;strokeWidth=2.2;fontFamily=Arial;fontSize=17;fontColor=#1F2933;align=center;verticalAlign=middle;spacing=6;" vertex="1">
+          <mxGeometry x="650" y="105" width="350" height="75" as="geometry"/>
+        </mxCell>
+        <mxCell id="coord" parent="1" value="&lt;b&gt;ABS Coordinator&lt;/b&gt;&lt;br&gt;M1&lt;br&gt;Order + batch orchestration&lt;br&gt;Final RESUME / HOLD authority" style="rounded=1;arcSize=12;whiteSpace=wrap;html=1;fillColor=#DCEEFF;strokeColor=#4F81BD;strokeWidth=2.2;fontFamily=Arial;fontSize=17;fontColor=#1F2933;align=center;verticalAlign=middle;spacing=6;" vertex="1">
+          <mxGeometry x="650" y="205" width="350" height="105" as="geometry"/>
+        </mxCell>
+        <mxCell id="fault" parent="1" value="&lt;b&gt;FaultSupervisor&lt;/b&gt;&lt;br&gt;M3 Fault-Tolerance IP&lt;br&gt;Safe-stop / recovery coordination&lt;br&gt;No actuator authority" style="rounded=1;arcSize=12;whiteSpace=wrap;html=1;fillColor=#FCE8D5;strokeColor=#D28A47;strokeWidth=2.2;fontFamily=Arial;fontSize=17;fontColor=#1F2933;align=center;verticalAlign=middle;spacing=6;dashed=1;dashPattern=7 5;" vertex="1">
+          <mxGeometry x="70" y="180" width="330" height="120" as="geometry"/>
+        </mxCell>
+        <mxCell id="viz" parent="1" value="&lt;b&gt;Advanced Visualisation&lt;/b&gt;&lt;br&gt;M1 IP - READ-ONLY&lt;br&gt;VIZ_* status / progress&lt;br&gt;Display only" style="rounded=1;arcSize=12;whiteSpace=wrap;html=1;fillColor=#DCEEFF;strokeColor=#4F81BD;strokeWidth=2.2;fontFamily=Arial;fontSize=17;fontColor=#1F2933;align=center;verticalAlign=middle;spacing=6;dashed=1;dashPattern=7 5;" vertex="1">
+          <mxGeometry x="1250" y="185" width="330" height="110" as="geometry"/>
+        </mxCell>
+        <mxCell id="loader" parent="1" value="&lt;b&gt;1  Bottle Loader&lt;/b&gt;&lt;br&gt;M2" style="rounded=1;arcSize=12;whiteSpace=wrap;html=1;fillColor=#E2F3E4;strokeColor=#5B9D6B;strokeWidth=2.2;fontFamily=Arial;fontSize=17;fontColor=#1F2933;align=center;verticalAlign=middle;spacing=6;" vertex="1">
+          <mxGeometry x="60" y="425" width="220" height="90" as="geometry"/>
+        </mxCell>
+        <mxCell id="conveyor" parent="1" value="&lt;b&gt;2  Conveyor / P1&lt;/b&gt;&lt;br&gt;M2&lt;br&gt;Entry transfer" style="rounded=1;arcSize=12;whiteSpace=wrap;html=1;fillColor=#E2F3E4;strokeColor=#5B9D6B;strokeWidth=2.2;fontFamily=Arial;fontSize=17;fontColor=#1F2933;align=center;verticalAlign=middle;spacing=6;" vertex="1">
+          <mxGeometry x="340" y="425" width="220" height="90" as="geometry"/>
+        </mxCell>
+        <mxCell id="rotary" parent="1" value="&lt;b&gt;3  Rotary Table&lt;/b&gt;&lt;br&gt;M3&lt;br&gt;P1-P6 indexed coordination" style="rounded=1;arcSize=12;whiteSpace=wrap;html=1;fillColor=#FCE8D5;strokeColor=#D28A47;strokeWidth=2.2;fontFamily=Arial;fontSize=17;fontColor=#1F2933;align=center;verticalAlign=middle;spacing=6;" vertex="1">
+          <mxGeometry x="620" y="425" width="220" height="90" as="geometry"/>
+        </mxCell>
+        <mxCell id="filling" parent="1" value="&lt;b&gt;4  Filling A + B&lt;/b&gt;&lt;br&gt;M4&lt;br&gt;Recipe-controlled" style="rounded=1;arcSize=12;whiteSpace=wrap;html=1;fillColor=#EAE1F5;strokeColor=#8A6BB2;strokeWidth=2.2;fontFamily=Arial;fontSize=17;fontColor=#1F2933;align=center;verticalAlign=middle;spacing=6;" vertex="1">
+          <mxGeometry x="900" y="425" width="220" height="90" as="geometry"/>
+        </mxCell>
+        <mxCell id="lid" parent="1" value="&lt;b&gt;5  Lid Placement&lt;/b&gt;&lt;br&gt;M3" style="rounded=1;arcSize=12;whiteSpace=wrap;html=1;fillColor=#FCE8D5;strokeColor=#D28A47;strokeWidth=2.2;fontFamily=Arial;fontSize=17;fontColor=#1F2933;align=center;verticalAlign=middle;spacing=6;" vertex="1">
+          <mxGeometry x="1180" y="425" width="220" height="90" as="geometry"/>
+        </mxCell>
+        <mxCell id="capper" parent="1" value="&lt;b&gt;6  Capping&lt;/b&gt;&lt;br&gt;M4" style="rounded=1;arcSize=12;whiteSpace=wrap;html=1;fillColor=#EAE1F5;strokeColor=#8A6BB2;strokeWidth=2.2;fontFamily=Arial;fontSize=17;fontColor=#1F2933;align=center;verticalAlign=middle;spacing=6;" vertex="1">
+          <mxGeometry x="1180" y="635" width="220" height="90" as="geometry"/>
+        </mxCell>
+        <mxCell id="labeller" parent="1" value="&lt;b&gt;7  P6 Labelling&lt;/b&gt;&lt;br&gt;M2&lt;br&gt;Label + verify" style="rounded=1;arcSize=12;whiteSpace=wrap;html=1;fillColor=#E2F3E4;strokeColor=#5B9D6B;strokeWidth=2.2;fontFamily=Arial;fontSize=17;fontColor=#1F2933;align=center;verticalAlign=middle;spacing=6;" vertex="1">
+          <mxGeometry x="900" y="635" width="220" height="90" as="geometry"/>
+        </mxCell>
+        <mxCell id="unloader" parent="1" value="&lt;b&gt;8  Unloading&lt;/b&gt;&lt;br&gt;M2&lt;br&gt;BOTTLE_DONE source" style="rounded=1;arcSize=12;whiteSpace=wrap;html=1;fillColor=#E2F3E4;strokeColor=#5B9D6B;strokeWidth=2.2;fontFamily=Arial;fontSize=17;fontColor=#1F2933;align=center;verticalAlign=middle;spacing=6;" vertex="1">
+          <mxGeometry x="620" y="635" width="220" height="90" as="geometry"/>
+        </mxCell>
+        <mxCell id="sortpack" parent="1" value="&lt;b&gt;9  Sort / Pack&lt;/b&gt;&lt;br&gt;M4 extension&lt;br&gt;Not order completion" style="rounded=1;arcSize=12;whiteSpace=wrap;html=1;fillColor=#EAE1F5;strokeColor=#8A6BB2;strokeWidth=2.2;fontFamily=Arial;fontSize=17;fontColor=#1F2933;align=center;verticalAlign=middle;spacing=6;" vertex="1">
+          <mxGeometry x="340" y="635" width="220" height="90" as="geometry"/>
+        </mxCell>
+        <mxCell id="transfer" parent="1" value="&lt;b&gt;M2 Transfer Fault Adapter&lt;/b&gt;&lt;br&gt;Four-stage recovery protocol" style="rounded=1;arcSize=12;whiteSpace=wrap;html=1;fillColor=#E2F3E4;strokeColor=#5B9D6B;strokeWidth=2.2;fontFamily=Arial;fontSize=17;fontColor=#1F2933;align=center;verticalAlign=middle;spacing=6;dashed=1;dashPattern=7 5;" vertex="1">
+          <mxGeometry x="60" y="650" width="240" height="75" as="geometry"/>
+        </mxCell>
+        <mxCell id="controllers" parent="1" value="&lt;b&gt;Machine Controllers&lt;/b&gt;&lt;br&gt;Local sequencing - safety - actuator authority" style="rounded=1;arcSize=12;whiteSpace=wrap;html=1;fillColor=#ECEFF3;strokeColor=#6F7B86;strokeWidth=2.2;fontFamily=Arial;fontSize=17;fontColor=#1F2933;align=center;verticalAlign=middle;spacing=6;" vertex="1">
+          <mxGeometry x="360" y="850" width="420" height="82" as="geometry"/>
+        </mxCell>
+        <mxCell id="plants" parent="1" value="&lt;b&gt;Plant Models&lt;/b&gt;&lt;br&gt;Sensors - actuators - physical / simulated state" style="rounded=1;arcSize=12;whiteSpace=wrap;html=1;fillColor=#ECEFF3;strokeColor=#6F7B86;strokeWidth=2.2;fontFamily=Arial;fontSize=17;fontColor=#1F2933;align=center;verticalAlign=middle;spacing=6;" vertex="1">
+          <mxGeometry x="880" y="850" width="420" height="82" as="geometry"/>
+        </mxCell>
+        <mxCell id="local_note" parent="1" value="Coordinator supervises batches/status only; machine-to-machine hand-offs own bottle movement." style="text;html=1;strokeColor=none;fillColor=none;whiteSpace=wrap;fontFamily=Arial;fontColor=#1F2933;align=center;verticalAlign=middle;" vertex="1">
+          <mxGeometry x="300" y="940" width="1050" height="22" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_order" parent="1" value="ORDER" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#3F4A56;strokeWidth=2.5;endArrow=block;endFill=1;fontFamily=Arial;fontSize=16;fontColor=#1F2933;labelBackgroundColor=#FFFFFF;" edge="1" source="pos" target="coord">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_complete" parent="1" value="ORDER_COMPLETE" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#3F4A56;strokeWidth=2.5;endArrow=block;endFill=1;fontFamily=Arial;fontSize=16;fontColor=#1F2933;labelBackgroundColor=#FFFFFF;" edge="1" source="coord" target="pos">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_ft" parent="1" value="Fault / Safe Stop / Recovery" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#D28A47;strokeWidth=2.2;endArrow=block;endFill=1;startArrow=block;startFill=1;dashed=1;dashPattern=7 5;fontFamily=Arial;fontSize=15;fontColor=#1F2933;labelBackgroundColor=#FFFFFF;" edge="1" source="fault" target="coord">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_viz" parent="1" value="VIZ_* status / progress" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#3F4A56;strokeWidth=2.5;endArrow=block;endFill=1;fontFamily=Arial;fontSize=16;fontColor=#1F2933;labelBackgroundColor=#FFFFFF;" edge="1" source="coord" target="viz">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_coord_prod" parent="1" value="START_ORDER + recipe / ~1 s read-only status monitoring" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#6F7B86;strokeWidth=2.2;endArrow=block;endFill=1;dashed=1;dashPattern=7 5;fontFamily=Arial;fontSize=16;fontColor=#1F2933;labelBackgroundColor=#FFFFFF;" edge="1" source="coord" target="rotary">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="p1" parent="1" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#3F4A56;strokeWidth=2.5;endArrow=block;endFill=1;fontFamily=Arial;fontSize=16;fontColor=#1F2933;labelBackgroundColor=#FFFFFF;" edge="1" source="loader" target="conveyor">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="p2" parent="1" value="P1  LOAD_BOTTLE(bottleId)" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#3F4A56;strokeWidth=2.5;endArrow=block;endFill=1;fontFamily=Arial;fontSize=15;fontColor=#1F2933;labelBackgroundColor=#FFFFFF;" edge="1" source="conveyor" target="rotary">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="p3" parent="1" value="P2 completion  MARK_FILLED(bottleId)" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#3F4A56;strokeWidth=2.5;endArrow=block;endFill=1;fontFamily=Arial;fontSize=15;fontColor=#1F2933;labelBackgroundColor=#FFFFFF;" edge="1" source="rotary" target="filling">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="p4" parent="1" value="P3 lid request / LID_CYCLE_DONE" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#3F4A56;strokeWidth=2.5;endArrow=block;endFill=1;fontFamily=Arial;fontSize=15;fontColor=#1F2933;labelBackgroundColor=#FFFFFF;" edge="1" source="filling" target="lid">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="p5" parent="1" value="P4" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#3F4A56;strokeWidth=2.5;endArrow=block;endFill=1;fontFamily=Arial;fontSize=15;fontColor=#1F2933;labelBackgroundColor=#FFFFFF;" edge="1" source="lid" target="capper">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="p6" parent="1" value="MARK_CAPPED -&amp;gt; P6 BOTTLE_AT_LABEL" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#3F4A56;strokeWidth=2.5;endArrow=block;endFill=1;fontFamily=Arial;fontSize=15;fontColor=#1F2933;labelBackgroundColor=#FFFFFF;" edge="1" source="capper" target="labeller">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="p7" parent="1" value="MARK_LABELLED / P6_CLEAR" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#3F4A56;strokeWidth=2.5;endArrow=block;endFill=1;fontFamily=Arial;fontSize=15;fontColor=#1F2933;labelBackgroundColor=#FFFFFF;" edge="1" source="labeller" target="unloader">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="p8" parent="1" value="Downstream extension" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#3F4A56;strokeWidth=2.5;endArrow=block;endFill=1;fontFamily=Arial;fontSize=15;fontColor=#1F2933;labelBackgroundColor=#FFFFFF;" edge="1" source="unloader" target="sortpack">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_done" parent="1" value="BOTTLE_DONE -&amp;gt; Coordinator" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#5B9D6B;strokeWidth=2.6;endArrow=block;endFill=1;dashed=1;dashPattern=7 5;fontFamily=Arial;fontSize=16;fontColor=#1F2933;labelBackgroundColor=#FFFFFF;" edge="1" source="unloader" target="coord">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="870" y="680"/>
+              <mxPoint x="870" y="360"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_adapter_ft" parent="1" value="Transfer fault evidence" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#D28A47;strokeWidth=2.1;endArrow=block;endFill=1;startArrow=block;startFill=1;dashed=1;dashPattern=7 5;fontFamily=Arial;fontSize=14;fontColor=#1F2933;labelBackgroundColor=#FFFFFF;" edge="1" source="transfer" target="fault">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="180" y="320"/>
+              <mxPoint x="235" y="320"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_transfer" parent="1" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#5B9D6B;strokeWidth=2.0;endArrow=block;endFill=1;dashed=1;dashPattern=7 5;fontFamily=Arial;fontSize=16;fontColor=#1F2933;labelBackgroundColor=#FFFFFF;" edge="1" source="conveyor" target="transfer">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="450" y="570"/>
+              <mxPoint x="180" y="570"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_local" parent="1" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#6F7B86;strokeWidth=2.2;endArrow=block;endFill=1;startArrow=block;startFill=1;fontFamily=Arial;fontSize=16;fontColor=#1F2933;labelBackgroundColor=#FFFFFF;" edge="1" source="controllers" target="plants">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
