@@ -1,0 +1,39 @@
+// Simulated Filler A mechanics and sensor feedback.
+
+FillerAPlant(
+    input String signal FILLER_A_PLANT_COMMAND;
+    input String signal INJECT_FILLER_A_FAULT;
+
+    output String signal FILLER_A_PLANT_FEEDBACK;
+)
+->{
+    Member4Visualisation.start();
+    System.out.println("M4 FillerAPlantCD started");
+
+    {loop {
+        present(FILLER_A_PLANT_COMMAND) {
+            Member4PlantStateV1.acceptFillerACommand(
+                #FILLER_A_PLANT_COMMAND
+            );
+        }
+        pause;
+    }}
+    ||
+    {loop {
+        present(INJECT_FILLER_A_FAULT) {
+            Member4PlantStateV1.injectFillerAFault(
+                #INJECT_FILLER_A_FAULT
+            );
+        }
+        pause;
+    }}
+    ||
+    {loop {
+        Member4PlantStateV1.tick();
+        String feedback = Member4PlantStateV1.takeFillerAFeedback();
+        if (feedback != null) {
+            emit FILLER_A_PLANT_FEEDBACK(feedback);
+        }
+        pause;
+    }}
+}

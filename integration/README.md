@@ -2,10 +2,9 @@
 
 ## Purpose
 
-This directory defines the shape of the future `main` branch. It does not
-claim that missing peer Controllers are implemented. Each member copies their
-tested production files into the assigned directory and satisfies the frozen
-receiver and hand-off contract before merge.
+This directory records the current production integration topology. M1, M2,
+M3 and M4 production XML is registered in `system-manifest.json`; physical
+cross-member acceptance remains an end-to-end integration task.
 
 ## Runtime topology
 
@@ -15,10 +14,10 @@ POSCD (11000)
         |-- BottleLoaderControllerCD (11002)       [M2 implemented]
         |-- ConveyorControllerCD (11009)           [M2 implemented]
         |-- RotaryTableControllerCD (11003)        [M3 implemented]
-        |-- FillerAControllerCD (11004)            [M4 pending]
-        |-- FillerBControllerCD (11005)            [M4 pending]
+        |-- FillerAControllerCD (11004)            [M4 implemented]
+        |-- FillerBControllerCD (11005)            [M4 implemented]
         |-- LidLoaderControllerCD (11006)           [M3 implemented]
-        |-- CapperControllerCD (11007)              [M4 pending]
+        |-- CapperControllerCD (11007)              [M4 implemented]
         |-- BottleUnloaderControllerCD (11010)      [M2 implemented]
         `-- ABSVisualisationPlantCD (11008)         [M1 implemented]
 
@@ -27,20 +26,33 @@ M2TransferFaultAdapterCD (13002)                   [M2 implemented]
 
 RotaryTablePlantCD (12003)                         [M3 implemented]
   receives bottle-correlated P1/P2/P3/P4/P6 events
+
+BottleLoaderPlantCD (12002)                        [M2 implemented]
+ConveyorPlantCD (12009)                            [M2 implemented]
+BottleUnloaderPlantCD (12010)                      [M2 implemented]
+LabellerPlantCD (12013)                            [M2 implemented]
+DigitalTwinCD / DigitalTwinViewerCD (14002 / 14003) [M2 implemented]
+
+BottleContextRegistryCD (11011)                    [M4 implemented]
+RecognitionPlantCD (12011)                         [M4 implemented]
+SortPackControllerCD (11012)                       [M4 implemented]
+SortPackPlantCD (12012)                            [M4 implemented]
+FillerAPlantCD / FillerBPlantCD (12004 / 12005)    [M4 implemented]
+CapperPlantCD (12007)                              [M4 implemented]
 ```
 
 `LabellerControllerCD:11013`, the four M2 Plant Clock Domains and
-`DigitalTwinCD:14002` are implemented in `machines/transfer/`. M4
-Registry/SortPack remains proposed and peer-owned until M4 source is supplied.
+`DigitalTwinCD:14002` are implemented in `machines/transfer/`. M4's Registry,
+Filling, Capping and Sort/Pack modules are implemented in
+`machines/filling_capping/`. Their cross-member profiles and hand-offs still
+require a physical end-to-end acceptance run.
 
 ## Merge order
 
-1. Merge this skeleton after M1 and M3 tests pass independently.
-2. M2 production source/XML under `machines/transfer/` passes its deterministic
-   tests and the M2/M3 contract test.
-3. M4 adds production source/XML under `machines/filling_capping/` and updates
-   its manifest entries.
-4. Run `tools/validate_integration.py` and all member self-tests.
+1. Keep M1, M2, M3 and M4 independent self-tests passing.
+2. Run `tools/validate_integration.py` against all canonical production XML.
+3. Run the M2/M3 and M3/M4 compatibility tests.
+4. Run the M4 two-size demo and verify both capacity/geometry paths.
 5. Run one bottle through P1 to P6, then a multi-bottle pipeline.
 6. Inject each supported fault and verify bounded recovery, M1 HOLD and no
    unintended actuator command.

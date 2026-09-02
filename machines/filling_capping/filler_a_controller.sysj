@@ -1,0 +1,60 @@
+// Filler A: frozen M1 status/recipe boundary plus M3 P2 context.
+
+FillerAController(
+    input Integer signal FILL_A_RATIO;
+    input signal FILLER_A_STATUS_REQUEST;
+    input String signal BOTTLE_AT_FILL;
+    input String signal FILLER_A_PLANT_FEEDBACK;
+
+    output Integer signal FILLER_A_STATUS;
+    output String signal FILLER_A_PLANT_COMMAND;
+    output String signal FILL_A_DONE;
+)
+->{
+    System.out.println("M4 FillerAControllerCD started");
+
+    {loop {
+        present(FILL_A_RATIO) {
+            Member4MachineStateV1.setFillerARatio(#FILL_A_RATIO);
+        }
+        pause;
+    }}
+    ||
+    {loop {
+        present(FILLER_A_STATUS_REQUEST) {
+            emit FILLER_A_STATUS(
+                Member4MachineStateV1.getFillerAStatus()
+            );
+        }
+        pause;
+    }}
+    ||
+    {loop {
+        present(BOTTLE_AT_FILL) {
+            Member4MachineStateV1.acceptBottleAtFill(#BOTTLE_AT_FILL);
+        }
+        pause;
+    }}
+    ||
+    {loop {
+        present(FILLER_A_PLANT_FEEDBACK) {
+            Member4MachineStateV1.acceptFillerAFeedback(
+                #FILLER_A_PLANT_FEEDBACK
+            );
+        }
+        pause;
+    }}
+    ||
+    {loop {
+        Member4MachineStateV1.tick();
+        String command = Member4MachineStateV1.takeFillerACommand();
+        if (command != null) {
+            emit FILLER_A_PLANT_COMMAND(command);
+        }
+        String completed = Member4MachineStateV1.takeFillADone();
+        if (completed != null) {
+            emit FILL_A_DONE(completed);
+        }
+        pause;
+    }}
+}

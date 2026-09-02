@@ -1,0 +1,38 @@
+// Simulated S/L diverter, package presence and placement confirmation.
+
+SortPackPlant(
+    input String signal SORT_PACK_PLANT_COMMAND;
+    input String signal INJECT_SORT_PACK_FAULT;
+
+    output String signal SORT_PACK_PLANT_FEEDBACK;
+)
+->{
+    System.out.println("M4 SortPackPlantCD started");
+
+    {loop {
+        present(SORT_PACK_PLANT_COMMAND) {
+            Member4PlantStateV1.acceptSortPackCommand(
+                #SORT_PACK_PLANT_COMMAND
+            );
+        }
+        pause;
+    }}
+    ||
+    {loop {
+        present(INJECT_SORT_PACK_FAULT) {
+            Member4PlantStateV1.injectSortPackFault(
+                #INJECT_SORT_PACK_FAULT
+            );
+        }
+        pause;
+    }}
+    ||
+    {loop {
+        Member4PlantStateV1.tick();
+        String feedback = Member4PlantStateV1.takeSortPackFeedback();
+        if (feedback != null) {
+            emit SORT_PACK_PLANT_FEEDBACK(feedback);
+        }
+        pause;
+    }}
+}
