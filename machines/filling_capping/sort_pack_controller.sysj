@@ -1,0 +1,42 @@
+// Downstream extension; completion is internal and never becomes BOTTLE_DONE.
+
+SortPackController(
+    input String signal BOTTLE_READY_FOR_SORT;
+    input String signal SORT_PACK_PLANT_FEEDBACK;
+
+    output String signal SORT_PACK_PLANT_COMMAND;
+)
+->{
+    System.out.println("M4 SortPackControllerCD started");
+
+    {loop {
+        present(BOTTLE_READY_FOR_SORT) {
+            Member4MachineStateV1.acceptBottleReadyForSort(
+                #BOTTLE_READY_FOR_SORT
+            );
+        }
+        pause;
+    }}
+    ||
+    {loop {
+        present(SORT_PACK_PLANT_FEEDBACK) {
+            Member4MachineStateV1.acceptSortPackFeedback(
+                #SORT_PACK_PLANT_FEEDBACK
+            );
+        }
+        pause;
+    }}
+    ||
+    {loop {
+        Member4MachineStateV1.tick();
+        String command = Member4MachineStateV1.takeSortPackCommand();
+        if (command != null) {
+            emit SORT_PACK_PLANT_COMMAND(command);
+        }
+        String completed = Member4MachineStateV1.takeSortPackCompletion();
+        if (completed != null) {
+            System.out.println("M4 internal " + completed);
+        }
+        pause;
+    }}
+}

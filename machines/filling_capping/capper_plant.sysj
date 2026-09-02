@@ -1,0 +1,38 @@
+// Simulated clamp, Z-axis, cap gripper and twist mechanics.
+
+CapperPlant(
+    input String signal CAPPER_PLANT_COMMAND;
+    input String signal INJECT_CAPPER_FAULT;
+
+    output String signal CAPPER_PLANT_FEEDBACK;
+)
+->{
+    System.out.println("M4 CapperPlantCD started");
+
+    {loop {
+        present(CAPPER_PLANT_COMMAND) {
+            Member4PlantStateV1.acceptCapperCommand(
+                #CAPPER_PLANT_COMMAND
+            );
+        }
+        pause;
+    }}
+    ||
+    {loop {
+        present(INJECT_CAPPER_FAULT) {
+            Member4PlantStateV1.injectCapperFault(
+                #INJECT_CAPPER_FAULT
+            );
+        }
+        pause;
+    }}
+    ||
+    {loop {
+        Member4PlantStateV1.tick();
+        String feedback = Member4PlantStateV1.takeCapperFeedback();
+        if (feedback != null) {
+            emit CAPPER_PLANT_FEEDBACK(feedback);
+        }
+        pause;
+    }}
+}

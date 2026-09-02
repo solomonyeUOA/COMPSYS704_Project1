@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Canonical M4 runtime. M2 profile/SortPack rows remain cross-team inputs. -->
+<System xmlns="http://systemjtechnology.com">
+    <SubSystem Name="MEMBER4_SS" Local="true">
+        <ClockDomain Name="BottleContextRegistryCD" Class="BottleContextRegistry">
+            <iSignal Name="BOTTLE_RECOGNISED" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="11011" />
+            <oSignal Name="ROTARY_BOTTLE_CONTEXT" To="RotaryTableControllerCD.ROTARY_BOTTLE_CONTEXT" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="11003" />
+            <oSignal Name="LOAD_PROFILE" To="BottleLoaderControllerCD.LOAD_PROFILE" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="11002" />
+            <oSignal Name="UNLOAD_PROFILE" To="BottleUnloaderControllerCD.UNLOAD_PROFILE" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="11010" />
+        </ClockDomain>
+
+        <ClockDomain Name="RecognitionPlantCD" Class="RecognitionPlant">
+            <iSignal Name="RECOGNITION_REQUEST" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="12011" />
+            <oSignal Name="BOTTLE_RECOGNISED" To="BottleContextRegistryCD.BOTTLE_RECOGNISED" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="11011" />
+        </ClockDomain>
+
+        <ClockDomain Name="FillerAControllerCD" Class="FillerAController">
+            <iSignal Name="FILL_A_RATIO" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="11004" />
+            <iSignal Name="FILLER_A_STATUS_REQUEST" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="11004" />
+            <iSignal Name="BOTTLE_AT_FILL" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="11004" />
+            <iSignal Name="FILLER_A_PLANT_FEEDBACK" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="11004" />
+            <oSignal Name="FILLER_A_STATUS" To="CoordinatorCD.FILLER_A_STATUS" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="11001" />
+            <oSignal Name="FILLER_A_PLANT_COMMAND" To="FillerAPlantCD.FILLER_A_PLANT_COMMAND" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="12004" />
+            <oSignal Name="FILL_A_DONE" To="FillerBControllerCD.FILL_A_DONE" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="11005" />
+        </ClockDomain>
+
+        <ClockDomain Name="FillerAPlantCD" Class="FillerAPlant">
+            <iSignal Name="FILLER_A_PLANT_COMMAND" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="12004" />
+            <iSignal Name="INJECT_FILLER_A_FAULT" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="12004" />
+            <oSignal Name="FILLER_A_PLANT_FEEDBACK" To="FillerAControllerCD.FILLER_A_PLANT_FEEDBACK" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="11004" />
+        </ClockDomain>
+
+        <ClockDomain Name="FillerBControllerCD" Class="FillerBController">
+            <iSignal Name="FILL_B_RATIO" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="11005" />
+            <iSignal Name="FILLER_B_STATUS_REQUEST" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="11005" />
+            <iSignal Name="FILL_A_DONE" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="11005" />
+            <iSignal Name="FILLER_B_PLANT_FEEDBACK" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="11005" />
+            <oSignal Name="FILLER_B_STATUS" To="CoordinatorCD.FILLER_B_STATUS" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="11001" />
+            <oSignal Name="FILLER_B_PLANT_COMMAND" To="FillerBPlantCD.FILLER_B_PLANT_COMMAND" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="12005" />
+            <oSignal Name="MARK_FILLED" To="RotaryTablePlantCD.MARK_FILLED" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="12003" />
+        </ClockDomain>
+
+        <ClockDomain Name="FillerBPlantCD" Class="FillerBPlant">
+            <iSignal Name="FILLER_B_PLANT_COMMAND" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="12005" />
+            <iSignal Name="INJECT_FILLER_B_FAULT" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="12005" />
+            <oSignal Name="FILLER_B_PLANT_FEEDBACK" To="FillerBControllerCD.FILLER_B_PLANT_FEEDBACK" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="11005" />
+        </ClockDomain>
+
+        <ClockDomain Name="CapperControllerCD" Class="CapperController">
+            <iSignal Name="CAPPER_STATUS_REQUEST" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="11007" />
+            <iSignal Name="BOTTLE_AT_CAP" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="11007" />
+            <iSignal Name="CAPPER_PLANT_FEEDBACK" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="11007" />
+            <oSignal Name="CAPPER_STATUS" To="CoordinatorCD.CAPPER_STATUS" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="11001" />
+            <oSignal Name="CAPPER_PLANT_COMMAND" To="CapperPlantCD.CAPPER_PLANT_COMMAND" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="12007" />
+            <oSignal Name="MARK_CAPPED" To="RotaryTablePlantCD.MARK_CAPPED" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="12003" />
+        </ClockDomain>
+
+        <ClockDomain Name="CapperPlantCD" Class="CapperPlant">
+            <iSignal Name="CAPPER_PLANT_COMMAND" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="12007" />
+            <iSignal Name="INJECT_CAPPER_FAULT" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="12007" />
+            <oSignal Name="CAPPER_PLANT_FEEDBACK" To="CapperControllerCD.CAPPER_PLANT_FEEDBACK" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="11007" />
+        </ClockDomain>
+
+        <ClockDomain Name="SortPackControllerCD" Class="SortPackController">
+            <iSignal Name="BOTTLE_READY_FOR_SORT" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="11012" />
+            <iSignal Name="SORT_PACK_PLANT_FEEDBACK" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="11012" />
+            <oSignal Name="SORT_PACK_PLANT_COMMAND" To="SortPackPlantCD.SORT_PACK_PLANT_COMMAND" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="12012" />
+        </ClockDomain>
+
+        <ClockDomain Name="SortPackPlantCD" Class="SortPackPlant">
+            <iSignal Name="SORT_PACK_PLANT_COMMAND" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="12012" />
+            <iSignal Name="INJECT_SORT_PACK_FAULT" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="12012" />
+            <oSignal Name="SORT_PACK_PLANT_FEEDBACK" To="SortPackControllerCD.SORT_PACK_PLANT_FEEDBACK" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="11012" />
+        </ClockDomain>
+    </SubSystem>
+</System>

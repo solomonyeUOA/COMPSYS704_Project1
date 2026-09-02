@@ -1,0 +1,24 @@
+// Conceptual recognition only: no image/QR algorithm is implemented.
+
+RecognitionPlant(
+    input String signal RECOGNITION_REQUEST;
+    output String signal BOTTLE_RECOGNISED;
+)
+->{
+    System.out.println("M4 RecognitionPlantCD started");
+
+    {loop {
+        present(RECOGNITION_REQUEST) {
+            String recognised = RecognitionPlantModelV1.recognise(
+                #RECOGNITION_REQUEST
+            );
+            if (recognised != null) {
+                emit BOTTLE_RECOGNISED(recognised);
+            }
+            else {
+                System.out.println("M4 Recognition rejected request");
+            }
+        }
+        pause;
+    }}
+}

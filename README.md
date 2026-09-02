@@ -2,9 +2,10 @@
 
 This repository is the current development-stage integration baseline for the
 Automated Bottling System (ABS). It contains M1's Swing POS, Coordinator and
-display-only Visualisation together with M3's Rotary Table, Lid Loader and
-Fault Supervisor. The unified Mock Controller is test-only; real M2 and M4
-Controller/Plant modules remain owned by their respective members.
+display-only Visualisation, M3's Rotary Table, Lid Loader and Fault Supervisor,
+and M4's two-size Filling, Capping and Sort/Pack Controller/Plant modules. The
+unified Mock Controller is test-only; real M2 Controller/Plant modules remain
+owned by Member 2.
 
 The authoritative quick-reference interface is
 [`docs/interfaces/COMPSYS704_Interface_Interim_Final.xlsx`](docs/interfaces/COMPSYS704_Interface_Interim_Final.xlsx).
@@ -29,8 +30,11 @@ changes must be agreed and applied consistently to source, XML, tests and docs.
 - M3 owns `RotaryTableControllerCD:11003`, `LidLoaderControllerCD:11006`,
   `RotaryTablePlantCD:12003`, `LidLoaderPlantCD:12006` and
   `FaultSupervisorCD:13003`.
-- M2 and M4 integration slots are documented under `machines/`; their pending
-  status must not be presented as completed production code.
+- M4 owns implemented Filler A/B, Capper, Bottle Context Registry,
+  Recognition Plant and Sort/Pack modules. Its canonical production mapping
+  is `machines/filling_capping/member4_system.xml`.
+- M2 transfer, loading, labelling and unloading modules remain pending peer
+  dependencies; this also blocks the full physical end-to-end group run.
 - `ABSVisualisationPlantCD` is display-only. It does not control machines,
   actuators or physical Plant state.
 - The obsolete combined `TransportControllerCD` / `TRANSPORT_*` status
@@ -94,7 +98,7 @@ visualisation/     display-only hierarchical Visualisation IP
 tests/             regression-only tests and Mock
 machines/transfer/          M2 integration slot (pending peer source)
 machines/rotary_lid/        M3 production modules and self-tests
-machines/filling_capping/   M4 integration slot (pending peer source)
+machines/filling_capping/   M4 production modules, models and self-tests
 integration/                topology, port manifest and merge checklist
 tools/                      structural integration validation
 
@@ -136,11 +140,16 @@ The order protocol, product batching logic, `START_ORDER`, `FILL_A_RATIO` and
 | ABS Visualisation | `ABSVisualisationPlantCD` | 11008 |
 | Conveyor | `ConveyorControllerCD` | 11009 |
 | Bottle Unloader | `BottleUnloaderControllerCD` | 11010 |
-| Bottle Context Registry | `BottleContextRegistryCD` | 11011 (proposed) |
-| Sort / Pack | `SortPackControllerCD` | 11012 (proposed) |
+| Bottle Context Registry | `BottleContextRegistryCD` | 11011 |
+| Sort / Pack | `SortPackControllerCD` | 11012 |
 | Labeller | `LabellerControllerCD` | 11013 |
 | Rotary Table Plant | `RotaryTablePlantCD` | 12003 |
+| Filler A Plant | `FillerAPlantCD` | 12004 |
+| Filler B Plant | `FillerBPlantCD` | 12005 |
 | Lid Loader Plant | `LidLoaderPlantCD` | 12006 |
+| Capper Plant | `CapperPlantCD` | 12007 |
+| Recognition Plant | `RecognitionPlantCD` | 12011 |
+| Sort / Pack Plant | `SortPackPlantCD` | 12012 |
 | M2 Transfer FT Adapter | `M2TransferFaultAdapterCD` | 13002 |
 | Fault Supervisor | `FaultSupervisorCD` | 13003 |
 
@@ -165,7 +174,8 @@ transport and state handling against the test-only Mock; real Controller/Plant
 acceptance remains a separate cross-member integration activity.
 
 Before a merge, run `python3 tools/validate_integration.py`. The structural
-validator treats M2 and M4 as pending until their production XML is supplied.
+validator includes M1, M3 and M4 production XML and reports only unresolved M2
+receivers as peer implementation warnings.
 
 ## Prerequisite
 

@@ -1,0 +1,683 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mxfile host="app.diagrams.net" modified="2026-08-28T15:15:00.000Z" agent="Codex" version="24.7.17" type="device" compressed="false">
+  <diagram id="m4-architecture" name="1 M4 System Architecture">
+    <mxGraphModel dx="1600" dy="900" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="900" math="0" shadow="0">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+        <mxCell id="title" value="Member 4 System Architecture" style="text;html=0;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontSize=26;fontStyle=1;fontColor=#17324D;" vertex="1" parent="1">
+          <mxGeometry x="50" y="20" width="1500" height="40" as="geometry"/>
+        </mxCell>
+        <mxCell id="subtitle" value="Dual-liquid filling, capping, Controller/Plant separation and frozen M1 interfaces" style="text;html=0;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontSize=13;fontColor=#157A7E;" vertex="1" parent="1">
+          <mxGeometry x="50" y="62" width="1500" height="28" as="geometry"/>
+        </mxCell>
+        <mxCell id="m1" value="M1 CoordinatorCD&#10;Receiver port 11001&#10;Recipe + status coordination" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#E8E1F5;strokeColor=#7253A3;strokeWidth=2;fontSize=15;fontColor=#17212B;align=center;verticalAlign=middle;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="50" y="120" width="270" height="150" as="geometry"/>
+        </mxCell>
+        <mxCell id="m3" value="M3 Rotary Table&#10;Bottle position + context relay&#10;Recognition / Registry context&#10;Receives marks on Plant port 12003&#10;P2 fill / P4 cap interlocks" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#DDF1E4;strokeColor=#2B8053;strokeWidth=2;fontSize=15;fontColor=#17212B;align=center;verticalAlign=middle;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="390" y="355" width="270" height="170" as="geometry"/>
+        </mxCell>
+        <mxCell id="m2" value="M2 Unloader&#10;Owns BOTTLE_DONE&#10;M4 never emits order completion" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#DDECF8;strokeColor=#377EAB;strokeWidth=2;fontSize=15;fontColor=#17212B;align=center;verticalAlign=middle;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="50" y="620" width="270" height="125" as="geometry"/>
+        </mxCell>
+        <mxCell id="fillerA" value="FillerAControllerCD&#10;Receiver port 11004&#10;Stores Integer FILL_A_RATIO&#10;Latches new bottleId + capacity&#10;Independent status: 0..4" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#FFF0C2;strokeColor=#B18112;strokeWidth=2;fontSize=15;fontColor=#17212B;align=center;verticalAlign=middle;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="760" y="105" width="300" height="175" as="geometry"/>
+        </mxCell>
+        <mxCell id="fillerB" value="FillerBControllerCD&#10;Receiver port 11005&#10;Stores Integer FILL_B_RATIO&#10;Gets context in matching FILL_A_DONE&#10;Independent status: 0..4" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#FFF0C2;strokeColor=#B18112;strokeWidth=2;fontSize=15;fontColor=#17212B;align=center;verticalAlign=middle;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="760" y="355" width="300" height="175" as="geometry"/>
+        </mxCell>
+        <mxCell id="capper" value="CapperControllerCD&#10;Receiver port 11007&#10;Latches bottleId&#10;Same cap sequence for both sizes&#10;Independent status: 0..4" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#FFF0C2;strokeColor=#B18112;strokeWidth=2;fontSize=15;fontColor=#17212B;align=center;verticalAlign=middle;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="760" y="605" width="300" height="175" as="geometry"/>
+        </mxCell>
+        <mxCell id="plantA" value="FillerAPlantCD&#10;Assigned port 12004&#10;Inlet + injector valves&#10;Dose unit top/bottom sensors&#10;Volume feedback" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#E6F5F5;strokeColor=#157A7E;strokeWidth=2;fontSize=15;fontColor=#17212B;align=center;verticalAlign=middle;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="1190" y="95" width="340" height="195" as="geometry"/>
+        </mxCell>
+        <mxCell id="plantB" value="FillerBPlantCD&#10;Assigned port 12005&#10;Inlet + injector valves&#10;Dose unit top/bottom sensors&#10;Total-volume feedback" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#E6F5F5;strokeColor=#157A7E;strokeWidth=2;fontSize=15;fontColor=#17212B;align=center;verticalAlign=middle;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="1190" y="345" width="340" height="195" as="geometry"/>
+        </mxCell>
+        <mxCell id="plantC" value="CapperPlantCD&#10;Assigned port 12007&#10;Bottle clamp + Z axis&#10;Cap gripper + rotation&#10;Exact end-position sensors" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#E6F5F5;strokeColor=#157A7E;strokeWidth=2;fontSize=15;fontColor=#17212B;align=center;verticalAlign=middle;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="1190" y="595" width="340" height="195" as="geometry"/>
+        </mxCell>
+        <mxCell id="rule" value="Legend: purple = frozen M1 recipe/status interface | green/amber = proposed M3–M4 workstation hand-offs | teal = proposed Controller/Plant interface | dashed grey = frozen BOTTLE_DONE ownership" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#E9EEF2;strokeColor=#6B7C8C;strokeWidth=2;fontSize=12;fontColor=#17212B;align=center;verticalAlign=middle;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="390" y="820" width="1140" height="50" as="geometry"/>
+        </mxCell>
+        <mxCell id="m2done_note" value="BOTTLE_DONE → CoordinatorCD:11001&#10;(frozen; only after collection)" style="text;html=0;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;fontSize=12;fontStyle=1;fontColor=#6B7C8C;" vertex="1" parent="1">
+          <mxGeometry x="50" y="555" width="270" height="48" as="geometry"/>
+        </mxCell>
+        <mxCell id="a1" value="FILL_A_RATIO / status" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=0;strokeColor=#7253A3;strokeWidth=2;endArrow=block;endFill=1;fontSize=11;labelBackgroundColor=#FFFFFF;" edge="1" parent="1" source="m1" target="fillerA">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="a2" value="FILL_B_RATIO / status" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=0;strokeColor=#7253A3;strokeWidth=2;endArrow=block;endFill=1;fontSize=11;labelBackgroundColor=#FFFFFF;" edge="1" parent="1" source="m1" target="fillerB">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="350" y="195"/>
+              <mxPoint x="350" y="330"/>
+              <mxPoint x="735" y="330"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="a3" value="Capper status" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=0;strokeColor=#7253A3;strokeWidth=2;endArrow=block;endFill=1;fontSize=11;labelBackgroundColor=#FFFFFF;" edge="1" parent="1" source="m1" target="capper">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="350" y="195"/>
+              <mxPoint x="350" y="795"/>
+              <mxPoint x="910" y="795"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="a4" value="BOTTLE_AT_FILL" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=0;strokeColor=#2B8053;strokeWidth=2;endArrow=block;endFill=1;fontSize=11;labelBackgroundColor=#FFFFFF;" edge="1" parent="1" source="m3" target="fillerA">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="690" y="400"/>
+              <mxPoint x="690" y="300"/>
+              <mxPoint x="910" y="300"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="a5" value="FILL_A_DONE" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=0;strokeColor=#B18112;strokeWidth=2;endArrow=block;endFill=1;fontSize=11;labelBackgroundColor=#FFFFFF;" edge="1" parent="1" source="fillerA" target="fillerB">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="a6" value="MARK_FILLED" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=0;strokeColor=#B18112;strokeWidth=2;endArrow=block;endFill=1;fontSize=11;labelBackgroundColor=#FFFFFF;" edge="1" parent="1" source="fillerB" target="m3">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="a7" value="BOTTLE_AT_CAP" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=0;strokeColor=#2B8053;strokeWidth=2;endArrow=block;endFill=1;fontSize=11;labelBackgroundColor=#FFFFFF;" edge="1" parent="1" source="m3" target="capper">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="700" y="500"/>
+              <mxPoint x="700" y="570"/>
+              <mxPoint x="910" y="570"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="a8" value="MARK_CAPPED" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=0;strokeColor=#B18112;strokeWidth=2;endArrow=block;endFill=1;fontSize=11;labelBackgroundColor=#FFFFFF;" edge="1" parent="1" source="capper" target="m3">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="680" y="690"/>
+              <mxPoint x="680" y="525"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="a9" value="actuators + sensors" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=0;strokeColor=#157A7E;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#FFFFFF;" edge="1" parent="1" source="fillerA" target="plantA">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="a10" value="actuators + sensors" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=0;strokeColor=#157A7E;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#FFFFFF;" edge="1" parent="1" source="fillerB" target="plantB">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="a11" value="clamp + Z + rotation" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=0;strokeColor=#157A7E;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#FFFFFF;" edge="1" parent="1" source="capper" target="plantC">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="a12" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=0;dashed=1;dashPattern=6 4;strokeColor=#6B7C8C;strokeWidth=2;endArrow=block;endFill=1;" edge="1" parent="1" source="m2" target="m1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="25" y="682"/>
+              <mxPoint x="25" y="195"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+  <diagram id="dual-filler-fsm" name="2 Distributed Filler State Machines">
+    <mxGraphModel dx="1600" dy="900" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="900" math="0" shadow="0">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+        <mxCell id="title" value="Distributed Dual-Liquid Filler State Machines" style="text;html=0;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontSize=26;fontStyle=1;fontColor=#17324D;" vertex="1" parent="1">
+          <mxGeometry x="50" y="20" width="1500" height="40" as="geometry"/>
+        </mxCell>
+        <mxCell id="subtitle" value="Separate Clock Domains, independent status values and an explicit bottleId-correlated handoff on receiver port 11005" style="text;html=0;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontSize=13;fontColor=#157A7E;" vertex="1" parent="1">
+          <mxGeometry x="50" y="62" width="1500" height="28" as="geometry"/>
+        </mxCell>
+        <mxCell id="formula" value="Proposed M4 cross-CD contract&#10;BOTTLE_AT_FILL: String full BottleContext → Filler A&#10;FILL_A_DONE: String full BottleContext|measuredAMl → Filler B&#10;MARK_FILLED: String bottleId → M3 Plant:12003" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#E8E1F5;strokeColor=#7253A3;strokeWidth=2;fontSize=13;fontColor=#17212B;align=center;verticalAlign=middle;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="1030" y="95" width="510" height="110" as="geometry"/>
+        </mxCell>
+        <mxCell id="laneA" value="FillerAControllerCD — receiver 11004" style="text;html=0;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontSize=17;fontStyle=1;fontColor=#377EAB;" vertex="1" parent="1">
+          <mxGeometry x="60" y="105" width="600" height="40" as="geometry"/>
+        </mxCell>
+        <mxCell id="laneB" value="FillerBControllerCD — receiver 11005" style="text;html=0;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontSize=17;fontStyle=1;fontColor=#B18112;" vertex="1" parent="1">
+          <mxGeometry x="60" y="440" width="600" height="40" as="geometry"/>
+        </mxCell>
+        <mxCell id="wait" value="A_WAIT_RECIPE&#10;Status 0 / valves OFF&#10;Store Integer ratioA" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#E9EEF2;strokeColor=#6B7C8C;strokeWidth=2;fontSize=14;fontColor=#17212B;align=center;verticalAlign=middle;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="80" y="190" width="220" height="110" as="geometry"/>
+        </mxCell>
+        <mxCell id="ready" value="A_READY&#10;Status 1&#10;Latch new bottleId/context&#10;Ignore completed duplicate" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#DDF1E4;strokeColor=#2B8053;strokeWidth=2;fontSize=14;fontColor=#17212B;align=center;verticalAlign=middle;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="370" y="190" width="230" height="110" as="geometry"/>
+        </mxCell>
+        <mxCell id="fillA" value="A_FILL&#10;Status 2&#10;Dose to targetA&#10;Tolerance + shutoff lead" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#DCECF7;strokeColor=#377EAB;strokeWidth=2;fontSize=14;fontColor=#17212B;align=center;verticalAlign=middle;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="670" y="190" width="230" height="110" as="geometry"/>
+        </mxCell>
+        <mxCell id="aDone" value="A_DONE&#10;Status 3 / record completed id&#10;Forward unchanged size + capacity&#10;Emit FILL_A_DONE(id|size|capacity|measuredA)" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#DDF1E4;strokeColor=#2B8053;strokeWidth=2;fontSize=12;fontColor=#17212B;align=center;verticalAlign=middle;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="970" y="190" width="280" height="110" as="geometry"/>
+        </mxCell>
+        <mxCell id="aFault" value="A_FAULT&#10;Status 4&#10;Valve OFF&#10;No completion" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#F8D7DA;strokeColor=#B94A48;strokeWidth=2;fontSize=14;fontColor=#17212B;align=center;verticalAlign=middle;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="1310" y="230" width="210" height="100" as="geometry"/>
+        </mxCell>
+        <mxCell id="fillB" value="B_WAIT_A&#10;Status 0 until ratioB valid; then 1&#10;Wait FILL_A_DONE&#10;Latch matching id + size + capacity" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#FFF0C2;strokeColor=#B18112;strokeWidth=2;fontSize=13;fontColor=#17212B;align=center;verticalAlign=middle;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="80" y="500" width="250" height="110" as="geometry"/>
+        </mxCell>
+        <mxCell id="verify" value="B_FILL&#10;Status 2&#10;Dose to targetB&#10;Monitor total volume" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#DCECF7;strokeColor=#377EAB;strokeWidth=2;fontSize=14;fontColor=#17212B;align=center;verticalAlign=middle;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="410" y="500" width="230" height="110" as="geometry"/>
+        </mxCell>
+        <mxCell id="bVerify" value="B_VERIFY&#10;Matching bottleId&#10;Total within tolerance&#10;No overflow" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#FFF0C2;strokeColor=#B18112;strokeWidth=2;fontSize=14;fontColor=#17212B;align=center;verticalAlign=middle;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="720" y="500" width="230" height="110" as="geometry"/>
+        </mxCell>
+        <mxCell id="done" value="B_DONE&#10;Status 3&#10;Record lastCompletedBottleId&#10;Emit MARK_FILLED(id) once" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#DDF1E4;strokeColor=#2B8053;strokeWidth=2;fontSize=13;fontColor=#17212B;align=center;verticalAlign=middle;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="1030" y="500" width="270" height="110" as="geometry"/>
+        </mxCell>
+        <mxCell id="fault" value="B_FAULT&#10;Status 4&#10;Valve OFF&#10;No MARK_FILLED" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#F8D7DA;strokeColor=#B94A48;strokeWidth=2;fontSize=14;fontColor=#17212B;align=center;verticalAlign=middle;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="1330" y="530" width="200" height="100" as="geometry"/>
+        </mxCell>
+        <mxCell id="safety" value="Shared safety / idempotence rules&#10;- Status polling only returns each CD's current 0..4 status and never advances state&#10;- activeBottleId must match every context and completion payload; stale/mismatched events are ignored or faulted&#10;- Duplicate completed bottleId never reopens a valve and may only re-send the recorded completion&#10;- closeThreshold = target - shutoffLeadMl; accept when |measured-target| ≤ toleranceMl&#10;- Any timeout, sensor conflict or measuredTotal &gt; capacityMl + overflowMarginMl de-energises the owning filler" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#E9EEF2;strokeColor=#6B7C8C;strokeWidth=2;fontSize=13;fontColor=#17212B;align=left;spacingLeft=12;verticalAlign=middle;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="80" y="700" width="1000" height="155" as="geometry"/>
+        </mxCell>
+        <mxCell id="f1" value="valid ratioA" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=0;strokeColor=#2B8053;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#FFFFFF;" edge="1" parent="1" source="wait" target="ready">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="f2" value="new BOTTLE_AT_FILL(full BottleContext)" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=0;strokeColor=#2B8053;strokeWidth=2;endArrow=block;endFill=1;fontSize=11;labelBackgroundColor=#FFFFFF;" edge="1" parent="1" source="ready" target="fillA">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="f3" value="A within tolerance" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=0;strokeColor=#377EAB;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#FFFFFF;" edge="1" parent="1" source="fillA" target="aDone">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="f3x" value="FILL_A_DONE(String id|size|capacity|measuredA) → 11005" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=0;dashed=1;strokeColor=#B18112;strokeWidth=2;endArrow=block;endFill=1;fontSize=10;labelBackgroundColor=#FFFFFF;" edge="1" parent="1" source="aDone" target="fillB">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1110" y="390"/>
+              <mxPoint x="205" y="390"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="f4" value="valid matching context received" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=0;strokeColor=#377EAB;strokeWidth=2;endArrow=block;endFill=1;fontSize=11;labelBackgroundColor=#FFFFFF;" edge="1" parent="1" source="fillB" target="verify">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="f5" value="B target reached" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=0;strokeColor=#2B8053;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#FFFFFF;" edge="1" parent="1" source="verify" target="bVerify">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="f5b" value="total within tolerance; emit MARK_FILLED(id) → M3 Plant:12003" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=0;strokeColor=#2B8053;strokeWidth=2;endArrow=block;endFill=1;fontSize=11;labelBackgroundColor=#FFFFFF;" edge="1" parent="1" source="bVerify" target="done">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="f6" value="M3 ACK / position cleared; retain completed id" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=0;strokeColor=#2B8053;strokeWidth=2;endArrow=block;endFill=1;fontSize=11;labelBackgroundColor=#FFFFFF;" edge="1" parent="1" source="done" target="fillB">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1165" y="670"/>
+              <mxPoint x="205" y="670"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="f6a" value="M3 ACK / position cleared" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=0;strokeColor=#2B8053;strokeWidth=2;endArrow=block;endFill=1;fontSize=11;labelBackgroundColor=#FFFFFF;" edge="1" parent="1" source="aDone" target="ready">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1110" y="350"/>
+              <mxPoint x="485" y="350"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="f7" value="invalid ratio/context" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=0;strokeColor=#B94A48;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#FFFFFF;" edge="1" parent="1" source="wait" target="aFault">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="190" y="155"/>
+              <mxPoint x="1415" y="155"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="f8" value="A timeout / overflow" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=0;strokeColor=#B94A48;strokeWidth=2;endArrow=block;endFill=1;fontSize=11;labelBackgroundColor=#FFFFFF;" edge="1" parent="1" source="fillA" target="aFault">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="f9" value="B timeout / overflow / mismatched id" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=0;strokeColor=#B94A48;strokeWidth=2;endArrow=block;endFill=1;fontSize=11;labelBackgroundColor=#FFFFFF;" edge="1" parent="1" source="verify" target="fault">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="f10" value="verification failed" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=0;strokeColor=#B94A48;strokeWidth=2;endArrow=block;endFill=1;fontSize=11;labelBackgroundColor=#FFFFFF;" edge="1" parent="1" source="bVerify" target="fault">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points"><mxPoint x="835" y="650"/><mxPoint x="1430" y="650"/></Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="f11" value="explicit reset after cause cleared" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=0;strokeColor=#B94A48;strokeWidth=2;endArrow=block;endFill=1;fontSize=11;labelBackgroundColor=#FFFFFF;" edge="1" parent="1" source="fault" target="fillB">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points"><mxPoint x="1430" y="680"/><mxPoint x="205" y="680"/></Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="f12" value="explicit reset after cause cleared" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=0;strokeColor=#B94A48;strokeWidth=2;endArrow=block;endFill=1;fontSize=11;labelBackgroundColor=#FFFFFF;" edge="1" parent="1" source="aFault" target="wait">
+          <mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="1415" y="370"/><mxPoint x="190" y="370"/></Array></mxGeometry>
+        </mxCell>
+        <mxCell id="f13" value="invalid ratioB / FILL_A_DONE context" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=0;strokeColor=#B94A48;strokeWidth=2;endArrow=block;endFill=1;fontSize=11;labelBackgroundColor=#FFFFFF;" edge="1" parent="1" source="fillB" target="fault">
+          <mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="205" y="640"/><mxPoint x="1430" y="640"/></Array></mxGeometry>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+  <diagram id="detailed-filler-cycles" name="3 Detailed Filler Plant Cycles">
+    <mxGraphModel dx="1600" dy="900" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="900" math="0" shadow="0">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+        <mxCell id="title" value="Detailed Filler A / B Controller-Plant Cycles" style="text;html=0;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontSize=26;fontStyle=1;fontColor=#17324D;" vertex="1" parent="1">
+          <mxGeometry x="50" y="20" width="1500" height="40" as="geometry"/>
+        </mxCell>
+        <mxCell id="subtitle" value="Both fillers implement the brief's injector, pressure-canister and inlet sequence; only one injector is enabled at a time" style="text;html=0;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontSize=13;fontColor=#157A7E;" vertex="1" parent="1">
+          <mxGeometry x="50" y="62" width="1500" height="28" as="geometry"/>
+        </mxCell>
+        <mxCell id="laneA" value="FillerAControllerCD + FillerAPlantCD" style="text;html=0;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontSize=17;fontStyle=1;fontColor=#377EAB;" vertex="1" parent="1">
+          <mxGeometry x="50" y="100" width="600" height="35" as="geometry"/>
+        </mxCell>
+        <mxCell id="aReady" value="A_READY&#10;Status 1&#10;Wait bottleAtPos2&#10;Target A latched" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#DDF1E4;strokeColor=#2B8053;strokeWidth=2;fontSize=13;fontColor=#17212B;align=center;verticalAlign=middle;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="40" y="150" width="180" height="110" as="geometry"/>
+        </mxCell>
+        <mxCell id="aInject" value="A_INJECT&#10;Status 2&#10;valveInjectorOnOff = 1&#10;Inlet remains closed" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#DCECF7;strokeColor=#377EAB;strokeWidth=2;fontSize=13;fontColor=#17212B;align=center;verticalAlign=middle;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="250" y="150" width="190" height="110" as="geometry"/>
+        </mxCell>
+        <mxCell id="aRetract" value="A_RETRACT / DOSE&#10;dosUnitValveRetract = 1&#10;Pressure canister rises&#10;Monitor measuredAMl" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#DCECF7;strokeColor=#377EAB;strokeWidth=2;fontSize=12;fontColor=#17212B;align=center;verticalAlign=middle;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="470" y="150" width="210" height="110" as="geometry"/>
+        </mxCell>
+        <mxCell id="aClose" value="A_TARGET_REACHED&#10;measuredA within tolerance&#10;valveInjectorOnOff = 0&#10;Stop retract command" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#FFF0C2;strokeColor=#B18112;strokeWidth=2;fontSize=12;fontColor=#17212B;align=center;verticalAlign=middle;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="710" y="150" width="210" height="110" as="geometry"/>
+        </mxCell>
+        <mxCell id="aInlet" value="A_OPEN_INLET&#10;valveInletOnOff = 1&#10;Injector confirmed OFF" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#DCECF7;strokeColor=#377EAB;strokeWidth=2;fontSize=13;fontColor=#17212B;align=center;verticalAlign=middle;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="950" y="150" width="185" height="110" as="geometry"/>
+        </mxCell>
+        <mxCell id="aExtend" value="A_EXTEND / REFILL&#10;dosUnitValveExtend = 1&#10;Wait dosUnitEvac&#10;Canister reaches bottom" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#DCECF7;strokeColor=#377EAB;strokeWidth=2;fontSize=12;fontColor=#17212B;align=center;verticalAlign=middle;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="1165" y="150" width="200" height="110" as="geometry"/>
+        </mxCell>
+        <mxCell id="aDone" value="A_DONE&#10;Status 3&#10;valveInletOnOff = 0&#10;Emit FILL_A_DONE(full context)" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#DDF1E4;strokeColor=#2B8053;strokeWidth=2;fontSize=11;fontColor=#17212B;align=center;verticalAlign=middle;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="1395" y="150" width="170" height="110" as="geometry"/>
+        </mxCell>
+        <mxCell id="aFault" value="A_FAULT — status 4&#10;Injector OFF | Inlet OFF&#10;Actuator OFF | no completion" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#F8D7DA;strokeColor=#B94A48;strokeWidth=2;fontSize=12;fontColor=#17212B;align=center;verticalAlign=middle;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="1260" y="315" width="300" height="85" as="geometry"/>
+        </mxCell>
+        <mxCell id="laneB" value="FillerBControllerCD + FillerBPlantCD" style="text;html=0;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontSize=17;fontStyle=1;fontColor=#B18112;" vertex="1" parent="1">
+          <mxGeometry x="50" y="430" width="600" height="35" as="geometry"/>
+        </mxCell>
+        <mxCell id="bReady" value="B_WAIT_A&#10;Status 1&#10;Wait matching FILL_A_DONE&#10;Target B latched" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#FFF0C2;strokeColor=#B18112;strokeWidth=2;fontSize=13;fontColor=#17212B;align=center;verticalAlign=middle;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="40" y="480" width="180" height="110" as="geometry"/>
+        </mxCell>
+        <mxCell id="bInject" value="B_INJECT&#10;Status 2&#10;valveInjectorOnOff = 1&#10;A injector confirmed OFF" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#DCECF7;strokeColor=#377EAB;strokeWidth=2;fontSize=12;fontColor=#17212B;align=center;verticalAlign=middle;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="250" y="480" width="190" height="110" as="geometry"/>
+        </mxCell>
+        <mxCell id="bRetract" value="B_RETRACT / DOSE&#10;dosUnitValveRetract = 1&#10;Pressure canister rises&#10;Monitor measuredTotalMl" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#DCECF7;strokeColor=#377EAB;strokeWidth=2;fontSize=12;fontColor=#17212B;align=center;verticalAlign=middle;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="470" y="480" width="210" height="110" as="geometry"/>
+        </mxCell>
+        <mxCell id="bClose" value="B_TARGET_REACHED&#10;Total within tolerance&#10;valveInjectorOnOff = 0&#10;Hard overflow check" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#FFF0C2;strokeColor=#B18112;strokeWidth=2;fontSize=12;fontColor=#17212B;align=center;verticalAlign=middle;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="710" y="480" width="210" height="110" as="geometry"/>
+        </mxCell>
+        <mxCell id="bInlet" value="B_OPEN_INLET&#10;valveInletOnOff = 1&#10;Injector confirmed OFF" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#DCECF7;strokeColor=#377EAB;strokeWidth=2;fontSize=13;fontColor=#17212B;align=center;verticalAlign=middle;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="950" y="480" width="185" height="110" as="geometry"/>
+        </mxCell>
+        <mxCell id="bExtend" value="B_EXTEND / REFILL&#10;dosUnitValveExtend = 1&#10;Wait dosUnitEvac&#10;Canister reaches bottom" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#DCECF7;strokeColor=#377EAB;strokeWidth=2;fontSize=12;fontColor=#17212B;align=center;verticalAlign=middle;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="1165" y="480" width="200" height="110" as="geometry"/>
+        </mxCell>
+        <mxCell id="bDone" value="B_DONE&#10;Status 3&#10;valveInletOnOff = 0&#10;MARK_FILLED(String bottleId)" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#DDF1E4;strokeColor=#2B8053;strokeWidth=2;fontSize=12;fontColor=#17212B;align=center;verticalAlign=middle;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="1395" y="480" width="170" height="110" as="geometry"/>
+        </mxCell>
+        <mxCell id="bFault" value="B_FAULT — status 4&#10;Injector OFF | Inlet OFF&#10;Actuator OFF | no MARK_FILLED" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#F8D7DA;strokeColor=#B94A48;strokeWidth=2;fontSize=12;fontColor=#17212B;align=center;verticalAlign=middle;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="1260" y="645" width="300" height="85" as="geometry"/>
+        </mxCell>
+        <mxCell id="rules" value="Mechanical and overflow invariants&#10;- Before injection, dosUnitEvac confirms the pressure canister starts at bottom; dosUnitFilled is the upper-limit confirmation during dosing&#10;- The injector and inlet valves are never ON together; Filler B cannot inject until FILL_A_DONE confirms Filler A is safe and complete&#10;- VOLUME_ML / TOTAL_VOLUME_ML are added Plant feedback signals for partial-volume targets and overflow prevention&#10;- If target is reached before the upper limit, close the injector and stop the retract command; an unexpected top/bottom conflict or timeout enters FAULT&#10;- Status polling returns the owning Controller's stored 0..4 status and never changes actuator outputs" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#E9EEF2;strokeColor=#6B7C8C;strokeWidth=2;fontSize=12;fontColor=#17212B;align=left;spacingLeft=12;verticalAlign=middle;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="40" y="750" width="1120" height="125" as="geometry"/>
+        </mxCell>
+        <mxCell id="a1" value="start" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=0;strokeColor=#2B8053;strokeWidth=2;endArrow=block;endFill=1;fontSize=9;labelBackgroundColor=#FFFFFF;" edge="1" parent="1" source="aReady" target="aInject"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="a2" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=0;strokeColor=#377EAB;strokeWidth=2;endArrow=block;endFill=1;" edge="1" parent="1" source="aInject" target="aRetract"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="a3" value="target / top" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=0;strokeColor=#377EAB;strokeWidth=2;endArrow=block;endFill=1;fontSize=9;labelBackgroundColor=#FFFFFF;" edge="1" parent="1" source="aRetract" target="aClose"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="a4" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=0;strokeColor=#377EAB;strokeWidth=2;endArrow=block;endFill=1;" edge="1" parent="1" source="aClose" target="aInlet"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="a5" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=0;strokeColor=#377EAB;strokeWidth=2;endArrow=block;endFill=1;" edge="1" parent="1" source="aInlet" target="aExtend"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="a6" value="bottom" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=0;strokeColor=#2B8053;strokeWidth=2;endArrow=block;endFill=1;fontSize=9;labelBackgroundColor=#FFFFFF;" edge="1" parent="1" source="aExtend" target="aDone"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="ab" value="FILL_A_DONE → Filler B receiver 11005" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=0;dashed=1;strokeColor=#B18112;strokeWidth=2;endArrow=block;endFill=1;fontSize=10;labelBackgroundColor=#FFFFFF;" edge="1" parent="1" source="aDone" target="bReady"><mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="1480" y="420"/><mxPoint x="130" y="420"/></Array></mxGeometry></mxCell>
+        <mxCell id="b1" value="A done + bottom" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=0;strokeColor=#2B8053;strokeWidth=2;endArrow=block;endFill=1;fontSize=9;labelBackgroundColor=#FFFFFF;" edge="1" parent="1" source="bReady" target="bInject"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="b2" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=0;strokeColor=#377EAB;strokeWidth=2;endArrow=block;endFill=1;" edge="1" parent="1" source="bInject" target="bRetract"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="b3" value="target / top" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=0;strokeColor=#377EAB;strokeWidth=2;endArrow=block;endFill=1;fontSize=9;labelBackgroundColor=#FFFFFF;" edge="1" parent="1" source="bRetract" target="bClose"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="b4" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=0;strokeColor=#377EAB;strokeWidth=2;endArrow=block;endFill=1;" edge="1" parent="1" source="bClose" target="bInlet"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="b5" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=0;strokeColor=#377EAB;strokeWidth=2;endArrow=block;endFill=1;" edge="1" parent="1" source="bInlet" target="bExtend"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="b6" value="bottom + verified" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=0;strokeColor=#2B8053;strokeWidth=2;endArrow=block;endFill=1;fontSize=9;labelBackgroundColor=#FFFFFF;" edge="1" parent="1" source="bExtend" target="bDone"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="af" value="timeout / sensor conflict / overflow" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=0;strokeColor=#B94A48;strokeWidth=2;endArrow=block;endFill=1;fontSize=10;labelBackgroundColor=#FFFFFF;" edge="1" parent="1" source="aRetract" target="aFault"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="bf" value="timeout / sensor conflict / overflow" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=0;strokeColor=#B94A48;strokeWidth=2;endArrow=block;endFill=1;fontSize=10;labelBackgroundColor=#FFFFFF;" edge="1" parent="1" source="bRetract" target="bFault"><mxGeometry relative="1" as="geometry"/></mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+  <diagram id="capper-fsm" name="4 Capper State Machine">
+    <mxGraphModel dx="1600" dy="900" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="900" math="0" shadow="0">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+        <mxCell id="title" value="Capper Controller State Machine" style="text;html=0;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontSize=26;fontStyle=1;fontColor=#17324D;" vertex="1" parent="1">
+          <mxGeometry x="50" y="20" width="1500" height="40" as="geometry"/>
+        </mxCell>
+        <mxCell id="subtitle" value="BottleId-idempotent capping; the same sequence is used for both bottle sizes with strict end-position verification" style="text;html=0;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontSize=13;fontColor=#157A7E;" vertex="1" parent="1">
+          <mxGeometry x="50" y="62" width="1500" height="28" as="geometry"/>
+        </mxCell>
+        <mxCell id="ready" value="READY&#10;Status 1 / actuators safe&#10;Latch new bottleId&#10;Ignore completed duplicate" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#DDF1E4;strokeColor=#2B8053;strokeWidth=2;fontSize=13;fontColor=#17212B;align=center;verticalAlign=middle;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="70" y="180" width="190" height="105" as="geometry"/>
+        </mxCell>
+        <mxCell id="clamp" value="CLAMP_BOTTLE&#10;cylClampBottleExtend" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#DCECF7;strokeColor=#377EAB;strokeWidth=2;fontSize=14;fontColor=#17212B;align=center;verticalAlign=middle;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="330" y="180" width="210" height="105" as="geometry"/>
+        </mxCell>
+        <mxCell id="lower" value="LOWER_GRIPPER&#10;cylPos5ZaxisExtend = 1&#10;Wait gripperZAxisLowered" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#DCECF7;strokeColor=#377EAB;strokeWidth=2;fontSize=13;fontColor=#17212B;align=center;verticalAlign=middle;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="610" y="180" width="210" height="105" as="geometry"/>
+        </mxCell>
+        <mxCell id="grip" value="GRIP_CAP&#10;capGripperPos5Extend = 1" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#DCECF7;strokeColor=#377EAB;strokeWidth=2;fontSize=13;fontColor=#17212B;align=center;verticalAlign=middle;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="890" y="180" width="210" height="105" as="geometry"/>
+        </mxCell>
+        <mxCell id="twist" value="TWIST&#10;gripperTurnExtend" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#FFF0C2;strokeColor=#B18112;strokeWidth=2;fontSize=14;fontColor=#17212B;align=center;verticalAlign=middle;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="1170" y="180" width="210" height="105" as="geometry"/>
+        </mxCell>
+        <mxCell id="release" value="RELEASE_CAP&#10;Grip OFF" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#DCECF7;strokeColor=#377EAB;strokeWidth=2;fontSize=14;fontColor=#17212B;align=center;verticalAlign=middle;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="1170" y="430" width="210" height="105" as="geometry"/>
+        </mxCell>
+        <mxCell id="untwist" value="UNTWIST&#10;Return to home angle" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#DCECF7;strokeColor=#377EAB;strokeWidth=2;fontSize=14;fontColor=#17212B;align=center;verticalAlign=middle;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="890" y="430" width="210" height="105" as="geometry"/>
+        </mxCell>
+        <mxCell id="raise" value="RAISE_GRIPPER&#10;cylPos5ZaxisExtend = 0&#10;Wait gripperZAxisLifted&#10;Bottle remains clamped" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#DCECF7;strokeColor=#377EAB;strokeWidth=2;fontSize=12;fontColor=#17212B;align=center;verticalAlign=middle;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="610" y="430" width="210" height="105" as="geometry"/>
+        </mxCell>
+        <mxCell id="unclamp" value="UNCLAMP_BOTTLE&#10;cylClampBottleExtend = 0&#10;Wait bottleClampOpen" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#DCECF7;strokeColor=#377EAB;strokeWidth=2;fontSize=13;fontColor=#17212B;align=center;verticalAlign=middle;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="330" y="430" width="210" height="105" as="geometry"/>
+        </mxCell>
+        <mxCell id="done" value="DONE&#10;Status 3&#10;Record lastCompletedBottleId&#10;Emit MARK_CAPPED(id) once" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#DDF1E4;strokeColor=#2B8053;strokeWidth=2;fontSize=13;fontColor=#17212B;align=center;verticalAlign=middle;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="70" y="430" width="190" height="105" as="geometry"/>
+        </mxCell>
+        <mxCell id="fault" value="FAULT&#10;De-energise actuators&#10;No MARK_CAPPED" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#F8D7DA;strokeColor=#B94A48;strokeWidth=2;fontSize=14;fontColor=#17212B;align=center;verticalAlign=middle;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="70" y="665" width="190" height="105" as="geometry"/>
+        </mxCell>
+        <mxCell id="safety" value="Safety / sequencing / idempotence invariants&#10;- Start only for a new bottleId when bottleAtPos4 is present; both sizes use the same Capper sequence&#10;- Clamp before lowering or twisting; every movement waits for the exact matching end-position sensor&#10;- Keep the bottle clamped until gripperZAxisLifted is present; only then enter UNCLAMP_BOTTLE&#10;- Duplicate completed bottleId never restarts actuators; timeout enters FAULT and status polling never advances the sequence&#10;- Capper emits MARK_CAPPED(String bottleId) to M3 RotaryTablePlantCD:12003 and never emits BOTTLE_DONE" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#E9EEF2;strokeColor=#6B7C8C;strokeWidth=2;fontSize=13;fontColor=#17212B;align=left;spacingLeft=12;verticalAlign=middle;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="360" y="665" width="880" height="165" as="geometry"/>
+        </mxCell>
+        <mxCell id="c1" value="new BOTTLE_AT_CAP(id) + bottleAtPos4" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=0;strokeColor=#2B8053;strokeWidth=2;endArrow=block;endFill=1;fontSize=11;labelBackgroundColor=#FFFFFF;" edge="1" parent="1" source="ready" target="clamp">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="c2" value="CLAMP_CLOSED" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=0;strokeColor=#377EAB;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#FFFFFF;" edge="1" parent="1" source="clamp" target="lower">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="c3" value="Z_AXIS_LOWERED" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=0;strokeColor=#377EAB;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#FFFFFF;" edge="1" parent="1" source="lower" target="grip">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="c4" value="GRIPPER_CLOSED" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=0;strokeColor=#B18112;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#FFFFFF;" edge="1" parent="1" source="grip" target="twist">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="c5" value="TURN_FINAL_POSITION" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=0;strokeColor=#B18112;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#FFFFFF;" edge="1" parent="1" source="twist" target="release">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="c6" value="cap released" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=0;strokeColor=#377EAB;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#FFFFFF;" edge="1" parent="1" source="release" target="untwist">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="c7" value="TURN_HOME_POSITION" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=0;strokeColor=#377EAB;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#FFFFFF;" edge="1" parent="1" source="untwist" target="raise">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="c8" value="gripperZAxisLifted" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=0;strokeColor=#2B8053;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#FFFFFF;" edge="1" parent="1" source="raise" target="unclamp">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="c8b" value="bottleClampOpen" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=0;strokeColor=#2B8053;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#FFFFFF;" edge="1" parent="1" source="unclamp" target="done">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="c9" value="M3 ACK / position clear; retain completed id" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=0;strokeColor=#2B8053;strokeWidth=2;endArrow=block;endFill=1;fontSize=11;labelBackgroundColor=#FFFFFF;" edge="1" parent="1" source="done" target="ready">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="165" y="600"/>
+              <mxPoint x="165" y="620"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="c10" value="any actuator/sensor timeout" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=0;strokeColor=#B94A48;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#FFFFFF;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="720" y="570" as="sourcePoint"/>
+            <mxPoint x="260" y="715" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="c11" value="reset after physical cause cleared" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=0;strokeColor=#B94A48;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#FFFFFF;" edge="1" parent="1" source="fault" target="ready">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+  <diagram id="two-size-safety" name="6 Two-Size Filling and Safety">
+    <mxGraphModel dx="1600" dy="900" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="900" math="0" shadow="0">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+        <mxCell id="title" value="Two-Size Bottle Filling: Positioning and Overflow Safety" style="text;html=0;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontSize=26;fontStyle=1;fontColor=#17324D;" vertex="1" parent="1">
+          <mxGeometry x="50" y="20" width="1500" height="40" as="geometry"/>
+        </mxCell>
+        <mxCell id="subtitle" value="M1 validates the A/B pair before dispatch; M3 relays the full BottleContext at Position 2; M4 applies local range, geometry and complement checks" style="text;html=0;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontSize=13;fontColor=#157A7E;" vertex="1" parent="1">
+          <mxGeometry x="50" y="62" width="1500" height="28" as="geometry"/>
+        </mxCell>
+        <mxCell id="input" value="Receive split inputs&#10;M1: ratioA → Filler A | ratioB → Filler B&#10;M3: full BottleContext at P2&#10;M1 confirms each pair is 0..100 and sums to 100" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#DDECF8;strokeColor=#377EAB;strokeWidth=2;fontSize=13;fontColor=#17212B;align=center;verticalAlign=middle;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="40" y="325" width="240" height="145" as="geometry"/>
+        </mxCell>
+        <mxCell id="capacity" value="New bottleId?&#10;active and completed IDs checked" style="rhombus;whiteSpace=wrap;html=0;fillColor=#FFF0C2;strokeColor=#B18112;strokeWidth=2;fontSize=14;fontColor=#17212B;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="330" y="310" width="230" height="175" as="geometry"/>
+        </mxCell>
+        <mxCell id="capacity2" value="Known bottle profile?&#10;S ↔ 200 mL | L ↔ 500 mL&#10;capacity and profile IDs valid" style="rhombus;whiteSpace=wrap;html=0;fillColor=#FFF0C2;strokeColor=#B18112;strokeWidth=2;fontSize=13;fontColor=#17212B;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="620" y="310" width="230" height="175" as="geometry"/>
+        </mxCell>
+        <mxCell id="compute" value="Position nozzle + compute targets&#10;fillerNozzleZ from geometryProfileId&#10;wait within positionTolerance&#10;targetA = C × ratioA / 100&#10;targetB = C × ratioB / 100&#10;closeAt = target - shutoffLeadMl" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#E8E1F5;strokeColor=#7253A3;strokeWidth=2;fontSize=12;fontColor=#17212B;align=center;verticalAlign=middle;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="900" y="310" width="270" height="175" as="geometry"/>
+        </mxCell>
+        <mxCell id="valid" value="Trust/local checks valid?&#10;M1 pair invariant confirmed&#10;local ratio in range&#10;measuredA + targetB ≈ capacity before B" style="rhombus;whiteSpace=wrap;html=0;fillColor=#FFF0C2;strokeColor=#B18112;strokeWidth=2;fontSize=12;fontColor=#17212B;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="1220" y="310" width="250" height="175" as="geometry"/>
+        </mxCell>
+        <mxCell id="fill" value="Fill A then B&#10;FILL_A_DONE gates Filler B&#10;Only one liquid valve ON&#10;Monitor total continuously" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#DCECF7;strokeColor=#377EAB;strokeWidth=2;fontSize=13;fontColor=#17212B;align=center;verticalAlign=middle;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="1225" y="550" width="240" height="130" as="geometry"/>
+        </mxCell>
+        <mxCell id="done" value="ACCEPT / DONE&#10;|measuredTotal - C| ≤ toleranceMl&#10;Record completed bottleId&#10;MARK_FILLED(id) once" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#DDF1E4;strokeColor=#2B8053;strokeWidth=2;fontSize=13;fontColor=#17212B;align=center;verticalAlign=middle;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="1190" y="745" width="310" height="110" as="geometry"/>
+        </mxCell>
+        <mxCell id="fault" value="FAULT / REJECT&#10;Close valves and stop motion&#10;Unknown/mismatched profile, position timeout, invalid recipe,&#10;sensor conflict, identity mismatch or overflow&#10;Explicit recovery after cause cleared" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#F8D7DA;strokeColor=#B94A48;strokeWidth=2;fontSize=12;fontColor=#17212B;align=center;verticalAlign=middle;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="700" y="735" width="340" height="120" as="geometry"/>
+        </mxCell>
+        <mxCell id="duplicate" value="DUPLICATE NO-OP&#10;Never reopen valves&#10;Optionally re-send recorded completion&#10;Wait for a different bottleId" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#E9EEF2;strokeColor=#6B7C8C;strokeWidth=2;fontSize=13;fontColor=#17212B;align=center;verticalAlign=middle;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="250" y="735" width="300" height="120" as="geometry"/>
+        </mxCell>
+        <mxCell id="ex200" value="Example: 200 mL&#10;60% A = 120 mL&#10;40% B = 80 mL" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#E6F5F5;strokeColor=#157A7E;strokeWidth=2;fontSize=15;fontColor=#17212B;align=center;verticalAlign=middle;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="150" y="120" width="300" height="120" as="geometry"/>
+        </mxCell>
+        <mxCell id="ex500" value="Example: 500 mL&#10;60% A = 300 mL&#10;40% B = 200 mL" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#E6F5F5;strokeColor=#157A7E;strokeWidth=2;fontSize=15;fontColor=#17212B;align=center;verticalAlign=middle;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="500" y="120" width="300" height="120" as="geometry"/>
+        </mxCell>
+        <mxCell id="note" value="BottleContextRegistryCD stores bottleId|sizeCode|capacityMl|geometryProfileId|packagingProfileId. Filler consumes capacityMl and geometryProfileId; packagingProfileId is forwarded unchanged. geometryProfileId resolves fillerNozzleZ and positionTolerance. Capper later resolves capperGripZ and clampSetpoint. All numerical set-points remain calibrated Plant parameters." style="rounded=1;whiteSpace=wrap;html=0;fillColor=#E9EEF2;strokeColor=#6B7C8C;strokeWidth=2;fontSize=11;fontColor=#17212B;align=left;spacingLeft=12;verticalAlign=middle;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="900" y="120" width="600" height="120" as="geometry"/>
+        </mxCell>
+        <mxCell id="z1" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=0;strokeColor=#377EAB;strokeWidth=2;endArrow=block;endFill=1;" edge="1" parent="1" source="input" target="capacity">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="z2" value="new" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=0;strokeColor=#2B8053;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#FFFFFF;" edge="1" parent="1" source="capacity" target="capacity2">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="z2b" value="profile valid" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=0;strokeColor=#2B8053;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#FFFFFF;" edge="1" parent="1" source="capacity2" target="compute">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="z3" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=0;strokeColor=#2B8053;strokeWidth=2;endArrow=block;endFill=1;fontSize=10;labelBackgroundColor=#FFFFFF;" edge="1" parent="1" source="compute" target="valid">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="z4" value="valid" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=0;strokeColor=#2B8053;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#FFFFFF;" edge="1" parent="1" source="valid" target="fill">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="z5" value="both targets within tolerance; no overflow" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=0;strokeColor=#2B8053;strokeWidth=2;endArrow=block;endFill=1;fontSize=11;labelBackgroundColor=#FFFFFF;" edge="1" parent="1" source="fill" target="done">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="z6" value="unknown or mismatched profile" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=0;strokeColor=#B94A48;strokeWidth=2;endArrow=block;endFill=1;fontSize=11;labelBackgroundColor=#FFFFFF;" edge="1" parent="1" source="capacity2" target="fault">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="735" y="620"/>
+              <mxPoint x="870" y="620"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="z7" value="invalid recipe" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=0;strokeColor=#B94A48;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;labelBackgroundColor=#FFFFFF;" edge="1" parent="1" source="valid" target="fault">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1345" y="690"/>
+              <mxPoint x="870" y="690"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="z8" value="position timeout / sensor conflict / identity mismatch / overflow" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=0;strokeColor=#B94A48;strokeWidth=2;endArrow=block;endFill=1;fontSize=10;labelBackgroundColor=#FFFFFF;" edge="1" parent="1" source="fill" target="fault">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1150" y="615"/>
+              <mxPoint x="1150" y="795"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="z9" value="duplicate active/completed id" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=0;strokeColor=#6B7C8C;strokeWidth=2;endArrow=block;endFill=1;fontSize=11;labelBackgroundColor=#FFFFFF;" edge="1" parent="1" source="capacity" target="duplicate">
+          <mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="445" y="620"/><mxPoint x="400" y="620"/></Array></mxGeometry>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+  <diagram id="two-size-end-to-end" name="6 Two-Size End-to-End and Interface Freeze">
+    <mxGraphModel dx="1600" dy="900" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="900" math="0" shadow="0">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+        <mxCell id="title" value="Two-Size Bottle End-to-End IP and Interface Freeze Sheet" style="text;html=0;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontSize=26;fontStyle=1;fontColor=#17324D;" vertex="1" parent="1">
+          <mxGeometry x="50" y="20" width="1500" height="40" as="geometry"/>
+        </mxCell>
+        <mxCell id="subtitle" value="Mixed strategy: centralized bottle context + decentralized local control; recognition, loading, filling and unloading share one bottleId" style="text;html=0;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontSize=13;fontColor=#157A7E;" vertex="1" parent="1">
+          <mxGeometry x="50" y="62" width="1500" height="28" as="geometry"/>
+        </mxCell>
+        <mxCell id="recognition" value="RecognitionPlantCD&#10;Assigned port 12011&#10;Camera / barcode / size sensor&#10;Output: bottleId | sizeCode | capacityMl" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#E6F5F5;strokeColor=#157A7E;strokeWidth=2;fontSize=14;fontColor=#17212B;align=center;verticalAlign=middle;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="50" y="125" width="310" height="120" as="geometry"/>
+        </mxCell>
+        <mxCell id="registry" value="BottleContextRegistryCD&#10;Assigned receiver port 11011&#10;Validate and store by bottleId&#10;200 mL ↔ sizeCode S | 500 mL ↔ sizeCode L&#10;Single source of truth" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#E8E1F5;strokeColor=#7253A3;strokeWidth=2;fontSize=14;fontColor=#17212B;align=center;verticalAlign=middle;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="50" y="310" width="310" height="145" as="geometry"/>
+        </mxCell>
+        <mxCell id="loader" value="M2 BottleLoaderControllerCD&#10;Receiver 11002&#10;LOAD_PROFILE(full BottleContext)&#10;Use approved fields; preserve context unchanged" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#DDECF8;strokeColor=#377EAB;strokeWidth=2;fontSize=13;fontColor=#17212B;align=center;verticalAlign=middle;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="440" y="120" width="300" height="120" as="geometry"/>
+        </mxCell>
+        <mxCell id="rotary" value="M3 Rotary Controller&#10;Receiver BLOCKED pending M1/M3 reconciliation&#10;M1 V1: RotaryTurntableControllerCD:11009&#10;M3 V2.1: RotaryTableControllerCD:11003" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#F8D7DA;strokeColor=#B94A48;strokeWidth=2;fontSize=12;fontColor=#17212B;align=center;verticalAlign=middle;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="440" y="285" width="300" height="130" as="geometry"/>
+        </mxCell>
+        <mxCell id="fillers" value="M4 Filler A → Filler B&#10;Receivers 11004 / 11005&#10;BOTTLE_AT_FILL → mechanical cycles&#10;Capacity-aware targets + overflow protection&#10;MARK_FILLED(id) after both complete" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#FFF0C2;strokeColor=#B18112;strokeWidth=2;fontSize=13;fontColor=#17212B;align=center;verticalAlign=middle;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="440" y="455" width="300" height="145" as="geometry"/>
+        </mxCell>
+        <mxCell id="unloader" value="M2 BottleUnloaderControllerCD&#10;Receiver 11010&#10;UNLOAD_PROFILE(full BottleContext)&#10;Emit BOTTLE_DONE after collection; then forward&#10;BOTTLE_READY_FOR_SORT(full context) → M4:11012" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#DDECF8;strokeColor=#377EAB;strokeWidth=2;fontSize=13;fontColor=#17212B;align=center;verticalAlign=middle;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="440" y="650" width="300" height="140" as="geometry"/>
+        </mxCell>
+        <mxCell id="frozen" value="FROZEN M1 BOUNDARY — do not change&#10;• FILL_A_RATIO: Integer → FillerAControllerCD:11004&#10;• FILL_B_RATIO: Integer → FillerBControllerCD:11005&#10;• *_STATUS_REQUEST → each Controller; *_STATUS(Integer 0..4) → CoordinatorCD:11001&#10;• BOTTLE_DONE: pure signal, Bottle Unloader → CoordinatorCD:11001 only&#10;• OPEN CLARIFICATION: brief says tenths of %, while current M1 uses 0..100; confirm 0..100 vs fixed-point 0..1000 scaling" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#E8E1F5;strokeColor=#7253A3;strokeWidth=2;fontSize=12;fontColor=#17212B;align=left;spacingLeft=12;verticalAlign=middle;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="810" y="115" width="730" height="155" as="geometry"/>
+        </mxCell>
+        <mxCell id="proposed" value="PROPOSED CROSS-TEAM SIGNALS — TEAM APPROVAL REQUIRED&#10;1. BOTTLE_RECOGNISED(id|size|capacity): Recognition → Registry:11011&#10;2. LOAD_PROFILE(full context): Registry → M2 Loader:11002&#10;3. ROTARY_BOTTLE_CONTEXT(full context): BLOCKED until M1/M3 reconcile 11009 vs 11003&#10;4. BOTTLE_AT_FILL(full context): M3 Rotary → M4 Filler A:11004&#10;5. FILL_A_DONE(full context|measuredA): Filler A → Filler B:11005&#10;6. MARK_FILLED(id): Filler B → M3 RotaryTablePlantCD:12003&#10;7. BOTTLE_AT_CAP(full context): M3 Rotary → M4 Capper:11007&#10;8. MARK_CAPPED(id): Capper → M3 RotaryTablePlantCD:12003&#10;9. UNLOAD_PROFILE(full context): Registry → M2 Unloader:11010&#10;10. BOTTLE_READY_FOR_SORT(full context): M2 Unloader → M4 SortPack:11012" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#FFF0C2;strokeColor=#B18112;strokeWidth=2;fontSize=12;fontColor=#17212B;align=left;spacingLeft=12;verticalAlign=middle;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="810" y="295" width="730" height="310" as="geometry"/>
+        </mxCell>
+        <mxCell id="plants" value="PROPOSED M4 CONTROLLER ↔ PLANT SIGNAL SET&#10;Filler A/B inputs: bottleAtPos2, dosUnitEvac, dosUnitFilled, VOLUME_ML / TOTAL_VOLUME_ML&#10;Filler A/B outputs: valveInjectorOnOff, valveInletOnOff, dosUnitValveRetract, dosUnitValveExtend&#10;Capper inputs: bottleAtPos4, gripperZAxisLowered/Lifted, gripperTurnHomePos/FinalPos, bottleClampOpen/Close&#10;Capper outputs: cylPos5ZaxisExtend, gripperTurnRetract/Extend, capGripperPos5Extend, cylClampBottleExtend&#10;Assigned Plant receiver ports: Filler A 12004 | Filler B 12005 | Capper 12007 | SortPack 12012" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#E6F5F5;strokeColor=#157A7E;strokeWidth=2;fontSize=12;fontColor=#17212B;align=left;spacingLeft=12;verticalAlign=middle;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="810" y="630" width="730" height="170" as="geometry"/>
+        </mxCell>
+        <mxCell id="signoff" value="FREEZE GATE: M1 + M2 + M3 + M4 owners must approve every proposed signal name, payload, receiver Clock Domain and port before any SystemJ XML mapping is treated as final." style="rounded=1;whiteSpace=wrap;html=0;fillColor=#F8D7DA;strokeColor=#B94A48;strokeWidth=2;fontSize=13;fontStyle=1;fontColor=#17212B;align=center;verticalAlign=middle;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="50" y="825" width="1490" height="55" as="geometry"/>
+        </mxCell>
+        <mxCell id="e1" value="BOTTLE_RECOGNISED" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=0;strokeColor=#157A7E;strokeWidth=2;endArrow=block;endFill=1;fontSize=10;labelBackgroundColor=#FFFFFF;" edge="1" parent="1" source="recognition" target="registry"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e2" value="LOAD_PROFILE" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=0;strokeColor=#377EAB;strokeWidth=2;endArrow=block;endFill=1;fontSize=10;labelBackgroundColor=#FFFFFF;" edge="1" parent="1" source="registry" target="loader"><mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="400" y="350"/><mxPoint x="400" y="180"/></Array></mxGeometry></mxCell>
+        <mxCell id="e3" value="ROTARY_BOTTLE_CONTEXT — BLOCKED" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=0;dashed=1;strokeColor=#B94A48;strokeWidth=2;endArrow=block;endFill=1;fontSize=10;labelBackgroundColor=#FFFFFF;" edge="1" parent="1" source="registry" target="rotary"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e4" value="BOTTLE_AT_FILL at P2" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=0;strokeColor=#B18112;strokeWidth=2;endArrow=block;endFill=1;fontSize=10;labelBackgroundColor=#FFFFFF;" edge="1" parent="1" source="rotary" target="fillers"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e5" value="MARK_FILLED(id)" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=0;dashed=1;strokeColor=#B18112;strokeWidth=2;endArrow=block;endFill=1;fontSize=10;labelBackgroundColor=#FFFFFF;" edge="1" parent="1" source="fillers" target="rotary"><mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="765" y="525"/><mxPoint x="765" y="350"/></Array></mxGeometry></mxCell>
+        <mxCell id="e6" value="UNLOAD_PROFILE" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=0;strokeColor=#377EAB;strokeWidth=2;endArrow=block;endFill=1;fontSize=10;labelBackgroundColor=#FFFFFF;" edge="1" parent="1" source="registry" target="unloader"><mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="390" y="400"/><mxPoint x="390" y="720"/></Array></mxGeometry></mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+  <diagram id="m4-sequence" name="7 M4 Integration Sequence">
+    <mxGraphModel dx="1600" dy="900" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="900" math="0" shadow="0">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+        <mxCell id="title" value="M4 Integration Sequence" style="text;html=0;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontSize=26;fontStyle=1;fontColor=#17324D;" vertex="1" parent="1">
+          <mxGeometry x="50" y="20" width="1500" height="40" as="geometry"/>
+        </mxCell>
+        <mxCell id="subtitle" value="Precondition: M1/M3 have reconciled the Rotary Controller receiver; Registry supplies the unchanged full BottleContext; M1 validates the split Integer ratio pair; every completion is bottleId-correlated" style="text;html=0;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontSize=13;fontColor=#157A7E;" vertex="1" parent="1">
+          <mxGeometry x="50" y="62" width="1500" height="28" as="geometry"/>
+        </mxCell>
+        <mxCell id="h1" value="M1 Coordinator" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#E8E1F5;strokeColor=#7253A3;strokeWidth=2;fontSize=15;fontColor=#17212B;align=center;verticalAlign=middle;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="60" y="105" width="220" height="80" as="geometry"/>
+        </mxCell>
+        <mxCell id="h2" value="M3 Rotary" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#DDF1E4;strokeColor=#2B8053;strokeWidth=2;fontSize=15;fontColor=#17212B;align=center;verticalAlign=middle;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="360" y="105" width="220" height="80" as="geometry"/>
+        </mxCell>
+        <mxCell id="h3" value="M4 Filler A" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#FFF0C2;strokeColor=#B18112;strokeWidth=2;fontSize=15;fontColor=#17212B;align=center;verticalAlign=middle;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="660" y="105" width="220" height="80" as="geometry"/>
+        </mxCell>
+        <mxCell id="h4" value="M4 Filler B" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#FFF0C2;strokeColor=#B18112;strokeWidth=2;fontSize=15;fontColor=#17212B;align=center;verticalAlign=middle;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="960" y="105" width="220" height="80" as="geometry"/>
+        </mxCell>
+        <mxCell id="h5" value="M4 Capper" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#FFF0C2;strokeColor=#B18112;strokeWidth=2;fontSize=15;fontColor=#17212B;align=center;verticalAlign=middle;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="1260" y="105" width="220" height="80" as="geometry"/>
+        </mxCell>
+        <mxCell id="life1" value="" style="shape=line;dashed=1;whiteSpace=wrap;html=0;strokeColor=#6B7C8C;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="170" y="185" width="1" height="650" as="geometry"/>
+        </mxCell>
+        <mxCell id="life2" value="" style="shape=line;dashed=1;whiteSpace=wrap;html=0;strokeColor=#6B7C8C;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="470" y="185" width="1" height="650" as="geometry"/>
+        </mxCell>
+        <mxCell id="life3" value="" style="shape=line;dashed=1;whiteSpace=wrap;html=0;strokeColor=#6B7C8C;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="770" y="185" width="1" height="650" as="geometry"/>
+        </mxCell>
+        <mxCell id="life4" value="" style="shape=line;dashed=1;whiteSpace=wrap;html=0;strokeColor=#6B7C8C;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="1070" y="185" width="1" height="650" as="geometry"/>
+        </mxCell>
+        <mxCell id="life5" value="" style="shape=line;dashed=1;whiteSpace=wrap;html=0;strokeColor=#6B7C8C;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="1370" y="185" width="1" height="650" as="geometry"/>
+        </mxCell>
+        <mxCell id="s1" value="FILL_A_RATIO(Integer 0..100) → port 11004" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;strokeColor=#7253A3;strokeWidth=2;endArrow=block;endFill=1;fontSize=11;labelBackgroundColor=#FFFFFF;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="170" y="230" as="sourcePoint"/>
+            <mxPoint x="770" y="230" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="s2" value="FILL_B_RATIO(Integer 0..100) → port 11005" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;strokeColor=#7253A3;strokeWidth=2;endArrow=block;endFill=1;fontSize=11;labelBackgroundColor=#FFFFFF;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="170" y="290" as="sourcePoint"/>
+            <mxPoint x="1070" y="290" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="s3" value="BOTTLE_AT_FILL(String id|size|capacity) → 11004" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;strokeColor=#2B8053;strokeWidth=2;endArrow=block;endFill=1;fontSize=11;labelBackgroundColor=#FFFFFF;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="470" y="355" as="sourcePoint"/>
+            <mxPoint x="770" y="355" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="s4" value="New id: fill A to calibrated threshold; verify tolerance" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;strokeColor=#B18112;strokeWidth=2;endArrow=block;endFill=1;fontSize=11;labelBackgroundColor=#FFFFFF;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="770" y="440" as="sourcePoint"/>
+            <mxPoint x="770" y="440" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="s5" value="FILL_A_DONE(String id|size|capacity|measuredA) → 11005" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;strokeColor=#B18112;strokeWidth=2;endArrow=block;endFill=1;fontSize=10;labelBackgroundColor=#FFFFFF;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="770" y="485" as="sourcePoint"/>
+            <mxPoint x="1070" y="485" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="s6" value="Matching id only: fill B; verify total within tolerance" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;strokeColor=#B18112;strokeWidth=2;endArrow=block;endFill=1;fontSize=11;labelBackgroundColor=#FFFFFF;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="1070" y="550" as="sourcePoint"/>
+            <mxPoint x="1070" y="550" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="s7" value="MARK_FILLED(String bottleId) once → M3 Plant:12003" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;strokeColor=#B18112;strokeWidth=2;endArrow=block;endFill=1;fontSize=11;labelBackgroundColor=#FFFFFF;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="1070" y="615" as="sourcePoint"/>
+            <mxPoint x="470" y="615" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="s8" value="ACK by clearing P2; rotate through lid station to P4" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;strokeColor=#2B8053;strokeWidth=2;endArrow=block;endFill=1;fontSize=11;labelBackgroundColor=#FFFFFF;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="470" y="675" as="sourcePoint"/>
+            <mxPoint x="470" y="675" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="s9" value="BOTTLE_AT_CAP(String bottleId) → port 11007" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;strokeColor=#2B8053;strokeWidth=2;endArrow=block;endFill=1;fontSize=11;labelBackgroundColor=#FFFFFF;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="470" y="730" as="sourcePoint"/>
+            <mxPoint x="1370" y="730" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="s10" value="New id: clamp → lower → cap → raise fully → unclamp" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;strokeColor=#B18112;strokeWidth=2;endArrow=block;endFill=1;fontSize=11;labelBackgroundColor=#FFFFFF;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="1370" y="780" as="sourcePoint"/>
+            <mxPoint x="1370" y="780" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="s11" value="MARK_CAPPED(String bottleId) once → M3 Plant:12003" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;strokeColor=#B18112;strokeWidth=2;endArrow=block;endFill=1;fontSize=11;labelBackgroundColor=#FFFFFF;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="1370" y="830" as="sourcePoint"/>
+            <mxPoint x="470" y="830" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

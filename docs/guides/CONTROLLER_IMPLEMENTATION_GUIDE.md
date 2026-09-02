@@ -18,6 +18,12 @@ Use `.sysj` for SystemJ source files. Signal names, data types, Clock Domain
 names, directions, and ports in this guide are exact and case-sensitive. Do
 not rename them locally.
 
+M3 and M4 now provide production Controller/Plant implementations in this
+repository. For M4's additional bottle-correlated, geometry and Sort/Pack
+boundaries, use `machines/filling_capping/README.md` and
+`machines/filling_capping/member4_system.xml`; the examples below intentionally
+describe only the frozen M1-facing interface.
+
 The `Class="YOUR_GENERATED_CLASS"` value in the XML examples is deliberately
 a placeholder: replace it with the Java class generated from your own `.sysj`
 Controller. The frozen `ClockDomain Name`, signal names, `To` values, IP, and

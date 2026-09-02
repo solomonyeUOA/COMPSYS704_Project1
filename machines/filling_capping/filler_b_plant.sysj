@@ -1,0 +1,38 @@
+// Simulated Filler B mechanics and sensor feedback.
+
+FillerBPlant(
+    input String signal FILLER_B_PLANT_COMMAND;
+    input String signal INJECT_FILLER_B_FAULT;
+
+    output String signal FILLER_B_PLANT_FEEDBACK;
+)
+->{
+    System.out.println("M4 FillerBPlantCD started");
+
+    {loop {
+        present(FILLER_B_PLANT_COMMAND) {
+            Member4PlantStateV1.acceptFillerBCommand(
+                #FILLER_B_PLANT_COMMAND
+            );
+        }
+        pause;
+    }}
+    ||
+    {loop {
+        present(INJECT_FILLER_B_FAULT) {
+            Member4PlantStateV1.injectFillerBFault(
+                #INJECT_FILLER_B_FAULT
+            );
+        }
+        pause;
+    }}
+    ||
+    {loop {
+        Member4PlantStateV1.tick();
+        String feedback = Member4PlantStateV1.takeFillerBFeedback();
+        if (feedback != null) {
+            emit FILLER_B_PLANT_FEEDBACK(feedback);
+        }
+        pause;
+    }}
+}

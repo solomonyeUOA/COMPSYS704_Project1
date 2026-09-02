@@ -8,10 +8,10 @@ additions may be incorporated into V1 after integration review; any change
 still requires group agreement and coordinated updates to SystemJ
 declarations, XML mappings, tests and documentation.
 
-The cross-member impact audit completed on 28 August 2026 also synchronises
-the M1 production mapping with the assigned M2 Conveyor receiver and the
-frozen M3 Rotary receiver. Peer Machine Controller source/XML is still absent
-from this repository, so contract alignment and peer implementation
+The cross-member impact audit completed on 28 August 2026 synchronised M1 with
+the assigned M2 Conveyor receiver and frozen M3 Rotary receiver. The current
+repository now contains production source/XML for M1, M3 and M4. M2 peer
+source/XML remains absent, so its contract alignment and implementation
 verification remain separate claims.
 
 ## M3-facing V2.1 supersession
@@ -145,22 +145,30 @@ port, following the Lab 3 pattern.
 | Overall ABS Visualisation | `ABSVisualisationPlantCD` | 11008 |
 | Conveyor Controller | `ConveyorControllerCD` | 11009 |
 | Bottle Unloader Controller | `BottleUnloaderControllerCD` | 11010 |
+| Bottle Context Registry | `BottleContextRegistryCD` | 11011 |
+| Sort / Pack Controller | `SortPackControllerCD` | 11012 |
 
 The table above is the **current M1 production mapping** after the 28 August
 cross-member audit. It follows the M2-assigned Conveyor receiver and the M3
 V2.1 Rotary receiver. The production XML is aligned at the M1 sender; real peer
-source/XML is not present here and therefore remains unverifiable.
+M1, M3 and M4 production source/XML is present and structurally validated.
+M2 source/XML is not present here and therefore remains unverifiable.
+
+M4 Plant receivers are `FillerAPlantCD:12004`, `FillerBPlantCD:12005`,
+`CapperPlantCD:12007`, `RecognitionPlantCD:12011` and
+`SortPackPlantCD:12012`. These are internal Controller/Plant boundaries and do
+not extend the M1 Coordinator interface.
 
 | V2.1 receiver | Owner | Target port | Contract status | Current implementation / blocker |
 | --- | --- | ---: | --- | --- |
 | `CoordinatorCD` | M1 | 11001 | FROZEN | Implemented; all M3 safety inputs share the existing receiver. |
 | `ConveyorControllerCD` | M2 | 11009 | M2 ASSIGNED | M1 `CONVEYOR_STATUS_REQUEST` mapping updated; peer implementation unavailable. |
-| `RotaryTableControllerCD` | M3 | 11003 | FROZEN V2.1 | M1 `ROTARY_STATUS_REQUEST` mapping updated; peer implementation unavailable. |
-| `LidLoaderControllerCD` | M3 | 11006 | FROZEN | Current mapping already uses 11006. |
-| `RotaryTablePlantCD` | M3 | 12003 | FROZEN | Documentation-only in M1; M3 implementation not present in this repository. |
-| `LidLoaderPlantCD` | M3 | 12006 | FROZEN | Documentation-only in M1; M3 implementation not present in this repository. |
+| `RotaryTableControllerCD` | M3 | 11003 | FROZEN V2.1 | Implemented; M1 `ROTARY_STATUS_REQUEST` mapping is aligned. |
+| `LidLoaderControllerCD` | M3 | 11006 | FROZEN | Implemented. |
+| `RotaryTablePlantCD` | M3 | 12003 | FROZEN | Implemented. |
+| `LidLoaderPlantCD` | M3 | 12006 | FROZEN | Implemented. |
 | `M2TransferFaultAdapterCD` | M2 | 13002 | M2 ASSIGNED | Receives `TRANSFER_RECOVERY_REQUEST`; peer implementation unavailable. |
-| `FaultSupervisorCD` | M3 IP | 13003 | FROZEN | M1 outputs are mapped here; peer implementation is not present in this repository. |
+| `FaultSupervisorCD` | M3 IP | 13003 | FROZEN | Implemented; M1 outputs are mapped here. |
 
 The previous M1 mapping (`ConveyorControllerCD:11003` and
 `RotaryTurntableControllerCD:11009`) is superseded. Port 11013 is assigned to
@@ -252,12 +260,11 @@ Controller status value and there is no status code 5.
 
 The port is always the receiver's `SimpleServer` port.
 
-The POS, Coordinator and ABS Visualisation rows are implemented at both ends
-in the current production SystemJ/XML files. The repository does not yet
-contain the real Machine Controller modules; their rows below are the exact
-Coordinator-required production endpoints that each Controller owner must
-mirror. The test-only Mock exercises those machine-facing directions without
-replacing their assigned production Clock Domains or ports.
+The POS, Coordinator, ABS Visualisation, M3 and M4 rows are implemented in the
+current production SystemJ/XML files. M2 rows remain the exact
+Coordinator-required production endpoints that Member 2 must mirror. The
+test-only Mock exercises machine-facing directions without replacing assigned
+production Clock Domains or ports.
 
 | Sender | Receiver | Signal | Type | IP | Port |
 | --- | --- | --- | --- | --- | ---: |
@@ -299,6 +306,40 @@ replacing their assigned production Clock Domains or ports.
 | `CoordinatorCD` | `ABSVisualisationPlantCD` | `VIZ_UNLOADER_STATUS` | Integer | 127.0.0.1 | 11008 |
 | `CoordinatorCD` | `ABSVisualisationPlantCD` | `VIZ_REQUIRED_BOTTLES` | Integer | 127.0.0.1 | 11008 |
 | `CoordinatorCD` | `ABSVisualisationPlantCD` | `VIZ_COMPLETED_BOTTLES` | Integer | 127.0.0.1 | 11008 |
+
+## M4 implemented two-size boundaries
+
+M4 uses one validated context throughout filling, capping and Sort/Pack:
+
+```text
+bottleId|sizeCode|capacityMl|geometryProfileId|packagingProfileId
+```
+
+Only `S|200|GEOM_S|PACK_S` and `L|500|GEOM_L|PACK_L` are accepted. M3 forwards
+the unchanged full context at Positions 2 and 4. The following rows are
+implemented in `machines/filling_capping/member4_system.xml`:
+
+| Sender | Receiver | Signal | Payload / type | Receiver port |
+| --- | --- | --- | --- | ---: |
+| M4 Recognition | `BottleContextRegistryCD` | `BOTTLE_RECOGNISED` | `bottleId|sizeCode|capacityMl` String | 11011 |
+| `BottleContextRegistryCD` | `RotaryTableControllerCD` | `ROTARY_BOTTLE_CONTEXT` | full context String | 11003 |
+| `BottleContextRegistryCD` | `BottleLoaderControllerCD` | `LOAD_PROFILE` | full context String | 11002 |
+| `BottleContextRegistryCD` | `BottleUnloaderControllerCD` | `UNLOAD_PROFILE` | full context String | 11010 |
+| `RotaryTableControllerCD` | `FillerAControllerCD` | `BOTTLE_AT_FILL` | full context String | 11004 |
+| `FillerAControllerCD` | `FillerBControllerCD` | `FILL_A_DONE` | full context plus `measuredAMl` String | 11005 |
+| `FillerBControllerCD` | `RotaryTablePlantCD` | `MARK_FILLED` | `bottleId` String | 12003 |
+| `RotaryTableControllerCD` | `CapperControllerCD` | `BOTTLE_AT_CAP` | full context String | 11007 |
+| `CapperControllerCD` | `RotaryTablePlantCD` | `MARK_CAPPED` | `bottleId` String | 12003 |
+| M2 downstream hand-off | `SortPackControllerCD` | `BOTTLE_READY_FOR_SORT` | full context String | 11012 |
+
+The Registry-to-M2 and M2-to-SortPack rows are implemented at the M4 end but
+still depend on pending M2 receivers/senders. M4 does not emit `BOTTLE_DONE`.
+
+Filler targets use `capacityMl * ratio / 100`; Filler B cannot run before a
+matching safe `FILL_A_DONE`. Both fillers and the Capper first select the
+context's geometry profile. Completion is suppressed on invalid context,
+identity mismatch, unexpected feedback, timeout, overflow, wrong lane or
+unsafe actuator state. Status polling is read-only.
 
 ## Multiple products and pipelining
 
@@ -362,7 +403,8 @@ replaced by separate Conveyor and Rotary Turntable interfaces to match the
 2026 brief. `BOTTLE_DONE` moved from Capper to Bottle Unloader so completion is
 counted only after collection. The ten implemented Coordinator-to-
 Visualisation signals are now also part of this current V1 integration
-baseline. No unimplemented Individual Project extension is included.
+baseline. The implemented M4 two-size extension is recorded separately above
+without changing M1's order protocol or `BOTTLE_DONE` ownership.
 
 ## M3-facing GP bottle-correlated hand-offs V2.1
 
@@ -373,10 +415,10 @@ in the master contract for cross-team integration and must not be added to
 | Stage | Sender | Receiver | Signal | Type | Receiver port | Contract / implementation status |
 | --- | --- | --- | --- | --- | --- | --- |
 | P1 | M2 Entry | `RotaryTablePlantCD` | `LOAD_BOTTLE(bottleId)` | String | 12003 | FROZEN; NOT OWNED BY M1 |
-| P2 | M4 Filler | `RotaryTablePlantCD` | `MARK_FILLED(bottleId)` | String | 12003 | FROZEN; NOT OWNED BY M1 |
-| P3 | M3 Rotary | M3 Lid | `BOTTLE_AT_LID_POSITION(bottleId)` | String | M3 internal | FROZEN; NOT OWNED BY M1 |
-| P3 | M3 Lid | M3 Rotary | `LID_CYCLE_DONE(bottleId)` | String | M3 internal | FROZEN; NOT OWNED BY M1 |
-| P4 | M4 Capper | `RotaryTablePlantCD` | `MARK_CAPPED(bottleId)` | String | 12003 | FROZEN; NOT OWNED BY M1 |
+| P2 | M4 Filler | `RotaryTablePlantCD` | `MARK_FILLED(bottleId)` | String | 12003 | FROZEN; implemented at M4 sender and M3 receiver |
+| P3 | M3 Rotary | M3 Lid | `BOTTLE_AT_LID_POSITION(bottleId)` | String | M3 internal | FROZEN; implemented |
+| P3 | M3 Lid | M3 Rotary | `LID_CYCLE_DONE(bottleId)` | String | M3 internal | FROZEN; implemented |
+| P4 | M4 Capper | `RotaryTablePlantCD` | `MARK_CAPPED(bottleId)` | String | 12003 | FROZEN; implemented at M4 sender and M3 receiver |
 | P6 | M3 Rotary | `LabellerControllerCD` | `BOTTLE_AT_LABEL(bottleId)` | String | 11013 | Signal frozen; M2 receiver port assigned; peer implementation pending |
 | P6 | M2 Labeller | `RotaryTablePlantCD` | `MARK_LABELLED(bottleId)` | String | 12003 | FROZEN; NOT OWNED BY M1 |
 | P6 | M2 Unloader | `RotaryTablePlantCD` | `P6_CLEAR(bottleId)` | String | 12003 | FROZEN; NOT OWNED BY M1 |
@@ -405,8 +447,8 @@ internal interfaces.
 | M1 order/batch HOLD structure | M1 implementation | IMPLEMENTED: alert-only is observational; safe-stop request/recovery failure holds new order and next-batch dispatch; recovery-ready does not clear HOLD |
 | Physical safe-stop confirmation | Required before ACK | FROZEN CONTRACT — IMPLEMENTATION MISSING; no current M1-to-machine stop/confirmation boundary exists |
 | Exact M1 FT String field order | Required for interoperable ACK/decision | CONFLICT/GAP: supplied V2.1 defines meaning and `RESUME`/`HOLD`, but no canonical M1 payload schema |
-| `FaultSupervisorCD` peer | FROZEN at port 13003 | NOT OWNED BY M1; source/XML absent from this repository |
-| P1/P6 and M3 Rotary/Lid implementation | FROZEN | NOT OWNED BY M1; peer source/XML absent |
+| `FaultSupervisorCD` peer | FROZEN at port 13003 | IMPLEMENTED by M3; not owned by M1 |
+| M3 Rotary/Lid implementation | FROZEN | IMPLEMENTED by M3; P1/P6 M2 peers remain pending |
 | M2 Transfer Fault Adapter | Signal/payload FROZEN | NOT OWNED BY M1; request receiver port blocked pending M2 |
 
 Normal GP and Visualisation operation remains usable when the FT peer is
@@ -827,3 +869,8 @@ contract.
   targets `ConveyorControllerCD:11009` and `RotaryTableControllerCD:11003`;
   the recipe-pair invariant is confirmed in current M1 validation; proposed
   Labeller status/Visualisation telemetry remains unimplemented.
+- M4 implementation sync, 2 September 2026: production Filler A/B, Capper,
+  Bottle Context Registry, Recognition and Sort/Pack Controller/Plant modules
+  are registered; 200/500 mL formula, geometry, identity, timeout, overflow
+  and downstream routing behaviour is covered by deterministic tests and a
+  two-bottle SystemJ demonstration. M2 peer endpoints remain pending.

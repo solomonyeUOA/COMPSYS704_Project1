@@ -1,0 +1,41 @@
+// Validates one S/L context per bottleId and distributes unchanged profiles.
+
+BottleContextRegistry(
+    input String signal BOTTLE_RECOGNISED;
+
+    output String signal ROTARY_BOTTLE_CONTEXT;
+    output String signal LOAD_PROFILE;
+    output String signal UNLOAD_PROFILE;
+)
+->{
+    System.out.println("M4 BottleContextRegistryCD started");
+
+    {loop {
+        present(BOTTLE_RECOGNISED) {
+            if (!Member4MachineStateV1.acceptRecognition(
+                #BOTTLE_RECOGNISED
+            )) {
+                System.out.println(
+                    "M4 Registry rejected or de-duplicated recognition"
+                );
+            }
+        }
+        pause;
+    }}
+    ||
+    {loop {
+        String rotary = Member4MachineStateV1.takeRotaryContext();
+        if (rotary != null) {
+            emit ROTARY_BOTTLE_CONTEXT(rotary);
+        }
+        String load = Member4MachineStateV1.takeLoadProfile();
+        if (load != null) {
+            emit LOAD_PROFILE(load);
+        }
+        String unload = Member4MachineStateV1.takeUnloadProfile();
+        if (unload != null) {
+            emit UNLOAD_PROFILE(unload);
+        }
+        pause;
+    }}
+}
