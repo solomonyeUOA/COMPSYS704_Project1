@@ -1,0 +1,89 @@
+// M2 mandatory P6 Labeller. Status polling cannot start a label cycle.
+
+LabellerController(
+    input signal LABELLER_STATUS_REQUEST;
+    input String signal BOTTLE_AT_LABEL;
+    input String signal LABEL_VERIFIED;
+    input signal LABEL_FAULT_RESET;
+    input signal LABEL_PATH_CLEAR;
+    input signal LABEL_VERIFIER_HEALTHY;
+
+    output Integer signal LABELLER_STATUS;
+    output String signal LABEL_CMD;
+    output String signal MARK_LABELLED;
+    output String signal UNLOAD_READY;
+    output String signal WORKPIECE_TWIN_UPDATE;
+    output String signal RESOURCE_TWIN_UPDATE;
+)
+->{
+    System.out.println("M2 LabellerControllerCD started");
+
+    {loop {
+        present(LABELLER_STATUS_REQUEST) {
+            emit LABELLER_STATUS(M2MachineStateV1.getLabellerStatus());
+        }
+        pause;
+    }}
+    ||
+    {loop {
+        present(BOTTLE_AT_LABEL) {
+            if (!M2MachineStateV1.offerBottleAtLabel(#BOTTLE_AT_LABEL)) {
+                System.out.println("M2 Labeller rejected BOTTLE_AT_LABEL=" +
+                    #BOTTLE_AT_LABEL);
+            }
+        }
+        present(LABEL_VERIFIED) {
+            if (!M2MachineStateV1.acceptLabelVerification(
+                #LABEL_VERIFIED
+            )) {
+                System.out.println("M2 Labeller rejected LABEL_VERIFIED");
+            }
+        }
+        present(LABEL_FAULT_RESET) {
+            boolean pathClear = false;
+            boolean verifierHealthy = false;
+            present(LABEL_PATH_CLEAR) { pathClear = true; }
+            present(LABEL_VERIFIER_HEALTHY) {
+                verifierHealthy = true;
+            }
+            if (!M2MachineStateV1.resetLabellerFault(
+                pathClear,
+                verifierHealthy
+            )) {
+                System.out.println(
+                    "M2 Labeller rejected reset without evidence"
+                );
+            }
+        }
+        pause;
+    }}
+    ||
+    {loop {
+        String command = M2MachineStateV1.takeLabelCommand();
+        if (command != null) {
+            emit LABEL_CMD(command);
+        }
+        String marked = M2MachineStateV1.takeMarkLabelled();
+        if (marked != null) {
+            emit MARK_LABELLED(marked);
+        }
+        String ready = M2MachineStateV1.takeUnloadReady();
+        if (ready != null) {
+            emit UNLOAD_READY(ready);
+        }
+        pause;
+    }}
+    ||
+    {loop {
+        String workpiece =
+            M2MachineStateV1.takeLabellerWorkpieceUpdate();
+        if (workpiece != null) {
+            emit WORKPIECE_TWIN_UPDATE(workpiece);
+        }
+        String resource = M2MachineStateV1.takeLabellerResourceUpdate();
+        if (resource != null) {
+            emit RESOURCE_TWIN_UPDATE(resource);
+        }
+        pause;
+    }}
+}

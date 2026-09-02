@@ -1,0 +1,19 @@
+// Minimal read-only IP demonstration client for DigitalTwinCD.
+
+DigitalTwinViewer(
+    input String signal TWIN_CONTEXT_SNAPSHOT;
+    output String signal TWIN_CONTEXT_REQUEST;
+)
+->{
+    System.out.println("M2 DigitalTwinViewerCD started (display only)");
+
+    {loop {
+        if (M2TwinViewerStateV1.shouldRequest(System.currentTimeMillis())) {
+            emit TWIN_CONTEXT_REQUEST("*");
+        }
+        present(TWIN_CONTEXT_SNAPSHOT) {
+            System.out.println("[M2-TWIN] " + #TWIN_CONTEXT_SNAPSHOT);
+        }
+        pause;
+    }}
+}

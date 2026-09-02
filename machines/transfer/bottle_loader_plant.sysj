@@ -1,0 +1,24 @@
+// High-level M2 Bottle Loader Plant abstraction.
+
+BottleLoaderPlant(
+    input String signal LOAD_CMD;
+    output String signal LOAD_CONFIRMED;
+)
+->{
+    System.out.println("M2 BottleLoaderPlantCD started");
+
+    {loop {
+        present(LOAD_CMD) {
+            M2PlantStateV1.commandLoad(
+                #LOAD_CMD,
+                System.currentTimeMillis()
+            );
+        }
+        M2PlantStateV1.tickLoader(System.currentTimeMillis());
+        String confirmation = M2PlantStateV1.takeLoadConfirmed();
+        if (confirmation != null) {
+            emit LOAD_CONFIRMED(confirmation);
+        }
+        pause;
+    }}
+}

@@ -1,0 +1,42 @@
+// Sensor-backed high-level abstraction of the entry Conveyor Plant.
+
+ConveyorPlant(
+    input String signal CONVEYOR_TRANSFER;
+    input Boolean signal MOTOR_CMD;
+    input String signal HANDOFF_COMMITTED;
+    input signal INJECT_ARRIVAL_FAULT;
+    input signal CLEAR_ARRIVAL_FAULT;
+
+    output String signal P1_FEEDBACK;
+)
+->{
+    System.out.println("M2 ConveyorPlantCD started");
+
+    {loop {
+        present(CONVEYOR_TRANSFER) {
+            M2PlantStateV1.registerConveyorBottle(#CONVEYOR_TRANSFER);
+        }
+        present(MOTOR_CMD) {
+            M2PlantStateV1.setConveyorMotor(
+                #MOTOR_CMD,
+                System.currentTimeMillis()
+            );
+        }
+        present(HANDOFF_COMMITTED) {
+            M2PlantStateV1.commitConveyorHandoff(#HANDOFF_COMMITTED);
+        }
+        present(INJECT_ARRIVAL_FAULT) {
+            M2PlantStateV1.setConveyorArrivalFault(true);
+        }
+        present(CLEAR_ARRIVAL_FAULT) {
+            M2PlantStateV1.setConveyorArrivalFault(false);
+        }
+
+        M2PlantStateV1.tickConveyor(System.currentTimeMillis());
+        String feedback = M2PlantStateV1.conveyorFeedback();
+        if (feedback != null) {
+            emit P1_FEEDBACK(feedback);
+        }
+        pause;
+    }}
+}

@@ -2,10 +2,10 @@
 
 This repository is the current development-stage integration baseline for the
 Automated Bottling System (ABS). It contains M1's Swing POS, Coordinator and
-display-only Visualisation, M3's Rotary Table, Lid Loader and Fault Supervisor,
-and M4's two-size Filling, Capping and Sort/Pack Controller/Plant modules. The
-unified Mock Controller is test-only; real M2 Controller/Plant modules remain
-owned by Member 2.
+display-only Visualisation; M2's Loader, Conveyor, Labeller, Unloader,
+Transfer Fault Adapter and Digital Twin; and M3's Rotary Table, Lid Loader and
+Fault Supervisor; and M4's two-size Filling, Capping and Sort/Pack
+Controller/Plant modules. The unified Mock Controller is test-only.
 
 The executable integration topology and receiver allocation are maintained in
 [`integration/`](integration/), with the actual `.sysj`, `.xml` and Java
@@ -25,11 +25,12 @@ agreed and applied consistently to source, XML and tests.
 - M3 owns `RotaryTableControllerCD:11003`, `LidLoaderControllerCD:11006`,
   `RotaryTablePlantCD:12003`, `LidLoaderPlantCD:12006` and
   `FaultSupervisorCD:13003`.
+- M2 owns implemented Loader, Conveyor, Labeller, Unloader, Transfer Fault
+  Adapter and Digital Twin modules. Its canonical production mapping is
+  `machines/transfer/member2_system.xml`.
 - M4 owns implemented Filler A/B, Capper, Bottle Context Registry,
   Recognition Plant and Sort/Pack modules. Its canonical production mapping
   is `machines/filling_capping/member4_system.xml`.
-- M2 transfer, loading, labelling and unloading modules remain pending peer
-  dependencies; this also blocks the full physical end-to-end group run.
 - `ABSVisualisationPlantCD` is display-only. It does not control machines,
   actuators or physical Plant state.
 - The obsolete combined `TransportControllerCD` / `TRANSPORT_*` status
@@ -88,7 +89,7 @@ xuqi_coordinator/  ABS Coordinator
 common/            shared order/state helpers
 visualisation/     display-only hierarchical Visualisation IP
 tests/             regression-only tests and Mock
-machines/transfer/          M2 integration slot (pending peer source)
+machines/transfer/          M2 production modules, tests and Digital Twin IP
 machines/rotary_lid/        M3 production modules and self-tests
 machines/filling_capping/   M4 production modules, models and self-tests
 integration/                topology, port manifest and merge checklist
@@ -156,9 +157,9 @@ headless execution and expected regression evidence. This path validates M1
 transport and state handling against the test-only Mock; real Controller/Plant
 acceptance remains a separate cross-member integration activity.
 
-Before a merge, run `python3 tools/validate_integration.py`. The structural
-validator includes M1, M3 and M4 production XML and reports only unresolved M2
-receivers as peer implementation warnings.
+Before a merge, run `python tools/validate_integration.py`. The structural
+validator includes the canonical M1, M2, M3 and M4 production XML and checks
+their registered receivers and required inputs.
 
 ## Prerequisite
 
