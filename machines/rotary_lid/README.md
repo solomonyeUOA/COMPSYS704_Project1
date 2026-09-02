@@ -54,12 +54,14 @@ actuator.
 
 ## Build and verify
 
-From the repository root, with the course Lab 3 libraries:
+From the repository root, first verify the project-pinned Java and SystemJ
+toolchain described in `../../toolchain/README.md`. Then use the verified
+SystemJ library directory below:
 
 ```sh
 mkdir -p build/member3-generated build/member3-classes
 
-java -cp "/path/to/COMPSYS704_Lab_3/lib/*" \
+java -cp "/path/to/COMPSYS704_Project1_SystemJ_lib/*" \
   com.systemj.compiler.JavaPrettyPrinter \
   -d build/member3-generated --nojavac --silence \
   machines/rotary_lid/rotary_table_controller.sysj \
@@ -69,15 +71,15 @@ java -cp "/path/to/COMPSYS704_Lab_3/lib/*" \
   machines/rotary_lid/fault_supervisor.sysj \
   machines/rotary_lid/member3_demo_driver.sysj
 
-javac --release 8 -cp "/path/to/COMPSYS704_Lab_3/lib/*" \
+javac -cp "/path/to/COMPSYS704_Project1_SystemJ_lib/*" \
   -d build/member3-classes \
   build/member3-generated/*.java machines/rotary_lid/*.java
 
-java -cp "build/member3-classes:/path/to/COMPSYS704_Lab_3/lib/*" \
+java -cp "build/member3-classes:/path/to/COMPSYS704_Project1_SystemJ_lib/*" \
   Member3ControllerSelfTest
-java -cp "build/member3-classes:/path/to/COMPSYS704_Lab_3/lib/*" \
+java -cp "build/member3-classes:/path/to/COMPSYS704_Project1_SystemJ_lib/*" \
   Member3PlantSelfTest
-java -cp "build/member3-classes:/path/to/COMPSYS704_Lab_3/lib/*" \
+java -cp "build/member3-classes:/path/to/COMPSYS704_Project1_SystemJ_lib/*" \
   FaultSupervisorSelfTest
 ```
 
@@ -86,7 +88,7 @@ M3 runtime after neighbouring receiver ports are available:
 
 ```sh
 java -Djava.awt.headless=false \
-  -cp "build/member3-classes:/path/to/COMPSYS704_Lab_3/lib/*" \
+  -cp "build/member3-classes:/path/to/COMPSYS704_Project1_SystemJ_lib/*" \
   com.systemj.SystemJRunner machines/rotary_lid/member3_system.xml
 ```
 
@@ -96,7 +98,7 @@ For a self-contained one-bottle demonstration, use the same compiled classes:
 
 ```sh
 java -Djava.awt.headless=true \
-  -cp "build/member3-classes:/path/to/COMPSYS704_Lab_3/lib/*" \
+  -cp "build/member3-classes:/path/to/COMPSYS704_Project1_SystemJ_lib/*" \
   com.systemj.SystemJRunner machines/rotary_lid/member3_demo.xml
 ```
 
