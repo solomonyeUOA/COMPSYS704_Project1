@@ -11,6 +11,7 @@ public final class Member3DemoStateV1 {
     private static String clearBottleId;
     private static boolean passPublished;
     private static long contextStartMs;
+    private static long nextStatusPollMs;
 
     private Member3DemoStateV1() {
     }
@@ -21,6 +22,7 @@ public final class Member3DemoStateV1 {
         actionAfterMs = contextStartMs + 500;
         clearBottleId = null;
         passPublished = false;
+        nextStatusPollMs = contextStartMs;
     }
 
     public static synchronized int nextAction() {
@@ -65,6 +67,15 @@ public final class Member3DemoStateV1 {
 
     public static synchronized String clearBottleId() {
         return clearBottleId;
+    }
+
+    public static synchronized boolean shouldPollStatus() {
+        long now = System.currentTimeMillis();
+        if (now < nextStatusPollMs) {
+            return false;
+        }
+        nextStatusPollMs = now + 250;
+        return true;
     }
 
     private static boolean allPositionsEmpty() {
