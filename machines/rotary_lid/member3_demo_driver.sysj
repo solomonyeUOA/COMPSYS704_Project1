@@ -63,8 +63,10 @@ Member3DemoDriver(
     }}
     ||
     {loop {
-        emit ROTARY_STATUS_REQUEST;
-        emit LID_STATUS_REQUEST;
+        if (Member3DemoStateV1.shouldPollStatus()) {
+            emit ROTARY_STATUS_REQUEST;
+            emit LID_STATUS_REQUEST;
+        }
         pause;
     }}
 }
