@@ -33,8 +33,17 @@ The production XML (not the unified Mock mapping) sends Conveyor polling to
 
 ## Compile
 
-Use Java 8 and replace `<SYSTEMJ_LIB_DIR>` with the course SystemJ JAR folder.
-Run from the repository root.
+Use the project-pinned Temurin OpenJDK 8u502 and SystemJ JAR directory. Verify
+both before compiling, then replace `<SYSTEMJ_LIB_DIR>` below with the verified
+directory. Run from the repository root.
+
+```powershell
+python tools/verify_project_toolchain.py `
+  --java-home "<TEMURIN_8U502_HOME>" `
+  --systemj-lib "<SYSTEMJ_LIB_DIR>"
+```
+
+Do not continue unless the command prints `PROJECT_TOOLCHAIN_OK`.
 
 ```powershell
 New-Item -ItemType Directory -Force build/generated,build/classes

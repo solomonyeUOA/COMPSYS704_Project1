@@ -162,6 +162,18 @@ receivers as peer implementation warnings.
 
 ## Prerequisite
 
-Use the Java 8 course environment and SystemJ compiler/runtime JARs supplied
-with the COMPSYS704 Labs. Generated Java is a build artifact and must not be
-edited or committed.
+The project toolchain is frozen to Eclipse Temurin OpenJDK `1.8.0_502`
+(`Temurin-8.0.502+7`), `javac 1.8.0_502`, and the exact SystemJ JAR checksums
+in [`toolchain/systemj-project.sha256`](toolchain/systemj-project.sha256).
+Generated Java is a build artifact and must not be edited or committed.
+
+Every member must run this check before compiling:
+
+```bash
+python3 tools/verify_project_toolchain.py \
+  --java-home "/path/to/temurin-8" \
+  --systemj-lib "/path/to/COMPSYS704_Project1_SystemJ_lib"
+```
+
+Continue only when it prints `PROJECT_TOOLCHAIN_OK`. See
+[`toolchain/README.md`](toolchain/README.md) for the project-wide rule.
