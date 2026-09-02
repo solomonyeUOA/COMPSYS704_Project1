@@ -11,25 +11,31 @@
     "xuqi_pos/pos.xml",
     "xuqi_coordinator/coordinator.xml",
     "visualisation/abs_visualisation_plant.xml",
-    "machines/rotary_lid/member3_system.xml"
+    "machines/rotary_lid/member3_system.xml",
+    "machines/filling_capping/member4_system.xml"
   ],
   "receivers": [
     {"clockDomain": "POSCD", "owner": "M1", "port": 11000, "status": "implemented"},
     {"clockDomain": "CoordinatorCD", "owner": "M1", "port": 11001, "status": "implemented"},
     {"clockDomain": "BottleLoaderControllerCD", "owner": "M2", "port": 11002, "status": "pending"},
     {"clockDomain": "RotaryTableControllerCD", "owner": "M3", "port": 11003, "status": "implemented"},
-    {"clockDomain": "FillerAControllerCD", "owner": "M4", "port": 11004, "status": "pending"},
-    {"clockDomain": "FillerBControllerCD", "owner": "M4", "port": 11005, "status": "pending"},
+    {"clockDomain": "FillerAControllerCD", "owner": "M4", "port": 11004, "status": "implemented"},
+    {"clockDomain": "FillerBControllerCD", "owner": "M4", "port": 11005, "status": "implemented"},
     {"clockDomain": "LidLoaderControllerCD", "owner": "M3", "port": 11006, "status": "implemented"},
-    {"clockDomain": "CapperControllerCD", "owner": "M4", "port": 11007, "status": "pending"},
+    {"clockDomain": "CapperControllerCD", "owner": "M4", "port": 11007, "status": "implemented"},
     {"clockDomain": "ABSVisualisationPlantCD", "owner": "M1", "port": 11008, "status": "implemented"},
     {"clockDomain": "ConveyorControllerCD", "owner": "M2", "port": 11009, "status": "pending"},
     {"clockDomain": "BottleUnloaderControllerCD", "owner": "M2", "port": 11010, "status": "pending"},
-    {"clockDomain": "BottleContextRegistryCD", "owner": "M4", "port": 11011, "status": "proposed"},
-    {"clockDomain": "SortPackControllerCD", "owner": "M4", "port": 11012, "status": "proposed"},
+    {"clockDomain": "BottleContextRegistryCD", "owner": "M4", "port": 11011, "status": "implemented"},
+    {"clockDomain": "SortPackControllerCD", "owner": "M4", "port": 11012, "status": "implemented"},
     {"clockDomain": "LabellerControllerCD", "owner": "M2", "port": 11013, "status": "pending"},
     {"clockDomain": "RotaryTablePlantCD", "owner": "M3", "port": 12003, "status": "implemented"},
+    {"clockDomain": "FillerAPlantCD", "owner": "M4", "port": 12004, "status": "implemented"},
+    {"clockDomain": "FillerBPlantCD", "owner": "M4", "port": 12005, "status": "implemented"},
     {"clockDomain": "LidLoaderPlantCD", "owner": "M3", "port": 12006, "status": "implemented"},
+    {"clockDomain": "CapperPlantCD", "owner": "M4", "port": 12007, "status": "implemented"},
+    {"clockDomain": "RecognitionPlantCD", "owner": "M4", "port": 12011, "status": "implemented"},
+    {"clockDomain": "SortPackPlantCD", "owner": "M4", "port": 12012, "status": "implemented"},
     {"clockDomain": "M2TransferFaultAdapterCD", "owner": "M2", "port": 13002, "status": "pending"},
     {"clockDomain": "FaultSupervisorCD", "owner": "M3", "port": 13003, "status": "implemented"}
   ],
@@ -47,6 +53,24 @@
       "MARK_LABELLED", "P6_CLEAR"
     ],
     "LidLoaderControllerCD": ["LID_STATUS_REQUEST", "BOTTLE_AT_LID_POSITION"],
+    "BottleContextRegistryCD": ["BOTTLE_RECOGNISED"],
+    "RecognitionPlantCD": ["RECOGNITION_REQUEST"],
+    "FillerAControllerCD": [
+      "FILL_A_RATIO", "FILLER_A_STATUS_REQUEST", "BOTTLE_AT_FILL",
+      "FILLER_A_PLANT_FEEDBACK"
+    ],
+    "FillerAPlantCD": ["FILLER_A_PLANT_COMMAND", "INJECT_FILLER_A_FAULT"],
+    "FillerBControllerCD": [
+      "FILL_B_RATIO", "FILLER_B_STATUS_REQUEST", "FILL_A_DONE",
+      "FILLER_B_PLANT_FEEDBACK"
+    ],
+    "FillerBPlantCD": ["FILLER_B_PLANT_COMMAND", "INJECT_FILLER_B_FAULT"],
+    "CapperControllerCD": [
+      "CAPPER_STATUS_REQUEST", "BOTTLE_AT_CAP", "CAPPER_PLANT_FEEDBACK"
+    ],
+    "CapperPlantCD": ["CAPPER_PLANT_COMMAND", "INJECT_CAPPER_FAULT"],
+    "SortPackControllerCD": ["BOTTLE_READY_FOR_SORT", "SORT_PACK_PLANT_FEEDBACK"],
+    "SortPackPlantCD": ["SORT_PACK_PLANT_COMMAND", "INJECT_SORT_PACK_FAULT"],
     "FaultSupervisorCD": [
       "TRANSFER_FAULT_EVENT", "TRANSFER_RECOVERY_ACK",
       "TRANSFER_RECOVERY_RESULT", "FT_SAFE_STOP_ACK", "FT_RESUME_DECISION"

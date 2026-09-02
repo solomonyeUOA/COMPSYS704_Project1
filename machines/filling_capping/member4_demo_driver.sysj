@@ -1,0 +1,89 @@
+// TEST ONLY: replaces M1/M2/M3 neighbours for a two-bottle M4 demonstration.
+
+Member4DemoDriver(
+    input String signal ROTARY_BOTTLE_CONTEXT;
+    input String signal LOAD_PROFILE;
+    input String signal UNLOAD_PROFILE;
+    input Integer signal FILLER_A_STATUS;
+    input Integer signal FILLER_B_STATUS;
+    input Integer signal CAPPER_STATUS;
+    input String signal MARK_FILLED;
+    input String signal MARK_CAPPED;
+
+    output String signal BOTTLE_RECOGNISED;
+    output Integer signal FILL_A_RATIO;
+    output Integer signal FILL_B_RATIO;
+    output signal FILLER_A_STATUS_REQUEST;
+    output signal FILLER_B_STATUS_REQUEST;
+    output signal CAPPER_STATUS_REQUEST;
+    output String signal BOTTLE_AT_FILL;
+    output String signal BOTTLE_AT_CAP;
+    output String signal BOTTLE_READY_FOR_SORT;
+)
+->{
+    Member4MachineStateV1.reset();
+    Member4PlantStateV1.reset();
+    Member4DemoStateV1.reset();
+    // Seed the same validated 60/40 values that the demo also sends over M1.
+    Member4MachineStateV1.setFillerARatio(60);
+    Member4MachineStateV1.setFillerBRatio(40);
+    System.out.println("Member 4 demo driver started");
+
+    {loop {
+        if (Member4DemoStateV1.shouldSendRecipe()) {
+            emit FILL_A_RATIO(60);
+            emit FILL_B_RATIO(40);
+        }
+        if (Member4DemoStateV1.shouldPoll()) {
+            emit FILLER_A_STATUS_REQUEST;
+            emit FILLER_B_STATUS_REQUEST;
+            emit CAPPER_STATUS_REQUEST;
+        }
+        pause;
+    }}
+    ||
+    {loop {
+        int action = Member4DemoStateV1.nextAction();
+        if (action == Member4DemoStateV1.FILL &&
+            Member4DemoStateV1.context() != null) {
+            emit BOTTLE_AT_FILL(Member4DemoStateV1.context());
+        }
+        else if (action == Member4DemoStateV1.CAP &&
+            Member4DemoStateV1.context() != null) {
+            emit BOTTLE_AT_CAP(Member4DemoStateV1.context());
+        }
+        else if (action == Member4DemoStateV1.SORT_PACK &&
+            Member4DemoStateV1.context() != null) {
+            emit BOTTLE_READY_FOR_SORT(Member4DemoStateV1.context());
+        }
+        else if (action == Member4DemoStateV1.PASS) {
+            System.out.println("MEMBER4 SYSTEMJ DEMO PASSED");
+            Member4DemoStateV1.exitSuccess();
+        }
+        pause;
+    }}
+    ||
+    {loop {
+        present(ROTARY_BOTTLE_CONTEXT) {
+            Member4DemoStateV1.onContext(#ROTARY_BOTTLE_CONTEXT);
+            System.out.println(
+                "Demo received context " + #ROTARY_BOTTLE_CONTEXT
+            );
+        }
+        pause;
+    }}
+    ||
+    {loop {
+        present(MARK_FILLED) {
+            Member4DemoStateV1.onFilled(#MARK_FILLED);
+        }
+        pause;
+    }}
+    ||
+    {loop {
+        present(MARK_CAPPED) {
+            Member4DemoStateV1.onCapped(#MARK_CAPPED);
+        }
+        pause;
+    }}
+}

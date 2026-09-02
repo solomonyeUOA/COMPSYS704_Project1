@@ -1,0 +1,60 @@
+// Filler B cannot start before matching safe FILL_A_DONE.
+
+FillerBController(
+    input Integer signal FILL_B_RATIO;
+    input signal FILLER_B_STATUS_REQUEST;
+    input String signal FILL_A_DONE;
+    input String signal FILLER_B_PLANT_FEEDBACK;
+
+    output Integer signal FILLER_B_STATUS;
+    output String signal FILLER_B_PLANT_COMMAND;
+    output String signal MARK_FILLED;
+)
+->{
+    System.out.println("M4 FillerBControllerCD started");
+
+    {loop {
+        present(FILL_B_RATIO) {
+            Member4MachineStateV1.setFillerBRatio(#FILL_B_RATIO);
+        }
+        pause;
+    }}
+    ||
+    {loop {
+        present(FILLER_B_STATUS_REQUEST) {
+            emit FILLER_B_STATUS(
+                Member4MachineStateV1.getFillerBStatus()
+            );
+        }
+        pause;
+    }}
+    ||
+    {loop {
+        present(FILL_A_DONE) {
+            Member4MachineStateV1.acceptFillADone(#FILL_A_DONE);
+        }
+        pause;
+    }}
+    ||
+    {loop {
+        present(FILLER_B_PLANT_FEEDBACK) {
+            Member4MachineStateV1.acceptFillerBFeedback(
+                #FILLER_B_PLANT_FEEDBACK
+            );
+        }
+        pause;
+    }}
+    ||
+    {loop {
+        Member4MachineStateV1.tick();
+        String command = Member4MachineStateV1.takeFillerBCommand();
+        if (command != null) {
+            emit FILLER_B_PLANT_COMMAND(command);
+        }
+        String completed = Member4MachineStateV1.takeMarkFilled();
+        if (completed != null) {
+            emit MARK_FILLED(completed);
+        }
+        pause;
+    }}
+}
