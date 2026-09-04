@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- TEST ONLY: M2 Adapter, M3 Supervisor and a deterministic peer driver. -->
+<System xmlns="http://systemjtechnology.com">
+    <SubSystem Name="FAULT_TOLERANCE_DEMO_SS" Local="true">
+        <ClockDomain Name="M2TransferFaultAdapterCD" Class="M2TransferFaultAdapter">
+            <iSignal Name="LOCAL_TRANSFER_FAULT" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="13002" />
+            <iSignal Name="TRANSFER_RECOVERY_REQUEST" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="13002" />
+            <iSignal Name="LOCAL_RECOVERY_EVIDENCE" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="13002" />
+            <oSignal Name="TRANSFER_FAULT_EVENT" To="FaultSupervisorCD.TRANSFER_FAULT_EVENT" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="13003" />
+            <oSignal Name="TRANSFER_RECOVERY_ACK" To="FaultSupervisorCD.TRANSFER_RECOVERY_ACK" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="13003" />
+            <oSignal Name="TRANSFER_RECOVERY_RESULT" To="FaultSupervisorCD.TRANSFER_RECOVERY_RESULT" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="13003" />
+            <oSignal Name="LOCAL_RECOVERY_INTENT" To="FaultToleranceDemoDriverCD.LOCAL_RECOVERY_INTENT" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="15003" />
+        </ClockDomain>
+
+        <ClockDomain Name="FaultSupervisorCD" Class="FaultSupervisor">
+            <iSignal Name="TRANSFER_FAULT_EVENT" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="13003" />
+            <iSignal Name="TRANSFER_RECOVERY_ACK" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="13003" />
+            <iSignal Name="TRANSFER_RECOVERY_RESULT" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="13003" />
+            <iSignal Name="FT_SAFE_STOP_ACK" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="13003" />
+            <iSignal Name="FT_RESUME_DECISION" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="13003" />
+            <oSignal Name="TRANSFER_RECOVERY_REQUEST" To="M2TransferFaultAdapterCD.TRANSFER_RECOVERY_REQUEST" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="13002" />
+            <oSignal Name="FT_FAULT_ALERT" To="FaultToleranceDemoDriverCD.FT_FAULT_ALERT" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="15003" />
+            <oSignal Name="FT_SAFE_STOP_REQUEST" To="FaultToleranceDemoDriverCD.FT_SAFE_STOP_REQUEST" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="15003" />
+            <oSignal Name="FT_RECOVERY_READY" To="FaultToleranceDemoDriverCD.FT_RECOVERY_READY" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="15003" />
+            <oSignal Name="FT_RECOVERY_FAILED" To="FaultToleranceDemoDriverCD.FT_RECOVERY_FAILED" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="15003" />
+        </ClockDomain>
+
+        <ClockDomain Name="FaultToleranceDemoDriverCD" Class="FaultToleranceDemoDriver">
+            <iSignal Name="LOCAL_RECOVERY_INTENT" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="15003" />
+            <iSignal Name="FT_FAULT_ALERT" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="15003" />
+            <iSignal Name="FT_SAFE_STOP_REQUEST" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="15003" />
+            <iSignal Name="FT_RECOVERY_READY" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="15003" />
+            <iSignal Name="FT_RECOVERY_FAILED" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="15003" />
+            <oSignal Name="LOCAL_TRANSFER_FAULT" To="M2TransferFaultAdapterCD.LOCAL_TRANSFER_FAULT" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="13002" />
+            <oSignal Name="LOCAL_RECOVERY_EVIDENCE" To="M2TransferFaultAdapterCD.LOCAL_RECOVERY_EVIDENCE" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="13002" />
+            <oSignal Name="FT_SAFE_STOP_ACK" To="FaultSupervisorCD.FT_SAFE_STOP_ACK" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="13003" />
+            <oSignal Name="FT_RESUME_DECISION" To="FaultSupervisorCD.FT_RESUME_DECISION" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="13003" />
+        </ClockDomain>
+    </SubSystem>
+</System>

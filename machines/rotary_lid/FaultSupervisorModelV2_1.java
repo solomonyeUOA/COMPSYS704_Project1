@@ -3,20 +3,20 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-/** Policy and correlation model for the M3 individual-project supervisor. */
+/** Deterministic policy, correlation and evidence model for the M3 IP. */
 public final class FaultSupervisorModelV2_1 {
     public enum State {
         IDLE,
         WAITING_SAFE_STOP,
         WAITING_ACK,
         WAITING_RESULT,
+        RESOURCE_WAIT,
         RECOVERY_READY,
         MANUAL_RECOVERY,
+        LOCKED_OUT,
         FAILED
     }
 
-    private final Map<String, String> priorRequests =
-        new HashMap<String, String>();
     private final Map<String, String> priorEvents =
         new HashMap<String, String>();
     private final Map<String, String> priorAcks =
@@ -30,12 +30,124 @@ public final class FaultSupervisorModelV2_1 {
         new HashMap<String, String>();
     private final Map<String, Integer> localRetryCounts =
         new HashMap<String, Integer>();
+
     private String activeEpoch;
     private long latestStateVersion = -1;
     private FaultProtocolV2_1.FaultEvent activeEvent;
+    private FaultPolicyV2_1 activePolicy;
     private State state = State.IDLE;
-    private String pendingRequest;
+    private int activeAttempt;
+    private boolean manualEvidenceRecorded;
     private String decision = "IDLE";
+    private String latestEvidence = "NONE";
+
+    private String pendingRecoveryRequest;
+    private String pendingFaultAlert;
+    private String pendingSafeStopRequest;
+    private String pendingRecoveryReady;
+    private String pendingRecoveryFailed;
+
+    private int validEvents;
+    private int rejectedMessages;
+    private int duplicateMessages;
+    private int automaticAttempts;
+    private int verifiedRecoveries;
+    private int resourceWaits;
+    private int manualEscalations;
+    private int recoveryFailures;
+    private long traceSequence;
+
+    public synchronized boolean onFaultEvent(String payload) {
+        FaultProtocolV2_1.FaultEvent event;
+        FaultPolicyV2_1 policy;
+        try {
+            event = FaultProtocolV2_1.parseFaultEvent(payload);
+            policy = FaultPolicyV2_1.select(event);
+        }
+        catch (IllegalArgumentException exception) {
+            reject("INVALID_EVENT " + exception.getMessage());
+            return false;
+        }
+
+        String key = eventKey(event.sourceEpoch, event.eventId);
+        if (priorEvents.containsKey(key)) {
+            boolean identical = priorEvents.get(key).equals(payload);
+            duplicateMessages++;
+            record((identical ? "DUPLICATE_EVENT " :
+                "CONFLICTING_EVENT_ID ") + key);
+            if (!identical) {
+                reject("CONFLICTING_EVENT_ID " + key);
+            }
+            return identical;
+        }
+
+        if (activeEpoch != null && !activeEpoch.equals(event.sourceEpoch)) {
+            record("NEW_EPOCH " + event.sourceEpoch + " invalidated " +
+                activeEpoch);
+            clearActiveRecovery();
+            latestStateVersion = -1;
+        }
+        if (event.stateVersion < latestStateVersion) {
+            reject("STALE_STATE " + key);
+            return false;
+        }
+        if (latestStateVersion >= 0 &&
+            event.stateVersion > latestStateVersion + 1) {
+            reject("STATE_SNAPSHOT_REQUIRED " + key);
+            return false;
+        }
+        if (hasActiveRecovery() && activeEvent != null &&
+            !activeEvent.eventId.equals(event.eventId)) {
+            priorEvents.put(key, payload);
+            validEvents++;
+            pendingFaultAlert = payload;
+            if (policy.requiresSafeStop) {
+                pendingSafeStopRequest = safeStopRequest(event);
+            }
+            pendingRecoveryFailed = recoveryFailed(
+                event, "CONCURRENT_EVENT_HELD"
+            );
+            record("CONCURRENT_EVENT_HELD " + key);
+            return false;
+        }
+
+        priorEvents.put(key, payload);
+        validEvents++;
+        activeEpoch = event.sourceEpoch;
+        latestStateVersion = event.stateVersion;
+        activeEvent = event;
+        activePolicy = policy;
+        activeAttempt = 0;
+        manualEvidenceRecorded = false;
+        pendingFaultAlert = payload;
+        latestEvidence = "FAULT_EVENT_VALIDATED";
+        record("FAULT " + key + " " + policy.summary());
+
+        if (policy.disposition ==
+            FaultPolicyV2_1.Disposition.AUTOMATIC_RETRY) {
+            if (policy.requiresSafeStop) {
+                state = State.WAITING_SAFE_STOP;
+                decision = "WAITING_FOR_M1_SAFE_STOP";
+                pendingSafeStopRequest = safeStopRequest(event);
+            }
+            else {
+                issueRecoveryRequest();
+            }
+        }
+        else if (policy.disposition ==
+            FaultPolicyV2_1.Disposition.RESOURCE_WAIT) {
+            state = State.RESOURCE_WAIT;
+            decision = "WAIT_RESOURCE_NO_RETRY_BUDGET";
+            resourceWaits++;
+        }
+        else {
+            state = State.WAITING_SAFE_STOP;
+            decision = "NO_BLIND_RETRY_WAITING_SAFE_STOP";
+            pendingSafeStopRequest = safeStopRequest(event);
+            manualEscalations++;
+        }
+        return true;
+    }
 
     public synchronized boolean onTransferFault(String payload) {
         FaultProtocolV2_1.FaultEvent event;
@@ -43,88 +155,60 @@ public final class FaultSupervisorModelV2_1 {
             event = FaultProtocolV2_1.parseFaultEvent(payload);
         }
         catch (IllegalArgumentException exception) {
-            fail("INVALID_EVENT: " + exception.getMessage());
+            reject("INVALID_EVENT " + exception.getMessage());
             return false;
         }
         if (!"TRANSFER".equals(event.subsystem)) {
-            fail("WRONG_SUBSYSTEM " + event.subsystem);
+            reject("WRONG_SUBSYSTEM " + event.subsystem);
             return false;
         }
-        String eventKey = eventKey(event.sourceEpoch, event.eventId);
-        if (priorEvents.containsKey(eventKey)) {
-            boolean identical = priorEvents.get(eventKey).equals(payload);
-            record((identical ? "DUPLICATE_EVENT " :
-                "CONFLICTING_EVENT_ID ") + event.eventId);
-            if (!identical) {
-                fail("CONFLICTING_EVENT_ID " + event.eventId);
-            }
-            return identical;
+        return onFaultEvent(payload);
+    }
+
+    /** Accepts M1 acknowledgement only after an independent safe stop. */
+    public synchronized boolean onSafeStopAck(String payload) {
+        String[] fields;
+        try {
+            fields = coordinationFields(payload, 5);
         }
-        if (activeEpoch != null && !activeEpoch.equals(event.sourceEpoch)) {
-            record("NEW_EPOCH " + event.sourceEpoch + " invalidated " +
-                activeEpoch);
-            clearActiveRecovery();
-            latestStateVersion = -1;
-        }
-        activeEpoch = event.sourceEpoch;
-        if (hasActiveRecovery() && activeEvent != null &&
-            !activeEvent.eventId.equals(event.eventId)) {
-            boolean preempts = "CRITICAL".equals(event.severity) &&
-                !"CRITICAL".equals(activeEvent.severity);
-            if (!preempts) {
-                record("CONCURRENT_EVENT_HELD " + event.eventId);
-                return false;
-            }
-            record("CRITICAL_PREEMPT " + event.eventId + " replaced " +
-                activeEvent.eventId);
-            clearActiveRecovery();
-        }
-        if (event.stateVersion < latestStateVersion) {
-            fail("STALE_STATE " + event.eventId);
+        catch (IllegalArgumentException exception) {
+            reject("INVALID_SAFE_STOP_ACK " + exception.getMessage());
             return false;
         }
-        if (latestStateVersion >= 0 &&
-            event.stateVersion > latestStateVersion + 1) {
-            fail("STATE_SNAPSHOT_REQUIRED " + event.eventId);
+        if (state != State.WAITING_SAFE_STOP || activeEvent == null ||
+            !activeEvent.eventId.equals(fields[1]) ||
+            !activeEvent.sourceEpoch.equals(fields[2]) ||
+            !"SAFE_STOPPED".equals(fields[3]) ||
+            activeEvent.stateVersion != unsignedLong(fields[4])) {
+            reject("STALE_OR_MISMATCHED_SAFE_STOP_ACK");
             return false;
         }
-        latestStateVersion = event.stateVersion;
-        activeEvent = event;
-        priorEvents.put(eventKey, payload);
-        record("FAULT " + event.eventId + " " + event.faultCode);
-        if ("ARRIVAL_TIMEOUT".equals(event.faultCode)) {
-            state = State.WAITING_SAFE_STOP;
-            decision = "WAITING_FOR_INDEPENDENT_SAFE_STOP";
+        latestEvidence = "M1_SAFE_STOP_ACK";
+        record("SAFE_STOP_ACK " + fields[1]);
+        if (activePolicy.disposition ==
+            FaultPolicyV2_1.Disposition.AUTOMATIC_RETRY) {
+            issueRecoveryRequest();
         }
         else {
-            state = State.MANUAL_RECOVERY;
-            decision = "NO_BLIND_RETRY";
+            state = State.LOCKED_OUT;
+            decision = "MANUAL_RECONCILIATION_REQUIRED";
+            queueRecoveryFailed("NO_AUTOMATIC_ACTION");
         }
         return true;
     }
 
-    /** Called only by a future M1 parser after genuine independent evidence. */
+    /** Compatibility helper used by older model tests. */
     public synchronized boolean confirmSafeStop(
         String eventId,
         boolean independentEvidence
     ) {
-        if (!independentEvidence || state != State.WAITING_SAFE_STOP ||
-            activeEvent == null || !activeEvent.eventId.equals(eventId)) {
+        if (!independentEvidence || activeEvent == null) {
             return false;
         }
-        pendingRequest = FaultProtocolV2_1.recoveryRequest(
-            activeEvent,
-            "RETRY_TRANSFER",
-            1
+        return onSafeStopAck(
+            "V2|" + eventId + "|" + activeEvent.sourceEpoch +
+            "|SAFE_STOPPED|" + activeEvent.stateVersion
         );
-        priorRequests.put(eventKey(
-            activeEvent.sourceEpoch,
-            activeEvent.eventId
-        ), pendingRequest);
-        state = State.WAITING_ACK;
-        decision = "RETRY_TRANSFER_ATTEMPT_1";
-        record("REQUEST " + pendingRequest);
-        return true;
     }
 
     public synchronized boolean onRecoveryAck(String payload) {
@@ -133,28 +217,36 @@ public final class FaultSupervisorModelV2_1 {
             ack = FaultProtocolV2_1.parseRecoveryAck(payload);
         }
         catch (IllegalArgumentException exception) {
-            fail("INVALID_ACK: " + exception.getMessage());
+            failRecovery("INVALID_ACK " + exception.getMessage());
             return false;
         }
         String key = eventKey(ack.sourceEpoch, ack.eventId) + "|" +
             ack.attempt;
         if (priorAcks.containsKey(key)) {
-            record("DUPLICATE_ACK " + key);
-            return priorAcks.get(key).equals(payload);
+            boolean identical = priorAcks.get(key).equals(payload);
+            duplicateMessages++;
+            record((identical ? "DUPLICATE_ACK " : "CONFLICTING_ACK ") +
+                key);
+            if (!identical) {
+                failRecovery("CONFLICTING_ACK " + key);
+            }
+            return identical;
         }
-        if (!matchesActive(ack.eventId, ack.sourceEpoch, ack.attempt) ||
+        if (state != State.WAITING_ACK ||
+            !matchesActive(ack.eventId, ack.sourceEpoch, ack.attempt) ||
             ack.acceptedStateVersion != activeEvent.stateVersion) {
-            fail("STALE_OR_MISMATCHED_ACK " + key);
+            failRecovery("STALE_OR_MISMATCHED_ACK " + key);
             return false;
         }
         priorAcks.put(key, payload);
         if (!"ACCEPTED".equals(ack.ack)) {
-            fail("RECOVERY_REJECTED " + ack.reason);
+            failRecovery("RECOVERY_REJECTED " + ack.reason);
             return false;
         }
         state = State.WAITING_RESULT;
         decision = "RECOVERY_IN_PROGRESS";
-        record("ACK " + key);
+        latestEvidence = "CONTROLLER_ACK " + ack.reason;
+        record("ACK " + key + " " + ack.reason);
         return true;
     }
 
@@ -164,48 +256,163 @@ public final class FaultSupervisorModelV2_1 {
             result = FaultProtocolV2_1.parseRecoveryResult(payload);
         }
         catch (IllegalArgumentException exception) {
-            fail("INVALID_RESULT: " + exception.getMessage());
+            failRecovery("INVALID_RESULT " + exception.getMessage());
             return false;
         }
         String key = eventKey(result.sourceEpoch, result.eventId) + "|" +
             result.attempt;
         if (priorResults.containsKey(key)) {
-            record("DUPLICATE_RESULT " + key);
-            return priorResults.get(key).equals(payload);
+            boolean identical = priorResults.get(key).equals(payload);
+            duplicateMessages++;
+            record((identical ? "DUPLICATE_RESULT " :
+                "CONFLICTING_RESULT ") + key);
+            if (!identical) {
+                failRecovery("CONFLICTING_RESULT " + key);
+            }
+            return identical;
         }
         if (state != State.WAITING_RESULT ||
-            !matchesActive(result.eventId, result.sourceEpoch, result.attempt)) {
-            fail("STALE_OR_MISMATCHED_RESULT " + key);
+            !matchesActive(result.eventId, result.sourceEpoch,
+                result.attempt)) {
+            failRecovery("STALE_OR_MISMATCHED_RESULT " + key);
             return false;
         }
         priorResults.put(key, payload);
-        boolean safe = containsEvidence(result.safeEvidence, "motor_off") &&
-            containsEvidence(result.safeEvidence, "occupancy_consistent");
-        boolean service = containsEvidence(
+        boolean safe = containsAllEvidence(
+            result.safeEvidence,
+            activePolicy.safeEvidence
+        );
+        boolean service = containsAllEvidence(
             result.serviceEvidence,
-            "arrival_confirmed"
+            activePolicy.serviceEvidence
         );
         if (!"SUCCESS".equals(result.outcome) || !safe || !service ||
             result.resultingStateVersion <= activeEvent.stateVersion) {
-            fail("INVALID_RECOVERY_EVIDENCE " + key);
+            failRecovery("INVALID_RECOVERY_EVIDENCE " + key);
             return false;
         }
         latestStateVersion = result.resultingStateVersion;
         state = State.RECOVERY_READY;
         decision = "VERIFIED_READY_AWAIT_M1";
+        latestEvidence = result.safeEvidence + ";" +
+            result.serviceEvidence;
+        verifiedRecoveries++;
+        pendingRecoveryReady = recoveryReady(result.resultingStateVersion);
         record("RECOVERY_READY " + key);
+        return true;
+    }
+
+    public synchronized boolean recordManualEvidence(
+        ManualReconciliationEvidenceV2_1 evidence
+    ) {
+        if (evidence == null || activeEvent == null ||
+            (state != State.LOCKED_OUT &&
+                state != State.MANUAL_RECOVERY) ||
+            !activeEvent.eventId.equals(evidence.eventId) ||
+            !activeEvent.sourceEpoch.equals(evidence.sourceEpoch) ||
+            !activeEvent.subsystem.equals(evidence.subsystem) ||
+            !activeEvent.bottleId.equals(evidence.bottleId) ||
+            activeEvent.stateVersion != evidence.stateVersion) {
+            reject("INVALID_MANUAL_EVIDENCE");
+            return false;
+        }
+        manualEvidenceRecorded = true;
+        latestEvidence = "MANUAL " + evidence.evidenceCode + " by " +
+            evidence.operatorId;
+        decision = "AWAIT_NEWER_CONTROLLER_EVIDENCE";
+        record("MANUAL_EVIDENCE " + evidence.eventId + " " +
+            evidence.evidenceCode + " operator=" + evidence.operatorId);
+        return true;
+    }
+
+    public synchronized boolean confirmManualControllerEvidence(
+        String eventId,
+        String sourceEpoch,
+        String safeEvidence,
+        String serviceEvidence,
+        long resultingStateVersion
+    ) {
+        if (!manualEvidenceRecorded || activeEvent == null ||
+            state != State.LOCKED_OUT ||
+            !activeEvent.eventId.equals(eventId) ||
+            !activeEvent.sourceEpoch.equals(sourceEpoch) ||
+            resultingStateVersion <= activeEvent.stateVersion ||
+            !containsAllEvidence(safeEvidence, activePolicy.safeEvidence) ||
+            !containsAllEvidence(serviceEvidence,
+                activePolicy.serviceEvidence)) {
+            reject("INVALID_MANUAL_CONTROLLER_EVIDENCE");
+            return false;
+        }
+        latestStateVersion = resultingStateVersion;
+        state = State.RECOVERY_READY;
+        decision = "VERIFIED_READY_AWAIT_M1";
+        latestEvidence = safeEvidence + ";" + serviceEvidence;
+        verifiedRecoveries++;
+        pendingRecoveryReady = recoveryReady(resultingStateVersion);
+        record("MANUAL_RECOVERY_READY " + eventId);
+        return true;
+    }
+
+    public synchronized boolean confirmResourceRestored(
+        String eventId,
+        boolean lidAvailable,
+        long resultingStateVersion
+    ) {
+        if (state != State.RESOURCE_WAIT || activeEvent == null ||
+            !activeEvent.eventId.equals(eventId) || !lidAvailable ||
+            resultingStateVersion <= activeEvent.stateVersion) {
+            reject("INVALID_RESOURCE_EVIDENCE");
+            return false;
+        }
+        latestStateVersion = resultingStateVersion;
+        state = State.RECOVERY_READY;
+        decision = "RESOURCE_RESTORED_AWAIT_M1";
+        latestEvidence = "lid_available";
+        verifiedRecoveries++;
+        pendingRecoveryReady = recoveryReady(resultingStateVersion);
+        record("RESOURCE_READY " + eventId);
+        return true;
+    }
+
+    public synchronized boolean onResumeDecision(String payload) {
+        String[] fields;
+        try {
+            fields = coordinationFields(payload, 6);
+        }
+        catch (IllegalArgumentException exception) {
+            reject("INVALID_RESUME_DECISION " + exception.getMessage());
+            return false;
+        }
+        if (activeEvent == null ||
+            !activeEvent.eventId.equals(fields[1]) ||
+            !activeEvent.sourceEpoch.equals(fields[2]) ||
+            unsignedLong(fields[5]) != latestStateVersion) {
+            reject("STALE_OR_MISMATCHED_RESUME_DECISION");
+            return false;
+        }
+        if ("HOLD".equals(fields[3])) {
+            decision = "M1_HOLD " + fields[4];
+            record(decision);
+            return true;
+        }
+        if (!"RESUME".equals(fields[3]) || state != State.RECOVERY_READY) {
+            reject("UNSAFE_RESUME_DECISION");
+            return false;
+        }
+        record("M1_RESUME " + fields[4]);
+        clearActiveRecovery();
         return true;
     }
 
     public synchronized void reportAckTimeout() {
         if (state == State.WAITING_ACK) {
-            fail("ACK_TIMEOUT_NO_RESEND");
+            failRecovery("ACK_TIMEOUT_NO_RESEND");
         }
     }
 
     public synchronized void reportResultTimeout() {
         if (state == State.WAITING_RESULT) {
-            fail("RESULT_TIMEOUT");
+            failRecovery("RESULT_TIMEOUT");
         }
     }
 
@@ -251,7 +458,7 @@ public final class FaultSupervisorModelV2_1 {
             record("LOCAL_RESET_REJECTED ROTARY " + eventId);
             return false;
         }
-        localDecisions.put("ROTARY", "RESET_AUTHORIZED_AFTER_RECONCILIATION");
+        localDecisions.put("ROTARY", "RESET_AFTER_MANUAL_RECONCILIATION");
         record("LOCAL_RESET_AUTHORIZED ROTARY " + eventId);
         return true;
     }
@@ -278,7 +485,7 @@ public final class FaultSupervisorModelV2_1 {
             localDecisions.put("LID", "ONE_PICK_RETRY_AUTHORIZED");
         }
         else {
-            localDecisions.put("LID", "RESET_AUTHORIZED_AFTER_EVIDENCE");
+            localDecisions.put("LID", "RESET_AFTER_EVIDENCE");
         }
         record("LOCAL_RESET_AUTHORIZED LID " + eventId);
         return true;
@@ -296,14 +503,33 @@ public final class FaultSupervisorModelV2_1 {
         record("LOCAL_FAULT_RESOLVED " + subsystem + " " + eventId);
     }
 
-    public synchronized String getLocalSummary() {
-        return "ROTARY=" + localDecision("ROTARY") + "; LID=" +
-            localDecision("LID");
+    public synchronized String takeRecoveryRequest() {
+        String result = pendingRecoveryRequest;
+        pendingRecoveryRequest = null;
+        return result;
     }
 
-    public synchronized String takeRecoveryRequest() {
-        String result = pendingRequest;
-        pendingRequest = null;
+    public synchronized String takeFaultAlert() {
+        String result = pendingFaultAlert;
+        pendingFaultAlert = null;
+        return result;
+    }
+
+    public synchronized String takeSafeStopRequest() {
+        String result = pendingSafeStopRequest;
+        pendingSafeStopRequest = null;
+        return result;
+    }
+
+    public synchronized String takeRecoveryReady() {
+        String result = pendingRecoveryReady;
+        pendingRecoveryReady = null;
+        return result;
+    }
+
+    public synchronized String takeRecoveryFailed() {
+        String result = pendingRecoveryFailed;
+        pendingRecoveryFailed = null;
         return result;
     }
 
@@ -319,12 +545,68 @@ public final class FaultSupervisorModelV2_1 {
         return activeEvent == null ? "-" : activeEvent.eventId;
     }
 
+    public synchronized String getActiveEpoch() {
+        return activeEvent == null ? "-" : activeEvent.sourceEpoch;
+    }
+
+    public synchronized String getActiveSubsystem() {
+        return activeEvent == null ? "-" : activeEvent.subsystem;
+    }
+
+    public synchronized String getActiveFaultCode() {
+        return activeEvent == null ? "-" : activeEvent.faultCode;
+    }
+
+    public synchronized String getActiveSeverity() {
+        return activeEvent == null ? "-" : activeEvent.severity;
+    }
+
+    public synchronized String getActiveBottleId() {
+        return activeEvent == null ? "-" : activeEvent.bottleId;
+    }
+
+    public synchronized long getActiveStateVersion() {
+        return activeEvent == null ? -1 : activeEvent.stateVersion;
+    }
+
+    public synchronized int getActiveAttempt() {
+        return activeAttempt;
+    }
+
+    public synchronized String getPolicySummary() {
+        return activePolicy == null ? "NONE" : activePolicy.summary();
+    }
+
+    public synchronized String getRequiredSafeEvidence() {
+        return activePolicy == null ? "-" : activePolicy.safeEvidence;
+    }
+
+    public synchronized String getRequiredServiceEvidence() {
+        return activePolicy == null ? "-" : activePolicy.serviceEvidence;
+    }
+
+    public synchronized String getLatestEvidence() {
+        return latestEvidence;
+    }
+
+    public synchronized String getLocalSummary() {
+        return "ROTARY=" + localDecision("ROTARY") + "; LID=" +
+            localDecision("LID");
+    }
+
     public synchronized String[] historySnapshot() {
         return history.toArray(new String[history.size()]);
     }
 
+    public synchronized FaultSupervisorMetricsV2_1 metricsSnapshot() {
+        return new FaultSupervisorMetricsV2_1(
+            validEvents, rejectedMessages, duplicateMessages,
+            automaticAttempts, verifiedRecoveries, resourceWaits,
+            manualEscalations, recoveryFailures, 0
+        );
+    }
+
     public synchronized void reset() {
-        priorRequests.clear();
         priorEvents.clear();
         priorAcks.clear();
         priorResults.clear();
@@ -334,15 +616,44 @@ public final class FaultSupervisorModelV2_1 {
         history.clear();
         activeEpoch = null;
         latestStateVersion = -1;
-        activeEvent = null;
-        state = State.IDLE;
-        pendingRequest = null;
-        decision = "IDLE";
+        validEvents = 0;
+        rejectedMessages = 0;
+        duplicateMessages = 0;
+        automaticAttempts = 0;
+        verifiedRecoveries = 0;
+        resourceWaits = 0;
+        manualEscalations = 0;
+        recoveryFailures = 0;
+        traceSequence = 0;
+        clearActiveRecovery();
+        clearOutputs();
+    }
+
+    private void issueRecoveryRequest() {
+        if (activePolicy == null || activePolicy.maxAttempts != 1 ||
+            activeAttempt >= activePolicy.maxAttempts) {
+            failRecovery("ATTEMPT_LIMIT_REACHED");
+            return;
+        }
+        activeAttempt++;
+        String request = FaultProtocolV2_1.recoveryRequest(
+            activeEvent,
+            activePolicy.action,
+            activeAttempt
+        );
+        if ("TRANSFER".equals(activeEvent.subsystem)) {
+            pendingRecoveryRequest = request;
+        }
+        automaticAttempts++;
+        state = State.WAITING_ACK;
+        decision = activePolicy.action + "_ATTEMPT_" + activeAttempt;
+        record("REQUEST " + request);
     }
 
     private boolean matchesActive(String eventId, String epoch, int attempt) {
         return activeEvent != null && activeEvent.eventId.equals(eventId) &&
-            activeEvent.sourceEpoch.equals(epoch) && attempt == 1;
+            activeEvent.sourceEpoch.equals(epoch) &&
+            attempt == activeAttempt && attempt > 0;
     }
 
     private String eventKey(String epoch, String eventId) {
@@ -350,9 +661,8 @@ public final class FaultSupervisorModelV2_1 {
     }
 
     private boolean hasActiveRecovery() {
-        return state == State.WAITING_SAFE_STOP ||
-            state == State.WAITING_ACK || state == State.WAITING_RESULT ||
-            state == State.RECOVERY_READY || state == State.MANUAL_RECOVERY;
+        return activeEvent != null && state != State.IDLE &&
+            state != State.FAILED;
     }
 
     private boolean sameLocalEvent(String subsystem, String eventId) {
@@ -370,6 +680,16 @@ public final class FaultSupervisorModelV2_1 {
         return value == null ? "READY" : value;
     }
 
+    private boolean containsAllEvidence(String actual, String required) {
+        String[] requiredTokens = required.split("\\+", -1);
+        for (String token : requiredTokens) {
+            if (!containsEvidence(actual, token)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     private boolean containsEvidence(String evidence, String token) {
         String[] values = evidence.split("\\+", -1);
         for (String value : values) {
@@ -380,23 +700,96 @@ public final class FaultSupervisorModelV2_1 {
         return false;
     }
 
-    private void fail(String reason) {
-        state = State.FAILED;
+    private void reject(String reason) {
+        rejectedMessages++;
+        record("REJECTED " + reason);
+    }
+
+    private void failRecovery(String reason) {
+        state = State.LOCKED_OUT;
         decision = reason;
-        pendingRequest = null;
-        record("FAILED " + reason);
+        pendingRecoveryRequest = null;
+        recoveryFailures++;
+        queueRecoveryFailed(reason);
+        record("RECOVERY_FAILED " + reason);
+    }
+
+    private void queueRecoveryFailed(String reason) {
+        if (activeEvent == null) {
+            return;
+        }
+        pendingRecoveryFailed = recoveryFailed(activeEvent, reason);
+    }
+
+    private String recoveryFailed(
+        FaultProtocolV2_1.FaultEvent event,
+        String reason
+    ) {
+        return "V2|" + event.eventId + "|" + event.sourceEpoch +
+            "|RECOVERY_FAILED|" + safeToken(reason) + "|" +
+            event.stateVersion;
+    }
+
+    private String safeStopRequest(FaultProtocolV2_1.FaultEvent event) {
+        return "V2|" + event.eventId + "|" + event.sourceEpoch +
+            "|SAFE_STOP|" + event.stateVersion;
+    }
+
+    private String recoveryReady(long stateVersion) {
+        return "V2|" + activeEvent.eventId + "|" +
+            activeEvent.sourceEpoch + "|RECOVERY_READY|" + stateVersion;
+    }
+
+    private String[] coordinationFields(String payload, int expected) {
+        if (payload == null) {
+            throw new IllegalArgumentException("payload is required");
+        }
+        String[] fields = payload.split("\\|", -1);
+        if (fields.length != expected || !"V2".equals(fields[0])) {
+            throw new IllegalArgumentException("invalid V2 coordination payload");
+        }
+        for (int index = 1; index < fields.length; index++) {
+            if (fields[index].isEmpty() ||
+                !fields[index].equals(fields[index].trim())) {
+                throw new IllegalArgumentException("empty coordination field");
+            }
+        }
+        return fields;
+    }
+
+    private long unsignedLong(String value) {
+        if (!value.matches("0|[1-9][0-9]*")) {
+            throw new IllegalArgumentException("version must be unsigned");
+        }
+        return Long.parseLong(value);
+    }
+
+    private String safeToken(String value) {
+        return value.replace('|', '_').replace(' ', '_');
     }
 
     private void clearActiveRecovery() {
         activeEvent = null;
-        pendingRequest = null;
+        activePolicy = null;
+        activeAttempt = 0;
+        manualEvidenceRecorded = false;
         state = State.IDLE;
         decision = "IDLE";
+        latestEvidence = "NONE";
+        pendingRecoveryRequest = null;
+    }
+
+    private void clearOutputs() {
+        pendingFaultAlert = null;
+        pendingSafeStopRequest = null;
+        pendingRecoveryReady = null;
+        pendingRecoveryFailed = null;
     }
 
     private void record(String entry) {
-        history.add(System.currentTimeMillis() + " " + entry);
-        if (history.size() > 200) {
+        traceSequence++;
+        history.add(String.format("%04d %s", traceSequence, entry));
+        if (history.size() > 300) {
             history.remove(0);
         }
     }

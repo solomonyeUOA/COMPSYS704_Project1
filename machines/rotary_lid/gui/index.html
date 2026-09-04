@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>M3 Fault-Tolerance Supervisor</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body class="running">
+  <header class="topbar">
+    <div>
+      <p class="eyebrow">COMPSYS 704 / MEMBER 3 IP</p>
+      <h1>Fault-Tolerance Supervisor</h1>
+    </div>
+    <div class="header-status">
+      <span id="mode" class="mode">TEST MODE</span>
+      <span id="state-pill" class="state-pill state-idle">IDLE</span>
+    </div>
+  </header>
+
+  <main>
+    <section class="plant-section" aria-labelledby="plant-title">
+      <div class="section-heading">
+        <div>
+          <p class="section-kicker">LIVE PRODUCTION FLOW</p>
+          <h2 id="plant-title">Automated bottling line</h2>
+        </div>
+        <div id="line-message" class="line-message healthy">
+          <span class="live-dot"></span>
+          <span>Line running normally</span>
+        </div>
+      </div>
+
+      <div class="plant-scroll">
+        <div id="plant" class="plant">
+          <article class="machine" data-stage="0">
+            <span class="station-number">P1</span>
+            <div class="machine-visual loader-visual"><i></i><i></i><i></i></div>
+            <strong>Bottle Loader</strong><small>Load empty bottle</small>
+            <span class="fault-marker">BLOCKED HERE</span>
+          </article>
+          <span class="flow-arrow">&gt;</span>
+          <article class="machine" data-stage="1">
+            <span class="station-number">P1-P2</span>
+            <div class="machine-visual conveyor-visual"><i></i><i></i><i></i></div>
+            <strong>Conveyor</strong><small>Transfer bottle</small>
+            <span class="fault-marker">BLOCKED HERE</span>
+          </article>
+          <span class="flow-arrow">&gt;</span>
+          <article class="machine" data-stage="2">
+            <span class="station-number">P2</span>
+            <div class="machine-visual rotary-visual"><i></i></div>
+            <strong>Rotary Table</strong><small>Index 60 degrees</small>
+            <span class="fault-marker">BLOCKED HERE</span>
+          </article>
+          <span class="flow-arrow">&gt;</span>
+          <article class="machine" data-stage="3">
+            <span class="station-number">P3</span>
+            <div class="machine-visual filler-visual blue-liquid"><i></i></div>
+            <strong>Filler A</strong><small>Dose liquid A</small>
+            <span class="fault-marker">BLOCKED HERE</span>
+          </article>
+          <span class="flow-arrow">&gt;</span>
+          <article class="machine" data-stage="4">
+            <span class="station-number">P4</span>
+            <div class="machine-visual filler-visual violet-liquid"><i></i></div>
+            <strong>Filler B</strong><small>Dose liquid B</small>
+            <span class="fault-marker">BLOCKED HERE</span>
+          </article>
+          <span class="flow-arrow">&gt;</span>
+          <article class="machine" data-stage="5">
+            <span class="station-number">P5</span>
+            <div class="machine-visual lid-visual"><i></i></div>
+            <strong>Lid Loader</strong><small>Pick and place lid</small>
+            <span class="fault-marker">BLOCKED HERE</span>
+          </article>
+          <span class="flow-arrow">&gt;</span>
+          <article class="machine" data-stage="6">
+            <span class="station-number">P5</span>
+            <div class="machine-visual capper-visual"><i></i></div>
+            <strong>Capper</strong><small>Tighten lid</small>
+            <span class="fault-marker">BLOCKED HERE</span>
+          </article>
+          <span class="flow-arrow">&gt;</span>
+          <article class="machine" data-stage="7">
+            <span class="station-number">P6</span>
+            <div class="machine-visual unloader-visual"><i></i></div>
+            <strong>Unloader</strong><small>Remove finished bottle</small>
+            <span class="fault-marker">BLOCKED HERE</span>
+          </article>
+
+          <div class="belt" aria-hidden="true">
+            <span class="moving-bottle bottle-one"></span>
+            <span class="moving-bottle bottle-two"></span>
+            <span class="moving-bottle bottle-three"></span>
+            <span id="blocked-bottle" class="blocked-bottle"></span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="recovery-section" aria-labelledby="recovery-title">
+      <div class="section-heading compact">
+        <div>
+          <p class="section-kicker">RECOVERY CONTROL</p>
+          <h2 id="recovery-title">Where the recovery is waiting</h2>
+        </div>
+        <p id="next-action" class="next-action">Waiting for a fault event</p>
+      </div>
+      <ol id="recovery-flow" class="recovery-flow">
+        <li data-step="0"><span>1</span><strong>Detect</strong><small>Classify fault</small></li>
+        <li data-step="1"><span>2</span><strong>Safe stop</strong><small>M1 confirms stop</small></li>
+        <li data-step="2"><span>3</span><strong>Recover</strong><small>Retry or reconcile</small></li>
+        <li data-step="3"><span>4</span><strong>Verify</strong><small>Check new evidence</small></li>
+        <li data-step="4"><span>5</span><strong>Resume</strong><small>M1 makes decision</small></li>
+      </ol>
+    </section>
+
+    <div class="workspace">
+      <section class="incident-panel">
+        <p class="section-kicker">ACTIVE INCIDENT</p>
+        <div class="incident-title">
+          <div>
+            <h2 id="fault-name">No active fault</h2>
+            <p id="incident-context">The supervisor is monitoring all three subsystems.</p>
+          </div>
+          <span id="severity" class="severity neutral">NORMAL</span>
+        </div>
+        <dl class="facts">
+          <div><dt>Decision</dt><dd id="decision">IDLE</dd></div>
+          <div><dt>Recovery policy</dt><dd id="policy">No action required</dd></div>
+          <div><dt>Validated evidence</dt><dd id="evidence">None</dd></div>
+          <div><dt>Attempt</dt><dd id="attempt">0 / 1</dd></div>
+        </dl>
+        <div id="action-area" class="action-area">
+          <p>Required action</p>
+          <button data-action="safe-stop">Confirm safe stop as M1</button>
+          <button data-action="manual-evidence">Record manual reconciliation</button>
+          <button data-action="controller-evidence">Submit controller evidence</button>
+          <button data-action="resume">Approve resume as M1</button>
+          <button data-action="reset" class="secondary">Reset scenario</button>
+          <span id="action-result" role="status"></span>
+        </div>
+      </section>
+
+      <section id="fault-lab" class="fault-lab">
+        <div class="section-heading compact">
+          <div><p class="section-kicker">TEST MODE</p><h2>Inject a fault</h2></div>
+          <small>Available only in the IP demonstration</small>
+        </div>
+        <div class="fault-groups">
+          <div><h3>Rotary table</h3>
+            <button data-fault="ALIGNMENT_TIMEOUT"><span class="warning-dot"></span>Alignment timeout</button>
+            <button data-fault="MOTOR_STALL"><span class="critical-dot"></span>Motor stall</button>
+            <button data-fault="POSITION_SENSOR_FAILURE"><span class="critical-dot"></span>Sensor failure</button>
+          </div>
+          <div><h3>Lid handling</h3>
+            <button data-fault="MAGAZINE_EMPTY"><span class="resource-dot"></span>Magazine empty</button>
+            <button data-fault="PICK_TIMEOUT"><span class="warning-dot"></span>Pick timeout</button>
+            <button data-fault="PLACEMENT_TIMEOUT"><span class="critical-dot"></span>Placement timeout</button>
+          </div>
+          <div><h3>Bottle transfer</h3>
+            <button data-fault="ARRIVAL_TIMEOUT"><span class="warning-dot"></span>Arrival timeout</button>
+            <button data-fault="DEPARTURE_TIMEOUT"><span class="critical-dot"></span>Departure timeout</button>
+            <button data-fault="POSITION_CONFLICT"><span class="critical-dot"></span>Position conflict</button>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <section class="trace-section">
+      <div class="section-heading compact">
+        <div><p class="section-kicker">AUDIT EVIDENCE</p><h2>Protocol event trace</h2></div>
+        <div class="metrics" id="metrics">events=0 / unsafeOutputs=0</div>
+      </div>
+      <ol id="trace" class="trace"><li class="empty">No events recorded</li></ol>
+    </section>
+  </main>
+
+  <footer>GP Controllers retain actuator authority. M1 retains global safe-stop and resume authority.</footer>
+  <script src="/app.js"></script>
+</body>
+</html>
