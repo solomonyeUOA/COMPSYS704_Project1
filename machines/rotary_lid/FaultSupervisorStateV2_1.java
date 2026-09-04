@@ -10,6 +10,10 @@ public final class FaultSupervisorStateV2_1 {
         return MODEL.onTransferFault(payload);
     }
 
+    public static boolean onFaultEvent(String payload) {
+        return MODEL.onFaultEvent(payload);
+    }
+
     public static boolean onRecoveryAck(String payload) {
         return MODEL.onRecoveryAck(payload);
     }
@@ -18,8 +22,32 @@ public final class FaultSupervisorStateV2_1 {
         return MODEL.onRecoveryResult(payload);
     }
 
+    public static boolean onSafeStopAck(String payload) {
+        return MODEL.onSafeStopAck(payload);
+    }
+
+    public static boolean onResumeDecision(String payload) {
+        return MODEL.onResumeDecision(payload);
+    }
+
     public static String takeRecoveryRequest() {
         return MODEL.takeRecoveryRequest();
+    }
+
+    public static String takeFaultAlert() {
+        return MODEL.takeFaultAlert();
+    }
+
+    public static String takeSafeStopRequest() {
+        return MODEL.takeSafeStopRequest();
+    }
+
+    public static String takeRecoveryReady() {
+        return MODEL.takeRecoveryReady();
+    }
+
+    public static String takeRecoveryFailed() {
+        return MODEL.takeRecoveryFailed();
     }
 
     public static void observeRotaryFault(String eventId, String reason) {
@@ -64,12 +92,94 @@ public final class FaultSupervisorStateV2_1 {
         return MODEL.getActiveEventId();
     }
 
+    public static String activeEpoch() {
+        return MODEL.getActiveEpoch();
+    }
+
+    public static String activeSubsystem() {
+        return MODEL.getActiveSubsystem();
+    }
+
+    public static String activeFaultCode() {
+        return MODEL.getActiveFaultCode();
+    }
+
+    public static String activeSeverity() {
+        return MODEL.getActiveSeverity();
+    }
+
+    public static String activeBottleId() {
+        return MODEL.getActiveBottleId();
+    }
+
+    public static long activeStateVersion() {
+        return MODEL.getActiveStateVersion();
+    }
+
+    public static int activeAttempt() {
+        return MODEL.getActiveAttempt();
+    }
+
+    public static String policySummary() {
+        return MODEL.getPolicySummary();
+    }
+
+    public static String requiredSafeEvidence() {
+        return MODEL.getRequiredSafeEvidence();
+    }
+
+    public static String requiredServiceEvidence() {
+        return MODEL.getRequiredServiceEvidence();
+    }
+
+    public static String latestEvidence() {
+        return MODEL.getLatestEvidence();
+    }
+
     public static String localSummary() {
         return MODEL.getLocalSummary();
     }
 
     public static String[] historySnapshot() {
         return MODEL.historySnapshot();
+    }
+
+    public static FaultSupervisorMetricsV2_1 metricsSnapshot() {
+        return MODEL.metricsSnapshot();
+    }
+
+    public static boolean recordManualEvidence(
+        ManualReconciliationEvidenceV2_1 evidence
+    ) {
+        return MODEL.recordManualEvidence(evidence);
+    }
+
+    public static boolean confirmManualControllerEvidence(
+        String eventId,
+        String sourceEpoch,
+        String safeEvidence,
+        String serviceEvidence,
+        long resultingStateVersion
+    ) {
+        return MODEL.confirmManualControllerEvidence(
+            eventId,
+            sourceEpoch,
+            safeEvidence,
+            serviceEvidence,
+            resultingStateVersion
+        );
+    }
+
+    public static boolean confirmResourceRestored(
+        String eventId,
+        boolean lidAvailable,
+        long resultingStateVersion
+    ) {
+        return MODEL.confirmResourceRestored(
+            eventId,
+            lidAvailable,
+            resultingStateVersion
+        );
     }
 
     public static void reset() {

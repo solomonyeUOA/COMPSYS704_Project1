@@ -9,6 +9,7 @@ public final class Member3PlantSelfTest {
         testIdentityAndP6Interlocks();
         testRotaryAlignmentFault();
         testLidPlantSequence();
+        testBoundedSignalWindows();
         System.out.println("Member3PlantSelfTest PASSED");
     }
 
@@ -109,6 +110,40 @@ public final class Member3PlantSelfTest {
         lid.tick(600);
         require(lid.isLidPlacedSensorActive(600), "placement sensor activates");
         require(lid.getMagazineCount() == 4, "one lid is consumed");
+    }
+
+    private static void testBoundedSignalWindows() {
+        BoundedSignalOfferV1 offer = new BoundedSignalOfferV1(3, 500, 100);
+        require(offer.arm("B900", "B900|S|200|GEOM_S|PACK_S", 0),
+            "offer is armed with stable bottle context");
+        require(offer.nextReactionValue(0) != null,
+            "first PRESENT window is emitted");
+        require(offer.nextReactionValue(499) != null,
+            "first payload remains PRESENT for its bounded window");
+        require(offer.nextReactionValue(500) == null,
+            "first PRESENT is followed by an ABSENT reaction");
+        require(offer.nextReactionValue(599) == null,
+            "the configured ABSENT gap is retained");
+        require(offer.nextReactionValue(600) != null,
+            "second bounded copy is emitted");
+        require(offer.nextReactionValue(1100) == null,
+            "second PRESENT is followed by an ABSENT reaction");
+        require(offer.nextReactionValue(1200) != null,
+            "third bounded copy is emitted");
+        require(offer.nextReactionValue(1700) == null,
+            "third PRESENT is followed by an ABSENT reaction");
+        require(offer.nextReactionValue(1800) == null && !offer.isActive(),
+            "no fourth copy is emitted");
+
+        require(offer.arm("B901", "B901", 2000), "second offer is armed");
+        require(offer.nextReactionValue(2000) != null,
+            "second offer emits its first window");
+        require(!offer.acknowledge("WRONG"),
+            "wrong-bottle completion cannot clear the offer");
+        require(offer.acknowledge("B901"),
+            "matching completion clears remaining retry copies");
+        require(offer.nextReactionValue(2001) == null,
+            "acknowledged offer emits no further copy");
     }
 
     private static void rotate(

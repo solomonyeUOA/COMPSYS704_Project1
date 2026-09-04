@@ -4,6 +4,10 @@ public final class Member3PlantStateV1 {
         new RotaryTablePlantModelV1();
     private static LidLoaderPlantModelV1 lid =
         new LidLoaderPlantModelV1();
+    private static BoundedSignalOfferV1 fillOffer =
+        new BoundedSignalOfferV1(3);
+    private static BoundedSignalOfferV1 labelOffer =
+        new BoundedSignalOfferV1(3);
 
     private Member3PlantStateV1() {
     }
@@ -11,6 +15,8 @@ public final class Member3PlantStateV1 {
     public static synchronized void reset() {
         rotary = new RotaryTablePlantModelV1();
         lid = new LidLoaderPlantModelV1();
+        fillOffer = new BoundedSignalOfferV1(3);
+        labelOffer = new BoundedSignalOfferV1(3);
     }
 
     public static synchronized boolean loadBottle(String id) {
@@ -37,7 +43,11 @@ public final class Member3PlantStateV1 {
     }
 
     public static synchronized boolean markFilled(String bottleId) {
-        return rotary.markFilled(bottleId);
+        boolean accepted = rotary.markFilled(bottleId);
+        if (accepted) {
+            fillOffer.acknowledge(bottleId);
+        }
+        return accepted;
     }
 
     public static synchronized boolean markLidPlaced(String bottleId) {
@@ -49,7 +59,11 @@ public final class Member3PlantStateV1 {
     }
 
     public static synchronized boolean markLabelled(String bottleId) {
-        return rotary.markLabelled(bottleId);
+        boolean accepted = rotary.markLabelled(bottleId);
+        if (accepted) {
+            labelOffer.acknowledge(bottleId);
+        }
+        return accepted;
     }
 
     public static synchronized boolean clearP6(String bottleId) {
@@ -76,12 +90,32 @@ public final class Member3PlantStateV1 {
         return rotary.takeFillOffer();
     }
 
+    public static synchronized String nextFillOfferWindow() {
+        if (!fillOffer.isActive()) {
+            String payload = rotary.takeFillOffer();
+            if (payload != null) {
+                fillOffer.arm(payload.split("\\|", -1)[0], payload);
+            }
+        }
+        return fillOffer.nextReactionValue();
+    }
+
     public static synchronized String takeCapOffer() {
         return rotary.takeCapOffer();
     }
 
     public static synchronized String takeLabelOffer() {
         return rotary.takeLabelOffer();
+    }
+
+    public static synchronized String nextLabelOfferWindow() {
+        if (!labelOffer.isActive()) {
+            String payload = rotary.takeLabelOffer();
+            if (payload != null) {
+                labelOffer.arm(payload, payload);
+            }
+        }
+        return labelOffer.nextReactionValue();
     }
 
     public static synchronized String rotarySnapshot() {

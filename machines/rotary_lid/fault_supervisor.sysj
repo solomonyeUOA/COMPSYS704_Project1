@@ -34,22 +34,55 @@ FaultSupervisor(
             );
         }
 
-        // M1 payload fields are not frozen in V2.1. Presence alone is not
-        // accepted as independent safe-stop or resume evidence.
+        // M1 messages are correlated to the active event and state version.
         present(FT_SAFE_STOP_ACK) {
-            System.out.println(
-                "FT_SAFE_STOP_ACK ignored until the M1 payload schema is frozen"
-            );
+            FaultSupervisorStateV2_1.onSafeStopAck(#FT_SAFE_STOP_ACK);
         }
         present(FT_RESUME_DECISION) {
-            System.out.println(
-                "FT_RESUME_DECISION recorded by M1; M3 cannot resume the line"
+            FaultSupervisorStateV2_1.onResumeDecision(
+                #FT_RESUME_DECISION
             );
         }
 
+        pause;
+    }}
+    ||
+    {loop {
         String request = FaultSupervisorStateV2_1.takeRecoveryRequest();
         if (request != null) {
             emit TRANSFER_RECOVERY_REQUEST(request);
+        }
+        pause;
+    }}
+    ||
+    {loop {
+        String alert = FaultSupervisorStateV2_1.takeFaultAlert();
+        if (alert != null) {
+            emit FT_FAULT_ALERT(alert);
+        }
+        pause;
+    }}
+    ||
+    {loop {
+        String safeStop = FaultSupervisorStateV2_1.takeSafeStopRequest();
+        if (safeStop != null) {
+            emit FT_SAFE_STOP_REQUEST(safeStop);
+        }
+        pause;
+    }}
+    ||
+    {loop {
+        String ready = FaultSupervisorStateV2_1.takeRecoveryReady();
+        if (ready != null) {
+            emit FT_RECOVERY_READY(ready);
+        }
+        pause;
+    }}
+    ||
+    {loop {
+        String failed = FaultSupervisorStateV2_1.takeRecoveryFailed();
+        if (failed != null) {
+            emit FT_RECOVERY_FAILED(failed);
         }
         pause;
     }}
