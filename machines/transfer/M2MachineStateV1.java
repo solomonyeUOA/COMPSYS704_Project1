@@ -10,6 +10,12 @@ public final class M2MachineStateV1 {
     private static ConveyorControllerModelV1 conveyor;
     private static LabellerControllerModelV1 labeller;
     private static BottleUnloaderControllerModelV1 unloader;
+    private static M2BoundedSignalOfferV1 bottleAtConveyorOffer;
+    private static M2BoundedSignalOfferV1 loadBottleOffer;
+    private static M2BoundedSignalOfferV1 markLabelledOffer;
+    private static M2BoundedSignalOfferV1 unloadReadyOffer;
+    private static M2BoundedSignalOfferV1 p6ClearOffer;
+    private static M2BoundedSignalOfferV1 bottleReadyForSortOffer;
     private static long eventSequence;
 
     private static final Queue<String> loaderWorkpieceUpdates =
@@ -47,6 +53,12 @@ public final class M2MachineStateV1 {
             "m2.bottleDoneHoldMillis",
             500L
         ));
+        bottleAtConveyorOffer = newHandoffOffer();
+        loadBottleOffer = newHandoffOffer();
+        markLabelledOffer = newHandoffOffer();
+        unloadReadyOffer = newHandoffOffer();
+        p6ClearOffer = newHandoffOffer();
+        bottleReadyForSortOffer = newHandoffOffer();
         eventSequence = 0;
         loaderWorkpieceUpdates.clear();
         loaderResourceUpdates.clear();
@@ -74,8 +86,11 @@ public final class M2MachineStateV1 {
     }
 
     public static synchronized boolean acceptLoadProfile(String payload) {
+        String bottleId = bottleIdFromContext(payload);
+        boolean known = bottleId != null &&
+            loader.hasAcceptedProfile(bottleId);
         boolean accepted = loader.acceptProfile(payload);
-        if (accepted) {
+        if (accepted && !known) {
             M2BottleContextV1 context = M2BottleContextV1.parse(payload);
             loaderWorkpieceUpdates.add(workpieceUpdate(
                 context.getBottleId(), "CREATED", "LOADER-1",
@@ -88,7 +103,11 @@ public final class M2MachineStateV1 {
     public static synchronized String takeLoadCommand(
         boolean entryAvailable
     ) {
-        String bottleId = loader.takeLoadCommand(entryAvailable);
+        boolean handoffClear = !bottleAtConveyorOffer.isActive() &&
+            !loadBottleOffer.isActive();
+        String bottleId = loader.takeLoadCommand(
+            entryAvailable && handoffClear
+        );
         if (bottleId != null) {
             loaderResourceUpdates.add(resourceUpdate(
                 "LOADER-1", "LOADER", bottleId, M2StatusV1.BUSY,
@@ -112,8 +131,20 @@ public final class M2MachineStateV1 {
         return accepted;
     }
 
-    public static synchronized String takeLoadedContext() {
-        return loader.takeLoadedContext();
+    public static synchronized String nextBottleAtConveyorOffer() {
+        return nextBottleAtConveyorOffer(System.currentTimeMillis());
+    }
+
+    static synchronized String nextBottleAtConveyorOffer(long nowMillis) {
+        if (!bottleAtConveyorOffer.isActive()) {
+            String payload = loader.takeLoadedContext();
+            if (payload != null) {
+                bottleAtConveyorOffer.arm(
+                    bottleIdFromContext(payload), payload, nowMillis
+                );
+            }
+        }
+        return bottleAtConveyorOffer.nextReactionValue(nowMillis);
     }
 
     public static synchronized int getConveyorStatus() {
@@ -121,17 +152,26 @@ public final class M2MachineStateV1 {
     }
 
     public static synchronized boolean isConveyorEntryAvailable() {
-        return conveyor.canAcceptBottle();
+        return conveyor.canAcceptBottle() &&
+            !bottleAtConveyorOffer.isActive() &&
+            !loadBottleOffer.isActive();
     }
 
     public static synchronized boolean offerConveyorBottle(String payload) {
+        String bottleId = bottleIdFromContext(payload);
+        boolean known = bottleId != null && conveyor.hasSeenBottle(bottleId);
+        if (!known && loadBottleOffer.isActive()) {
+            return false;
+        }
         boolean accepted = conveyor.offerBottle(payload);
         if (accepted) {
-            conveyorResourceUpdates.add(resourceUpdate(
-                "CONVEYOR-1", "CONVEYOR",
-                M2BottleContextV1.parse(payload).getBottleId(),
-                M2StatusV1.READY, "TRANSFER_READY", "-"
-            ));
+            bottleAtConveyorOffer.acknowledge(bottleId);
+            if (!known) {
+                conveyorResourceUpdates.add(resourceUpdate(
+                    "CONVEYOR-1", "CONVEYOR", bottleId,
+                    M2StatusV1.READY, "TRANSFER_READY", "-"
+                ));
+            }
         }
         return accepted;
     }
@@ -195,8 +235,18 @@ public final class M2MachineStateV1 {
         return conveyor.acceptRecoveryRequest(payload, nowMillis);
     }
 
-    public static synchronized String takeLoadBottle() {
-        return conveyor.takeLoadBottle();
+    public static synchronized String nextLoadBottleOffer() {
+        return nextLoadBottleOffer(System.currentTimeMillis());
+    }
+
+    static synchronized String nextLoadBottleOffer(long nowMillis) {
+        if (!loadBottleOffer.isActive()) {
+            String bottleId = conveyor.takeLoadBottle();
+            if (bottleId != null) {
+                loadBottleOffer.arm(bottleId, bottleId, nowMillis);
+            }
+        }
+        return loadBottleOffer.nextReactionValue(nowMillis);
     }
 
     public static synchronized String takeConveyorRecoveryEvidence() {
@@ -208,8 +258,9 @@ public final class M2MachineStateV1 {
     }
 
     public static synchronized boolean offerBottleAtLabel(String bottleId) {
+        boolean known = labeller.hasSeenBottle(bottleId);
         boolean accepted = labeller.offerBottle(bottleId);
-        if (accepted) {
+        if (accepted && !known) {
             labellerWorkpieceUpdates.add(workpieceUpdate(
                 bottleId, "P6", "LABELLER-1", "-"
             ));
@@ -250,12 +301,32 @@ public final class M2MachineStateV1 {
         return accepted;
     }
 
-    public static synchronized String takeMarkLabelled() {
-        return labeller.takeMarkLabelled();
+    public static synchronized String nextMarkLabelledOffer() {
+        return nextMarkLabelledOffer(System.currentTimeMillis());
     }
 
-    public static synchronized String takeUnloadReady() {
-        return labeller.takeUnloadReady();
+    static synchronized String nextMarkLabelledOffer(long nowMillis) {
+        if (!markLabelledOffer.isActive()) {
+            String bottleId = labeller.takeMarkLabelled();
+            if (bottleId != null) {
+                markLabelledOffer.arm(bottleId, bottleId, nowMillis);
+            }
+        }
+        return markLabelledOffer.nextReactionValue(nowMillis);
+    }
+
+    public static synchronized String nextUnloadReadyOffer() {
+        return nextUnloadReadyOffer(System.currentTimeMillis());
+    }
+
+    static synchronized String nextUnloadReadyOffer(long nowMillis) {
+        if (!unloadReadyOffer.isActive()) {
+            String bottleId = labeller.takeUnloadReady();
+            if (bottleId != null) {
+                unloadReadyOffer.arm(bottleId, bottleId, nowMillis);
+            }
+        }
+        return unloadReadyOffer.nextReactionValue(nowMillis);
     }
 
     public static synchronized boolean resetLabellerFault(
@@ -284,10 +355,18 @@ public final class M2MachineStateV1 {
     }
 
     public static synchronized boolean acceptUnloadReady(String bottleId) {
-        return unloader.acceptUnloadReady(bottleId);
+        boolean accepted = unloader.acceptUnloadReady(bottleId);
+        if (accepted) {
+            unloadReadyOffer.acknowledge(bottleId);
+        }
+        return accepted;
     }
 
     public static synchronized String takeUnloadCommand() {
+        if (p6ClearOffer.isActive() ||
+            bottleReadyForSortOffer.isActive()) {
+            return null;
+        }
         String bottleId = unloader.takeUnloadCommand();
         if (bottleId != null) {
             unloaderResourceUpdates.add(resourceUpdate(
@@ -322,12 +401,34 @@ public final class M2MachineStateV1 {
         return accepted;
     }
 
-    public static synchronized String takeP6Clear() {
-        return unloader.takeP6Clear();
+    public static synchronized String nextP6ClearOffer() {
+        return nextP6ClearOffer(System.currentTimeMillis());
     }
 
-    public static synchronized String takeSortContext() {
-        return unloader.takeSortContext();
+    static synchronized String nextP6ClearOffer(long nowMillis) {
+        if (!p6ClearOffer.isActive()) {
+            String bottleId = unloader.takeP6Clear();
+            if (bottleId != null) {
+                p6ClearOffer.arm(bottleId, bottleId, nowMillis);
+            }
+        }
+        return p6ClearOffer.nextReactionValue(nowMillis);
+    }
+
+    public static synchronized String nextBottleReadyForSortOffer() {
+        return nextBottleReadyForSortOffer(System.currentTimeMillis());
+    }
+
+    static synchronized String nextBottleReadyForSortOffer(long nowMillis) {
+        if (!bottleReadyForSortOffer.isActive()) {
+            String payload = unloader.takeSortContext();
+            if (payload != null) {
+                bottleReadyForSortOffer.arm(
+                    bottleIdFromContext(payload), payload, nowMillis
+                );
+            }
+        }
+        return bottleReadyForSortOffer.nextReactionValue(nowMillis);
     }
 
     public static synchronized boolean isBottleDonePresent(long nowMillis) {
@@ -410,5 +511,34 @@ public final class M2MachineStateV1 {
             return fallback;
         }
         return Long.parseLong(value);
+    }
+
+    private static int intProperty(String name, int fallback) {
+        String value = System.getProperty(name);
+        if (value == null || !value.matches("[1-9][0-9]*")) {
+            return fallback;
+        }
+        try {
+            return Integer.parseInt(value);
+        }
+        catch (NumberFormatException exception) {
+            return fallback;
+        }
+    }
+
+    private static M2BoundedSignalOfferV1 newHandoffOffer() {
+        return new M2BoundedSignalOfferV1(
+            intProperty("m2.handoff.maximumOffers", 3),
+            longProperty("m2.handoff.presentWindowMillis", 500L),
+            longProperty("m2.handoff.absentGapMillis", 100L)
+        );
+    }
+
+    private static String bottleIdFromContext(String payload) {
+        if (payload == null) {
+            return null;
+        }
+        int separator = payload.indexOf('|');
+        return separator < 0 ? payload : payload.substring(0, separator);
     }
 }

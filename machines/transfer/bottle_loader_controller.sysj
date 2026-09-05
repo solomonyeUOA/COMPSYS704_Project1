@@ -58,7 +58,8 @@ BottleLoaderController(
         if (loadCommand != null) {
             emit LOAD_CMD(loadCommand);
         }
-        String loadedContext = M2MachineStateV1.takeLoadedContext();
+        String loadedContext =
+            M2MachineStateV1.nextBottleAtConveyorOffer();
         if (loadedContext != null) {
             emit BOTTLE_AT_CONVEYOR(loadedContext);
         }

@@ -49,11 +49,12 @@ BottleUnloaderController(
         if (command != null) {
             emit UNLOAD_CMD(command);
         }
-        String clear = M2MachineStateV1.takeP6Clear();
+        String clear = M2MachineStateV1.nextP6ClearOffer();
         if (clear != null) {
             emit P6_CLEAR(clear);
         }
-        String sortContext = M2MachineStateV1.takeSortContext();
+        String sortContext =
+            M2MachineStateV1.nextBottleReadyForSortOffer();
         if (sortContext != null) {
             emit BOTTLE_READY_FOR_SORT(sortContext);
         }

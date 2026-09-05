@@ -63,11 +63,11 @@ LabellerController(
         if (command != null) {
             emit LABEL_CMD(command);
         }
-        String marked = M2MachineStateV1.takeMarkLabelled();
+        String marked = M2MachineStateV1.nextMarkLabelledOffer();
         if (marked != null) {
             emit MARK_LABELLED(marked);
         }
-        String ready = M2MachineStateV1.takeUnloadReady();
+        String ready = M2MachineStateV1.nextUnloadReadyOffer();
         if (ready != null) {
             emit UNLOAD_READY(ready);
         }
