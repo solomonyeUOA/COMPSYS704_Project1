@@ -38,8 +38,10 @@ public final class Member2ControllerSelfTest {
             loader.takeLoadedContext()), "preserve second context");
         check(loader.isBatchComplete(), "loader batch complete");
         check(loader.getStatus() == M2StatusV1.DONE, "loader done");
-        check(!loader.acceptProfile("B101|S|200|GEOM_S|PACK_S"),
-            "duplicate profile rejected");
+        check(loader.acceptProfile("B101|S|200|GEOM_S|PACK_S"),
+            "identical duplicate profile is idempotent");
+        check(!loader.acceptProfile("B101|L|500|GEOM_L|PACK_L"),
+            "conflicting duplicate profile rejected");
     }
 
     private static void testConveyor() {
@@ -65,8 +67,12 @@ public final class Member2ControllerSelfTest {
         check("B101".equals(conveyor.takeLoadBottle()),
             "emit exact LOAD_BOTTLE identity");
         check(conveyor.canAcceptBottle(), "conveyor re-armed");
-        check(!conveyor.offerBottle("B101|S|200|GEOM_S|PACK_S"),
-            "completed identity cannot be repeated");
+        check(conveyor.offerBottle("B101|S|200|GEOM_S|PACK_S"),
+            "completed transport copy is safely de-duplicated");
+        check(conveyor.takeTransferContext() == null,
+            "duplicate transport copy creates no second transfer");
+        check(!conveyor.offerBottle("B101|L|500|GEOM_L|PACK_L"),
+            "conflicting duplicate context is rejected");
     }
 
     private static void testLabeller() {
@@ -85,8 +91,10 @@ public final class Member2ControllerSelfTest {
             "UNLOAD_READY once");
         check(labeller.takeMarkLabelled() == null,
             "no duplicate label completion");
-        check(!labeller.offerBottle("B101"),
-            "completed label is idempotent");
+        check(labeller.offerBottle("B101"),
+            "completed label copy is idempotent");
+        check(labeller.takeLabelCommand() == null,
+            "duplicate label offer does not actuate again");
     }
 
     private static void testUnloader() {
@@ -117,8 +125,10 @@ public final class Member2ControllerSelfTest {
             "one ABSENT reaction rearms sender");
         check(unloader.getStatus() == M2StatusV1.READY,
             "unloader re-armed after gap");
-        check(!unloader.acceptUnloadReady("B101"),
-            "completed bottle cannot be counted twice");
+        check(unloader.acceptUnloadReady("B101"),
+            "completed unload-ready copy is idempotent");
+        check(unloader.takeUnloadCommand() == null,
+            "completed bottle cannot be unloaded twice");
     }
 
     private static void testConveyorRecovery() {

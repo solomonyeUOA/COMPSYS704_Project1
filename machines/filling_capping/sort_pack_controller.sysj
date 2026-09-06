@@ -11,9 +11,13 @@ SortPackController(
 
     {loop {
         present(BOTTLE_READY_FOR_SORT) {
-            Member4MachineStateV1.acceptBottleReadyForSort(
-                #BOTTLE_READY_FOR_SORT
-            );
+            String context = #BOTTLE_READY_FOR_SORT;
+            if (Member4MachineStateV1.acceptBottleReadyForSort(context)) {
+                System.out.println(
+                    "M4 SortPack accepted BOTTLE_READY_FOR_SORT: " +
+                    M4BottleContextV1.parse(context).getBottleId()
+                );
+            }
         }
         pause;
     }}

@@ -1,0 +1,15 @@
+// SIMULATION ONLY: finite environmental input, not a Coordinator command.
+// Enabled by choosing member4_simulation.xml instead of member4_system.xml.
+RecognitionSimulator(
+    output String signal RECOGNITION_REQUEST;
+)
+->{
+    RecognitionSimulatorStateV1.start();
+    loop {
+        String request = RecognitionSimulatorStateV1.nextRequest();
+        if (request != null) {
+            emit RECOGNITION_REQUEST(request);
+        }
+        pause;
+    }
+}

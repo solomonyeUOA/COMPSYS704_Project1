@@ -87,6 +87,20 @@ public final class Member4MachineStateV1 {
         return unloadProfileEvent.take(System.currentTimeMillis());
     }
 
+    /**
+     * Simulation pacing only: the matching context's three local transport
+     * windows have drained. This is not a delivery ACK from M2 or M3.
+     */
+    public static synchronized boolean isContextDistributionComplete(
+        String bottleId, String sizeCode
+    ) {
+        M4BottleContextV1 context = registry.get(bottleId);
+        return context != null && sizeCode.equals(context.getSizeCode()) &&
+            !rotaryContextEvent.isPending() &&
+            !loadProfileEvent.isPending() &&
+            !unloadProfileEvent.isPending();
+    }
+
     public static synchronized void setFillerARatio(int ratio) {
         fillerA.setRatio(ratio);
     }
@@ -95,8 +109,11 @@ public final class Member4MachineStateV1 {
         fillerB.setRatio(ratio);
     }
 
-    public static synchronized void acceptBottleAtFill(String context) {
-        fillerA.acceptBottleAtFill(context, System.currentTimeMillis());
+    public static synchronized boolean acceptBottleAtFill(String context) {
+        return fillerA.acceptBottleAtFill(
+            context,
+            System.currentTimeMillis()
+        );
     }
 
     public static synchronized void acceptFillADone(String completion) {
@@ -107,8 +124,13 @@ public final class Member4MachineStateV1 {
         capper.acceptBottleAtCap(context, System.currentTimeMillis());
     }
 
-    public static synchronized void acceptBottleReadyForSort(String context) {
-        sortPack.acceptBottleReady(context, System.currentTimeMillis());
+    public static synchronized boolean acceptBottleReadyForSort(
+        String context
+    ) {
+        return sortPack.acceptBottleReady(
+            context,
+            System.currentTimeMillis()
+        );
     }
 
     public static synchronized void acceptFillerAFeedback(String feedback) {

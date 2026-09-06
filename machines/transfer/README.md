@@ -1,9 +1,9 @@
 # Member 2: Entry/Exit Transfer and Digital Twin
 
 This directory is the complete M2-owned implementation. It follows the final
-interim workbook/report and the frozen M1/M3 receiver mappings on current
-`main`. M4 source is not yet available, so M4 profile and Sort/Pack boundaries
-are implemented and tested as contracts but still require the real M4 peer.
+interim workbook/report and the frozen M1/M3/M4 receiver mappings on current
+`main`. The M2/M3 and M2/M4 boundaries retain their existing signal names,
+payload types, IP addresses and ports.
 
 ## M2-owned Clock Domains
 
@@ -63,6 +63,25 @@ bottleId|L|500|GEOM_L|PACK_L
 
 `BOTTLE_READY_FOR_SORT` does not replace or duplicate `BOTTLE_DONE`.
 
+## Reliable cross-Clock-Domain hand-offs
+
+The event-valued M2 hand-offs `BOTTLE_AT_CONVEYOR`, `LOAD_BOTTLE`,
+`MARK_LABELLED`, `UNLOAD_READY`, `P6_CLEAR` and `BOTTLE_READY_FOR_SORT` retain
+one pending bottle payload and offer it as at most three single-reaction
+`PRESENT` pulses. Pulses start 600 ms apart by default and each is followed by
+an explicit `ABSENT` reaction. This preserves bounded retry and observable
+event edges without holding a peer input `PRESENT` for thousands of its fast
+reactions. Copies preserve the exact bottle ID and payload.
+
+The local M2 receivers acknowledge `BOTTLE_AT_CONVEYOR` and `UNLOAD_READY`
+after accepting the matching bottle, which cancels their remaining copies.
+The frozen M2/M3 and M2/M4 interfaces contain no acknowledgement for the other
+events, so those offers stop after the bounded retry count. Receiver models
+de-duplicate matching copies and reject conflicting payloads without repeating
+physical work. The defaults can be adjusted for an integration experiment
+with `m2.handoff.maximumOffers` and `m2.handoff.retryIntervalMillis`;
+production signal names, payloads, ports and receiver ownership are unchanged.
+
 ## Digital Twin IP
 
 `WorkpieceTwin` is the one stored representation of a physical bottle/product
@@ -99,6 +118,7 @@ used when no detail is required.
 - `*ControllerModelV1.java`: deterministic Controller state machines.
 - `M2PlantStateV1.java`: deterministic high-level Plant model.
 - `M2MachineStateV1.java`: SystemJ-facing state facade.
+- `M2BoundedSignalOfferV1.java`: retained bounded retry-pulse transport.
 - `WorkpieceTwin.java`, `ResourceTwin.java`, `DigitalTwinStoreV1.java`: twin
   models and single-owner store.
 - `M2TransferFault*V2_1.java`: frozen V2.1 payload/correlation implementation.
@@ -112,8 +132,12 @@ From the repository root:
 
 ```powershell
 $lib = 'D:\Auckland_University\COMPSYS_704\Lab\Lab3\COMPSYS704_Lab_3\lib'
-$java = 'C:\Program Files\Java\jdk-17\bin\java.exe'
-$javac = 'C:\Program Files\Java\jdk-17\bin\javac.exe'
+$javaHome = 'C:\Program Files\Eclipse Adoptium\jdk-8.0.502.7-hotspot'
+$java = "$javaHome\bin\java.exe"
+$javac = "$javaHome\bin\javac.exe"
+
+python tools\verify_project_toolchain.py `
+  --java-home $javaHome --systemj-lib $lib
 
 New-Item -ItemType Directory -Force `
   build\member2-generated,build\member2-classes
@@ -127,7 +151,7 @@ $generated = Get-ChildItem build\member2-generated -Filter *.java |
   Select-Object -ExpandProperty FullName
 $m2Java = Get-ChildItem machines\transfer -Filter *.java |
   Select-Object -ExpandProperty FullName
-& $javac --release 8 -cp "$lib\*" -d build\member2-classes `
+& $javac -cp "$lib\*" -d build\member2-classes `
   @generated @m2Java common\OptionalSimpleClient.java
 
 $cp = "build\member2-classes;$lib\*"
@@ -135,21 +159,39 @@ $cp = "build\member2-classes;$lib\*"
 & $java -cp $cp Member2PlantSelfTest
 & $java -cp $cp Member2DigitalTwinSelfTest
 & $java -cp $cp Member2FaultAdapterSelfTest
+& $java -cp $cp Member2ReliableHandoffSelfTest
 ```
 
-All four tests must print `PASSED`. The real M2/M3 model compatibility test
+All five tests must print `PASSED`. The reliable hand-off test checks bounded
+retry timing, mandatory `ABSENT` reactions, lost-pulse recovery and receiver
+de-duplication. The real M2/M3 model compatibility test
 also uses M3's existing Java sources:
 
 ```powershell
 New-Item -ItemType Directory -Force build\member2-member3
 $m3Java = Get-ChildItem machines\rotary_lid -Filter *.java |
   Select-Object -ExpandProperty FullName
-& $javac --release 8 -cp "$cp" -d build\member2-member3 `
+& $javac -cp "$cp" -d build\member2-member3 `
   @m3Java integration\Member2Member3SelfTest.java
 & $java -cp "build\member2-member3;$cp" Member2Member3SelfTest
 ```
 
-That test must also print `PASSED`. Then run the project topology validator:
+That test must also print `PASSED`. Compile the real M4 Java models and the M4
+compatibility test into the same classpath:
+
+```powershell
+$m4Java = Get-ChildItem machines\filling_capping -Filter *.java |
+  Select-Object -ExpandProperty FullName
+& $javac -cp "build\member2-member3;$cp" `
+  -d build\member2-member3 @m4Java `
+  integration\Member2Member4SelfTest.java
+& $java -cp "build\member2-member3;$cp" Member2Member4SelfTest
+```
+
+This covers the quantity-one (`q1`) and quantity-three (`q3`) reliable
+Sort/Pack scenarios. It deliberately drops the first transport pulse and
+verifies that a retry is accepted exactly once. Then run the project
+topology validator:
 
 ```powershell
 python tools\validate_integration.py
@@ -167,7 +209,8 @@ Run the M2 runtime only after the required receiver peers are started:
 - M1 has not frozen `LABELLER_STATUS_REQUEST`, `LABELLER_STATUS` or
   `VIZ_LABELLER_STATUS`. M2 implements its proposed Controller-side pair, but
   does not modify M1 or its Visualisation.
-- M4 must supply the real Registry, filling/capping and Sort/Pack runtime and
-  confirm the already aligned full-context payload.
+- M4's real Registry, filling/capping and Sort/Pack runtime is now present and
+  its receiver models align with M2's unchanged full-context payload. A live
+  multi-runtime timing run is still required before final submission.
 - The complete merged-runtime acceptance test still needs real M1, M2, M3 and
   M4 runtimes plus physical timing/calibration values.

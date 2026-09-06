@@ -1,9 +1,10 @@
-import java.util.HashSet;
-import java.util.Set;
+import java.util.HashMap;
+import java.util.Map;
 
 /** Entry Conveyor state machine with evidence-gated P1 hand-off. */
 public final class ConveyorControllerModelV1 {
-    private final Set<String> completedBottleIds = new HashSet<String>();
+    private final Map<String, String> acceptedContexts =
+        new HashMap<String, String>();
     private final long arrivalTimeoutMillis;
     private int status = M2StatusV1.READY;
     private M2BottleContextV1 active;
@@ -54,14 +55,23 @@ public final class ConveyorControllerModelV1 {
         catch (IllegalArgumentException exception) {
             return false;
         }
-        if (!canAcceptBottle() ||
-            completedBottleIds.contains(context.getBottleId())) {
+        String encoded = context.encode();
+        String previous = acceptedContexts.get(context.getBottleId());
+        if (previous != null) {
+            return previous.equals(encoded);
+        }
+        if (!canAcceptBottle()) {
             return false;
         }
         active = context;
+        acceptedContexts.put(context.getBottleId(), encoded);
         contextPending = true;
         stateVersion++;
         return true;
+    }
+
+    public boolean hasSeenBottle(String bottleId) {
+        return acceptedContexts.containsKey(bottleId);
     }
 
     public String takeTransferContext() {
@@ -172,7 +182,6 @@ public final class ConveyorControllerModelV1 {
             return null;
         }
         String result = active.getBottleId();
-        completedBottleIds.add(result);
         loadBottlePending = false;
         active = null;
         motorEnabled = false;

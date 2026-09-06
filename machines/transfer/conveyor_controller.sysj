@@ -66,7 +66,7 @@ ConveyorController(
             emit LOCAL_TRANSFER_FAULT(fault);
         }
 
-        String bottleId = M2MachineStateV1.takeLoadBottle();
+        String bottleId = M2MachineStateV1.nextLoadBottleOffer();
         if (bottleId != null) {
             emit LOAD_BOTTLE(bottleId);
             emit HANDOFF_COMMITTED(bottleId);
