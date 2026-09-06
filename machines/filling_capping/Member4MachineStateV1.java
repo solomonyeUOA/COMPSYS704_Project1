@@ -109,8 +109,11 @@ public final class Member4MachineStateV1 {
         fillerB.setRatio(ratio);
     }
 
-    public static synchronized void acceptBottleAtFill(String context) {
-        fillerA.acceptBottleAtFill(context, System.currentTimeMillis());
+    public static synchronized boolean acceptBottleAtFill(String context) {
+        return fillerA.acceptBottleAtFill(
+            context,
+            System.currentTimeMillis()
+        );
     }
 
     public static synchronized void acceptFillADone(String completion) {
@@ -121,8 +124,13 @@ public final class Member4MachineStateV1 {
         capper.acceptBottleAtCap(context, System.currentTimeMillis());
     }
 
-    public static synchronized void acceptBottleReadyForSort(String context) {
-        sortPack.acceptBottleReady(context, System.currentTimeMillis());
+    public static synchronized boolean acceptBottleReadyForSort(
+        String context
+    ) {
+        return sortPack.acceptBottleReady(
+            context,
+            System.currentTimeMillis()
+        );
     }
 
     public static synchronized void acceptFillerAFeedback(String feedback) {
