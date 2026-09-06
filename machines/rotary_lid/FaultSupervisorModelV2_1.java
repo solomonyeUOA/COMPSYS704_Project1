@@ -569,6 +569,10 @@ public final class FaultSupervisorModelV2_1 {
         return activeEvent == null ? -1 : activeEvent.stateVersion;
     }
 
+    public synchronized long getLatestStateVersion() {
+        return activeEvent == null ? -1 : latestStateVersion;
+    }
+
     public synchronized int getActiveAttempt() {
         return activeAttempt;
     }

@@ -42,6 +42,8 @@ public final class FaultSupervisorSelfTest {
         require(model.getState() ==
             FaultSupervisorModelV2_1.State.RECOVERY_READY,
             "verified result waits for M1");
+        require(model.getLatestStateVersion() == 5,
+            "resume correlation uses the verified controller version");
         require("V2|E1|A|RECOVERY_READY|5".equals(
             model.takeRecoveryReady()), "M1 receives recovery-ready report");
         require(model.onResumeDecision("V2|E1|A|RESUME|verified|5"),

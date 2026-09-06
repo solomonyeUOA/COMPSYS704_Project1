@@ -116,6 +116,10 @@ public final class FaultSupervisorStateV2_1 {
         return MODEL.getActiveStateVersion();
     }
 
+    public static long latestStateVersion() {
+        return MODEL.getLatestStateVersion();
+    }
+
     public static int activeAttempt() {
         return MODEL.getActiveAttempt();
     }

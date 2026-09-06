@@ -254,7 +254,7 @@ public final class FaultManagementWebServer {
             "V2|" + FaultSupervisorStateV2_1.activeEventId() + "|" +
             FaultSupervisorStateV2_1.activeEpoch() +
             "|RESUME|GUI_TEST_APPROVAL|" +
-            FaultSupervisorStateV2_1.activeStateVersion()
+            FaultSupervisorStateV2_1.latestStateVersion()
         );
     }
 
@@ -270,7 +270,7 @@ public final class FaultManagementWebServer {
         field(json, "severity", FaultSupervisorStateV2_1.activeSeverity());
         field(json, "bottleId", FaultSupervisorStateV2_1.activeBottleId());
         numberField(json, "stateVersion",
-            FaultSupervisorStateV2_1.activeStateVersion());
+            FaultSupervisorStateV2_1.latestStateVersion());
         numberField(json, "attempt",
             FaultSupervisorStateV2_1.activeAttempt());
         field(json, "policy", FaultSupervisorStateV2_1.policySummary());

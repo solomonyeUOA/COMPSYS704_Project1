@@ -24,16 +24,27 @@ Status requests are observational and cannot start or acknowledge operations.
   lid, P4 cap, P5 transfer and P6 label/unload.
 - A step is committed atomically only after a matching `ROTATION_DONE(cycleId)`
   and alignment confirmation. P6 must be physically clear first.
+  The Controller keeps DONE present while waiting for the Plant barrier to
+  reopen. It must observe ROTATION_READY absent during the active cycle before
+  accepting a subsequent ready indication. The Plant accepts duplicate DONE
+  for its last committed cycle without shifting slots or clearing offer latches
+  again; early and mismatched commits are rejected. This lets a later sampling
+  reaction recover a missed commit before the P2 filling offer is produced.
 - Every completion carries `bottleId`; stale, mismatched and duplicate events
   are rejected.
 - M4 full-context handoffs use
   `bottleId|sizeCode|capacityMl|geometryProfileId|packagingProfileId`.
-- `BOTTLE_AT_FILL` and `BOTTLE_AT_LABEL` are reliable event offers rather than
+- `BOTTLE_AT_FILL`, `BOTTLE_AT_CAP` and `BOTTLE_AT_LABEL` use bounded event offers rather than
   level commands. M3 retains the pending bottle context and sends at most three
   identical transport copies. Each copy is PRESENT for 500 ms and copies are
-  separated by a 100 ms ABSENT gap. A matching `MARK_FILLED(bottleId)` or
+  separated by a 100 ms ABSENT gap. A matching `MARK_FILLED(bottleId)`, `MARK_CAPPED(bottleId)` or
   `MARK_LABELLED(bottleId)` cancels the remaining copies; receivers must reject
   duplicate bottle IDs. Signal names, payloads and ports remain unchanged.
+  Exhausting the copies does not imply completion: the station barrier remains
+  closed until a valid completion arrives. Bounded retransmission cannot
+  guarantee delivery during a longer receiver outage.
+- Runtime duration measurements use a monotonic clock so wall-clock corrections
+  do not change motor timing, lid timing or notification windows.
 - The lid loader retains the active bottle identity and de-energises both
   actuators on timeout. Fault reset requires cause-specific evidence.
 - Alignment timeout has no automatic `REHOME`: M1 safe-stop, bottle-position

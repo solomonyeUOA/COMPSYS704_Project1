@@ -66,14 +66,14 @@ public final class LidLoaderPlantModelV1 {
     public void setPickFault(boolean active) {
         pickFault = active;
         if (!active && action == Action.PICKING) {
-            actionStartMs = System.currentTimeMillis();
+            actionStartMs = java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(System.nanoTime());
         }
     }
 
     public void setPlaceFault(boolean active) {
         placeFault = active;
         if (!active && action == Action.PLACING) {
-            actionStartMs = System.currentTimeMillis();
+            actionStartMs = java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(System.nanoTime());
         }
     }
 

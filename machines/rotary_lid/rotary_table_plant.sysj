@@ -123,10 +123,9 @@ RotaryTablePlant(
         if (fillOffer != null) {
             emit BOTTLE_AT_FILL(fillOffer);
         }
-        String capOffer = Member3PlantStateV1.takeCapOffer();
+        String capOffer = Member3PlantStateV1.nextCapOfferWindow();
         if (capOffer != null) {
             emit BOTTLE_AT_CAP(capOffer);
-            System.out.println("M3 offered P4 bottle to capper");
         }
         String labelOffer = Member3PlantStateV1.nextLabelOfferWindow();
         if (labelOffer != null) {
