@@ -8,6 +8,8 @@ public final class Member3PlantStateV1 {
         new BoundedSignalOfferV1(3);
     private static BoundedSignalOfferV1 labelOffer =
         new BoundedSignalOfferV1(3);
+    private static BoundedSignalOfferV1 capOffer =
+        new BoundedSignalOfferV1(3);
 
     private Member3PlantStateV1() {
     }
@@ -17,6 +19,7 @@ public final class Member3PlantStateV1 {
         lid = new LidLoaderPlantModelV1();
         fillOffer = new BoundedSignalOfferV1(3);
         labelOffer = new BoundedSignalOfferV1(3);
+        capOffer = new BoundedSignalOfferV1(3);
     }
 
     public static synchronized boolean loadBottle(String id) {
@@ -31,11 +34,11 @@ public final class Member3PlantStateV1 {
         boolean enabled,
         long cycleId
     ) {
-        rotary.setMotorCommand(enabled, cycleId, System.currentTimeMillis());
+        rotary.setMotorCommand(enabled, cycleId, java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(System.nanoTime()));
     }
 
     public static synchronized boolean updateRotary() {
-        return rotary.tick(System.currentTimeMillis());
+        return rotary.tick(java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(System.nanoTime()));
     }
 
     public static synchronized boolean commitRotation(long cycleId) {
@@ -55,7 +58,11 @@ public final class Member3PlantStateV1 {
     }
 
     public static synchronized boolean markCapped(String bottleId) {
-        return rotary.markCapped(bottleId);
+        boolean accepted = rotary.markCapped(bottleId);
+        if (accepted) {
+            capOffer.acknowledge(bottleId);
+        }
+        return accepted;
     }
 
     public static synchronized boolean markLabelled(String bottleId) {
@@ -104,6 +111,16 @@ public final class Member3PlantStateV1 {
         return rotary.takeCapOffer();
     }
 
+    public static synchronized String nextCapOfferWindow() {
+        if (!capOffer.isActive()) {
+            String payload = rotary.takeCapOffer();
+            if (payload != null) {
+                capOffer.arm(payload.split("\\|", -1)[0], payload);
+            }
+        }
+        return capOffer.nextReactionValue();
+    }
+
     public static synchronized String takeLabelOffer() {
         return rotary.takeLabelOffer();
     }
@@ -127,15 +144,15 @@ public final class Member3PlantStateV1 {
     }
 
     public static synchronized void setPickCommand(boolean enabled) {
-        lid.setPickCommand(enabled, System.currentTimeMillis());
+        lid.setPickCommand(enabled, java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(System.nanoTime()));
     }
 
     public static synchronized void setPlaceCommand(boolean enabled) {
-        lid.setPlaceCommand(enabled, System.currentTimeMillis());
+        lid.setPlaceCommand(enabled, java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(System.nanoTime()));
     }
 
     public static synchronized void updateLidLoader() {
-        lid.tick(System.currentTimeMillis());
+        lid.tick(java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(System.nanoTime()));
     }
 
     public static synchronized boolean isLidAvailable() {
@@ -147,7 +164,7 @@ public final class Member3PlantStateV1 {
     }
 
     public static synchronized boolean isLidPlacedSensorActive() {
-        return lid.isLidPlacedSensorActive(System.currentTimeMillis());
+        return lid.isLidPlacedSensorActive(java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(System.nanoTime()));
     }
 
     public static synchronized int getLidMagazineCount() {

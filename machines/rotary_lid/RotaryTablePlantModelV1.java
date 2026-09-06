@@ -100,6 +100,10 @@ public final class RotaryTablePlantModelV1 {
 
     /** Atomically shifts slots after the Controller publishes matching DONE. */
     public boolean commitRotation(long cycleId) {
+        // A repeated confirmation acknowledges the same commit without shifting again.
+        if (cycleId > 0 && cycleId == lastCommittedCycleId) {
+            return true;
+        }
         if (!movementComplete || !aligned || cycleId != pendingCycleId ||
             cycleId <= lastCommittedCycleId) {
             return false;

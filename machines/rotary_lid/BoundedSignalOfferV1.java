@@ -34,7 +34,7 @@ public final class BoundedSignalOfferV1 {
     }
 
     public boolean arm(String bottleId, String payload) {
-        return arm(bottleId, payload, System.currentTimeMillis());
+        return arm(bottleId, payload, java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(System.nanoTime()));
     }
 
     boolean arm(String bottleId, String payload, long nowMs) {
@@ -54,7 +54,7 @@ public final class BoundedSignalOfferV1 {
     }
 
     public String nextReactionValue() {
-        return nextReactionValue(System.currentTimeMillis());
+        return nextReactionValue(java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(System.nanoTime()));
     }
 
     String nextReactionValue(long nowMs) {

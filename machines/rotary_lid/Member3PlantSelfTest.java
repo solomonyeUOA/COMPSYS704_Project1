@@ -10,6 +10,8 @@ public final class Member3PlantSelfTest {
         testRotaryAlignmentFault();
         testLidPlantSequence();
         testBoundedSignalWindows();
+        testCapOfferCompletionCorrelation();
+        testDelayedAndDuplicateRotationCommit();
         System.out.println("Member3PlantSelfTest PASSED");
     }
 
@@ -42,6 +44,29 @@ public final class Member3PlantSelfTest {
         require(!table.clearP6("WRONG"), "wrong clear identity is rejected");
         require(table.clearP6("B001"),
             "matching labelled bottle can be physically cleared");
+    }
+
+    private static void testDelayedAndDuplicateRotationCommit() {
+        RotaryTablePlantModelV1 table = new RotaryTablePlantModelV1();
+        require(table.registerContext(context("DELAY")), "delayed context accepted");
+        require(table.loadBottle("DELAY"), "delayed bottle loaded");
+        require(table.setMotorCommand(true, 1, 0), "movement starts");
+        require(!table.commitRotation(1), "early completion cannot shift slots");
+        table.tick(500);
+        require(table.takeFillOffer() == null, "no fill before commit arrives");
+        require(!table.canRotate(), "missing commit holds the Plant barrier");
+        table.tick(2500);
+        require(!table.commitRotation(2), "wrong cycle cannot release stalled commit");
+        require(table.commitRotation(1), "delayed repeated DONE commits pending cycle");
+        require(context("DELAY").equals(table.takeFillOffer()),
+            "delayed commit produces the missing pre-fill offer");
+        for (int i = 0; i < 100; i++) {
+            require(table.commitRotation(1), "repeated DONE is idempotent");
+        }
+        require(table.getCompletedSteps() == 1, "repeated DONE shifts slots once");
+        require(table.getBottleAt(1) != null, "bottle remains at fill station");
+        require(table.takeFillOffer() == null, "duplicate commit cannot rearm fill latch");
+        require(!table.canRotate(), "unfilled bottle continues to hold barrier");
     }
 
     private static void testMultipleBottlePipeline() {
@@ -144,6 +169,47 @@ public final class Member3PlantSelfTest {
             "matching completion clears remaining retry copies");
         require(offer.nextReactionValue(2001) == null,
             "acknowledged offer emits no further copy");
+    }
+
+    private static void testCapOfferCompletionCorrelation() {
+        Member3PlantStateV1.reset();
+        require(Member3PlantStateV1.registerBottleContext(context("CAP1")),
+            "cap test context accepted");
+        require(Member3PlantStateV1.loadBottle("CAP1"), "cap test bottle loaded");
+        advancePlantFacade(1);
+        require(Member3PlantStateV1.markFilled("CAP1"), "cap test filled");
+        advancePlantFacade(2);
+        require(Member3PlantStateV1.markLidPlaced("CAP1"), "cap test lid placed");
+        advancePlantFacade(3);
+        String payload = Member3PlantStateV1.nextCapOfferWindow();
+        require(context("CAP1").equals(payload), "cap offer retains full context");
+        require(!Member3PlantStateV1.markCapped("WRONG"),
+            "wrong completion cannot acknowledge cap offer");
+        require(payload.equals(Member3PlantStateV1.nextCapOfferWindow()),
+            "cap offer remains PRESENT after wrong completion");
+        require(!Member3PlantStateV1.canRotate(), "uncapped bottle holds barrier");
+        require(Member3PlantStateV1.markCapped("CAP1"), "matching completion accepted");
+        require(Member3PlantStateV1.nextCapOfferWindow() == null,
+            "matching completion cancels cap retransmission");
+        require(!Member3PlantStateV1.markCapped("CAP1"), "duplicate completion is rejected");
+        require(Member3PlantStateV1.canRotate(), "capped bottle releases barrier");
+        Member3PlantStateV1.reset();
+        require(Member3PlantStateV1.nextCapOfferWindow() == null,
+            "reset clears pending cap context");
+    }
+
+    private static void advancePlantFacade(long cycle) {
+        Member3PlantStateV1.setRotaryMotor(false, 0);
+        Member3PlantStateV1.setRotaryMotor(true, cycle);
+        try {
+            Thread.sleep(RotaryControllerModelV1.ROTATION_TIME_MS + 20);
+        }
+        catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            throw new AssertionError("plant test interrupted", exception);
+        }
+        Member3PlantStateV1.updateRotary();
+        require(Member3PlantStateV1.commitRotation(cycle), "facade rotation commits");
     }
 
     private static void rotate(

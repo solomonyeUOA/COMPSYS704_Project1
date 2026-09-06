@@ -10,8 +10,8 @@ public final class Member3MachineStateV1 {
         new RotaryControllerModelV1();
     private static LidLoaderControllerModelV1 lidLoader =
         new LidLoaderControllerModelV1();
-    private static long lastRotaryTickMs = System.currentTimeMillis();
-    private static long lastLidTickMs = System.currentTimeMillis();
+    private static long lastRotaryTickMs = java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(System.nanoTime());
+    private static long lastLidTickMs = java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(System.nanoTime());
     private static boolean rotationDonePublished;
     private static boolean lidDonePublished;
     private static long nextCycleId = 1;
@@ -43,7 +43,7 @@ public final class Member3MachineStateV1 {
         );
         if (started) {
             nextCycleId++;
-            lastRotaryTickMs = System.currentTimeMillis();
+            lastRotaryTickMs = java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(System.nanoTime());
         }
         return started;
     }
@@ -59,7 +59,7 @@ public final class Member3MachineStateV1 {
     public static synchronized void tickRotaryNow(
         boolean tableAlignedWithSensor
     ) {
-        long now = System.currentTimeMillis();
+        long now = java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(System.nanoTime());
         rotary.tick(Math.max(0, now - lastRotaryTickMs),
             tableAlignedWithSensor);
         lastRotaryTickMs = now;
@@ -115,7 +115,7 @@ public final class Member3MachineStateV1 {
             lidAvailable
         );
         if (started) {
-            lastLidTickMs = System.currentTimeMillis();
+            lastLidTickMs = java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(System.nanoTime());
         }
         reportLidFaultIfPresent();
         return started;
@@ -134,7 +134,7 @@ public final class Member3MachineStateV1 {
         boolean lidPicked,
         boolean lidPlaced
     ) {
-        long now = System.currentTimeMillis();
+        long now = java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(System.nanoTime());
         lidLoader.tick(Math.max(0, now - lastLidTickMs),
             lidPicked, lidPlaced);
         lastLidTickMs = now;
@@ -195,8 +195,8 @@ public final class Member3MachineStateV1 {
     public static synchronized void reset() {
         rotary = new RotaryControllerModelV1();
         lidLoader = new LidLoaderControllerModelV1();
-        lastRotaryTickMs = System.currentTimeMillis();
-        lastLidTickMs = System.currentTimeMillis();
+        lastRotaryTickMs = java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(System.nanoTime());
+        lastLidTickMs = java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(System.nanoTime());
         rotationDonePublished = false;
         lidDonePublished = false;
         nextCycleId = 1;
