@@ -38,8 +38,10 @@ public final class Member2Member3SelfTest {
             "M3 registers same context");
         check(rotary.loadBottle(loadOffer.nextReactionValue(600L)),
             "M3 accepts retained M2 LOAD_BOTTLE identity");
-        check(!rotary.loadBottle(loadOffer.nextReactionValue(601L)),
-            "M3 does not load a repeated transport copy twice");
+        check(loadOffer.nextReactionValue(601L) == null,
+            "M2 returns LOAD_BOTTLE to ABSENT after the retry pulse");
+        check(!rotary.loadBottle(loadOffer.nextReactionValue(1200L)),
+            "M3 does not load a later transport retry twice");
         rotate(rotary, 1L, 0L);
         check(rotary.markFilled("B501"), "M4 fill stub");
         rotate(rotary, 2L, 1000L);
@@ -63,8 +65,11 @@ public final class Member2Member3SelfTest {
         );
         check(rotary.markLabelled(labelledOffer.nextReactionValue(600L)),
             "M3 accepts retained M2 MARK_LABELLED");
-        check(!rotary.markLabelled(labelledOffer.nextReactionValue(601L)),
-            "M3 does not apply a repeated label completion twice");
+        check(labelledOffer.nextReactionValue(601L) == null,
+            "M2 returns MARK_LABELLED to ABSENT after the retry pulse");
+        check(!rotary.markLabelled(
+            labelledOffer.nextReactionValue(1200L)
+        ), "M3 does not apply a later label retry twice");
 
         BottleUnloaderControllerModelV1 unloader =
             new BottleUnloaderControllerModelV1(500L);
@@ -82,8 +87,10 @@ public final class Member2Member3SelfTest {
         );
         check(rotary.clearP6(clearOffer.nextReactionValue(600L)),
             "M3 accepts retained M2 P6_CLEAR");
-        check(!rotary.clearP6(clearOffer.nextReactionValue(601L)),
-            "M3 does not clear P6 twice for a repeated copy");
+        check(clearOffer.nextReactionValue(601L) == null,
+            "M2 returns P6_CLEAR to ABSENT after the retry pulse");
+        check(!rotary.clearP6(clearOffer.nextReactionValue(1200L)),
+            "M3 does not clear P6 twice for a later retry");
         check(contextPayload.equals(unloader.takeSortContext()),
             "M2 preserves context for M4 SortPack");
         check(unloader.isBottleDonePresent(5000L),
@@ -133,12 +140,12 @@ public final class Member2Member3SelfTest {
         String signalName
     ) {
         M2BoundedSignalOfferV1 offer =
-            new M2BoundedSignalOfferV1(3, 500L, 100L);
+            new M2BoundedSignalOfferV1(3, 600L);
         check(offer.arm(bottleId, payload, 0L), signalName + " arms");
         check(payload.equals(offer.nextReactionValue(0L)),
-            signalName + " first window is available but simulated lost");
-        check(offer.nextReactionValue(500L) == null,
-            signalName + " inserts ABSENT gap");
+            signalName + " first pulse is available but simulated lost");
+        check(offer.nextReactionValue(1L) == null,
+            signalName + " inserts an ABSENT reaction");
         return offer;
     }
 

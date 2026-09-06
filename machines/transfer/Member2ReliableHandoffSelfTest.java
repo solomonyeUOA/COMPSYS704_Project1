@@ -4,34 +4,57 @@ public final class Member2ReliableHandoffSelfTest {
         "B701|S|200|GEOM_S|PACK_S";
 
     public static void main(String[] args) {
-        testBoundedPresentWindows();
-        testDifferentClockPhases();
+        testBoundedRetryPulses();
+        testFastReactionEmissionBound();
+        testLostPulseRecovery();
         testLoaderConveyorHandoffAndDeduplication();
         testP6HandoffChain();
         testSequentialQ3P6Handoffs();
         System.out.println("Member2ReliableHandoffSelfTest PASSED");
     }
 
-    private static void testBoundedPresentWindows() {
+    /** A fast producer may evaluate thousands of reactions but emits three. */
+    private static void testFastReactionEmissionBound() {
         M2BoundedSignalOfferV1 offer =
-            new M2BoundedSignalOfferV1(3, 500L, 100L);
+            new M2BoundedSignalOfferV1(3, 600L);
+        check(offer.arm("B704", "B704", 0L), "fast retry test arms");
+        int emitted = 0;
+        int longestPresentRun = 0;
+        int presentRun = 0;
+        for (long now = 0L; now <= 1201L; now++) {
+            if (offer.nextReactionValue(now) != null) {
+                emitted++;
+                presentRun++;
+                longestPresentRun = Math.max(longestPresentRun, presentRun);
+            }
+            else {
+                presentRun = 0;
+            }
+        }
+        check(emitted == 3, "fast reactions still emit only three pulses");
+        check(longestPresentRun == 1,
+            "no pulse remains PRESENT across consecutive reactions");
+        check(!offer.isActive(), "fast retry sequence finishes");
+    }
+
+    private static void testBoundedRetryPulses() {
+        M2BoundedSignalOfferV1 offer =
+            new M2BoundedSignalOfferV1(3, 600L);
         check(offer.arm("B700", SMALL_CONTEXT, 0L),
             "handoff arms stable payload");
         check(SMALL_CONTEXT.equals(offer.nextReactionValue(0L)),
-            "first PRESENT begins immediately");
-        check(SMALL_CONTEXT.equals(offer.nextReactionValue(499L)),
-            "payload remains PRESENT for the full window");
-        check(offer.nextReactionValue(500L) == null,
-            "first window ends with ABSENT");
+            "first pulse begins immediately");
+        check(offer.nextReactionValue(1L) == null,
+            "first pulse is followed by ABSENT");
         check(offer.nextReactionValue(599L) == null,
-            "ABSENT gap is retained");
+            "retry interval remains ABSENT");
         check(SMALL_CONTEXT.equals(offer.nextReactionValue(600L)),
-            "second PRESENT retries identical payload");
-        check(offer.nextReactionValue(1100L) == null,
-            "second PRESENT has an ABSENT edge");
+            "second pulse retries identical payload");
+        check(offer.nextReactionValue(601L) == null,
+            "second pulse is followed by ABSENT");
         check(SMALL_CONTEXT.equals(offer.nextReactionValue(1200L)),
-            "third and final PRESENT is emitted");
-        check(offer.nextReactionValue(1700L) == null &&
+            "third and final pulse is emitted");
+        check(offer.nextReactionValue(1201L) == null &&
             !offer.isActive(), "retry sequence is bounded");
 
         check(offer.arm("B702", "B702", 2000L),
@@ -46,27 +69,21 @@ public final class Member2ReliableHandoffSelfTest {
             "acknowledged event is absent");
     }
 
-    /** Exercises two asynchronous producer/receiver periods at every phase. */
-    private static void testDifferentClockPhases() {
-        int[] receiverPeriods = {73, 211};
-        for (int period : receiverPeriods) {
-            for (int phase = 0; phase < period; phase++) {
-                M2BoundedSignalOfferV1 offer =
-                    new M2BoundedSignalOfferV1(3, 500L, 100L);
-                offer.arm("B703", "B703", 0L);
-                boolean received = false;
-                for (long now = 0L; now <= 1700L; now += 1L) {
-                    String value = offer.nextReactionValue(now);
-                    if (now >= phase && (now - phase) % period == 0L &&
-                        "B703".equals(value)) {
-                        received = true;
-                        break;
-                    }
-                }
-                check(received, "phase-safe handoff period=" + period +
-                    " phase=" + phase);
-            }
-        }
+    /** Verifies that two lost attempts still leave one bounded retry. */
+    private static void testLostPulseRecovery() {
+        M2BoundedSignalOfferV1 offer =
+            new M2BoundedSignalOfferV1(3, 600L);
+        check(offer.arm("B703", "B703", 0L), "retry test arms");
+        check("B703".equals(offer.nextReactionValue(0L)),
+            "first pulse can be lost");
+        check(offer.nextReactionValue(1L) == null,
+            "first lost pulse returns to ABSENT");
+        check("B703".equals(offer.nextReactionValue(600L)),
+            "second pulse can be lost");
+        check(offer.nextReactionValue(601L) == null,
+            "second lost pulse returns to ABSENT");
+        check("B703".equals(offer.nextReactionValue(1200L)),
+            "third pulse remains available");
     }
 
     private static void testLoaderConveyorHandoffAndDeduplication() {
@@ -81,10 +98,9 @@ public final class Member2ReliableHandoffSelfTest {
 
         check(SMALL_CONTEXT.equals(
             M2MachineStateV1.nextBottleAtConveyorOffer(0L)),
-            "BOTTLE_AT_CONVEYOR retained");
-        check(SMALL_CONTEXT.equals(
-            M2MachineStateV1.nextBottleAtConveyorOffer(300L)),
-            "BOTTLE_AT_CONVEYOR stays PRESENT");
+            "BOTTLE_AT_CONVEYOR first pulse");
+        check(M2MachineStateV1.nextBottleAtConveyorOffer(1L) == null,
+            "BOTTLE_AT_CONVEYOR returns to ABSENT");
         check(M2MachineStateV1.offerConveyorBottle(SMALL_CONTEXT),
             "conveyor accepts matching context");
         check(M2MachineStateV1.offerConveyorBottle(SMALL_CONTEXT),
@@ -101,11 +117,9 @@ public final class Member2ReliableHandoffSelfTest {
             "B701|true|true|true|true|true"),
             "conveyor accepts complete P1 evidence");
         check("B701".equals(M2MachineStateV1.nextLoadBottleOffer(500L)),
-            "LOAD_BOTTLE first PRESENT");
-        check("B701".equals(M2MachineStateV1.nextLoadBottleOffer(999L)),
-            "LOAD_BOTTLE remains observable");
-        check(M2MachineStateV1.nextLoadBottleOffer(1000L) == null,
-            "LOAD_BOTTLE ABSENT gap");
+            "LOAD_BOTTLE first pulse");
+        check(M2MachineStateV1.nextLoadBottleOffer(501L) == null,
+            "LOAD_BOTTLE ABSENT reaction");
         check("B701".equals(M2MachineStateV1.nextLoadBottleOffer(1100L)),
             "LOAD_BOTTLE bounded retry");
     }
@@ -139,19 +153,14 @@ public final class Member2ReliableHandoffSelfTest {
         check(M2MachineStateV1.acceptRemovalConfirmed(
             "B701|true", 1000L), "P6 physical-clear evidence");
         check("B701".equals(M2MachineStateV1.nextP6ClearOffer(1000L)),
-            "P6_CLEAR first PRESENT");
+            "P6_CLEAR first pulse");
         check(SMALL_CONTEXT.equals(
             M2MachineStateV1.nextBottleReadyForSortOffer(1000L)),
-            "BOTTLE_READY_FOR_SORT first PRESENT");
-        check("B701".equals(M2MachineStateV1.nextP6ClearOffer(1499L)),
-            "P6_CLEAR retained through receiver phase offset");
-        check(SMALL_CONTEXT.equals(
-            M2MachineStateV1.nextBottleReadyForSortOffer(1499L)),
-            "sort context retained unchanged");
-        check(M2MachineStateV1.nextP6ClearOffer(1500L) == null,
-            "P6_CLEAR ABSENT gap");
-        check(M2MachineStateV1.nextBottleReadyForSortOffer(1500L) == null,
-            "sort handoff ABSENT gap");
+            "BOTTLE_READY_FOR_SORT first pulse");
+        check(M2MachineStateV1.nextP6ClearOffer(1001L) == null,
+            "P6_CLEAR ABSENT reaction");
+        check(M2MachineStateV1.nextBottleReadyForSortOffer(1001L) == null,
+            "sort handoff ABSENT reaction");
         check("B701".equals(M2MachineStateV1.nextP6ClearOffer(1600L)),
             "P6_CLEAR bounded retry");
         check(SMALL_CONTEXT.equals(
@@ -213,17 +222,15 @@ public final class Member2ReliableHandoffSelfTest {
         String expected,
         long start
     ) {
-        check(expected.equals(nextOffer(signalName, start + 499L)),
-            signalName + " first window retained");
-        check(nextOffer(signalName, start + 500L) == null,
-            signalName + " first ABSENT");
+        check(nextOffer(signalName, start + 1L) == null,
+            signalName + " first pulse returns to ABSENT");
         check(expected.equals(nextOffer(signalName, start + 600L)),
-            signalName + " second window");
-        check(nextOffer(signalName, start + 1100L) == null,
-            signalName + " second ABSENT");
+            signalName + " second pulse");
+        check(nextOffer(signalName, start + 601L) == null,
+            signalName + " second pulse returns to ABSENT");
         check(expected.equals(nextOffer(signalName, start + 1200L)),
-            signalName + " third window");
-        check(nextOffer(signalName, start + 1700L) == null,
+            signalName + " third pulse");
+        check(nextOffer(signalName, start + 1201L) == null,
             signalName + " bounded completion");
     }
 

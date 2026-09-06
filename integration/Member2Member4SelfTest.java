@@ -38,13 +38,13 @@ public final class Member2Member4SelfTest {
             check(context.equals(sortPayload),
                 "M2 preserves M4 context " + bottleId);
             M2BoundedSignalOfferV1 offer =
-                new M2BoundedSignalOfferV1(3, 500L, 100L);
+                new M2BoundedSignalOfferV1(3, 600L);
             check(offer.arm(bottleId, sortPayload, 0L),
                 "BOTTLE_READY_FOR_SORT arms " + bottleId);
             check(sortPayload.equals(offer.nextReactionValue(0L)),
-                "first PRESENT is available but simulated lost");
-            check(offer.nextReactionValue(500L) == null,
-                "retry is separated by ABSENT gap");
+                "first pulse is available but simulated lost");
+            check(offer.nextReactionValue(1L) == null,
+                "retry is separated by an ABSENT reaction");
 
             String retry = offer.nextReactionValue(600L);
             check(sortPack.acceptBottleReady(retry, cycleStart + 600L),
@@ -52,11 +52,10 @@ public final class Member2Member4SelfTest {
             check((bottleId + "|SET_LANE|" + lane).equals(
                 sortPack.takePlantCommand()),
                 "one route command generated " + bottleId);
-            check(!sortPack.acceptBottleReady(
-                offer.nextReactionValue(601L), cycleStart + 601L
-            ), "M4 de-duplicates repeated PRESENT " + bottleId);
+            check(offer.nextReactionValue(601L) == null,
+                "M2 returns the sort hand-off to ABSENT " + bottleId);
             check(sortPack.takePlantCommand() == null,
-                "duplicate creates no physical command " + bottleId);
+                "ABSENT reaction creates no physical command " + bottleId);
 
             sortPack.acceptPlantFeedback(
                 bottleId + "|LANE_CONFIRMED|" + lane,
@@ -73,8 +72,6 @@ public final class Member2Member4SelfTest {
                 sortPack.takeCompletion()),
                 "M4 completes accepted bottle " + bottleId);
 
-            check(offer.nextReactionValue(1100L) == null,
-                "second window ends with ABSENT");
             check(!sortPack.acceptBottleReady(
                 offer.nextReactionValue(1200L), cycleStart + 1200L
             ), "late copy cannot restart completed bottle " + bottleId);

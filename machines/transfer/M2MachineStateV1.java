@@ -529,8 +529,7 @@ public final class M2MachineStateV1 {
     private static M2BoundedSignalOfferV1 newHandoffOffer() {
         return new M2BoundedSignalOfferV1(
             intProperty("m2.handoff.maximumOffers", 3),
-            longProperty("m2.handoff.presentWindowMillis", 500L),
-            longProperty("m2.handoff.absentGapMillis", 100L)
+            longProperty("m2.handoff.retryIntervalMillis", 600L)
         );
     }
 

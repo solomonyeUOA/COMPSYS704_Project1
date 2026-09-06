@@ -1,37 +1,33 @@
 /**
- * Retains one bottle-correlated hand-off for a bounded number of PRESENT
- * windows. Every window carries the identical payload and consecutive
- * windows are separated by a real ABSENT gap.
+ * Retains one bottle-correlated hand-off for a bounded number of pulses.
+ * Every pulse carries the identical payload, and a pulse is always followed
+ * by an ABSENT reaction before another retry can be emitted.
  */
 public final class M2BoundedSignalOfferV1 {
     private final int maximumOffers;
-    private final long presentWindowMillis;
-    private final long absentGapMillis;
+    private final long retryIntervalMillis;
     private String bottleId;
     private String payload;
     private int offerCount;
-    private boolean presentWindowActive;
-    private long presentUntilMillis;
-    private long nextPresentAtMillis;
+    private boolean absentReactionRequired;
+    private long nextOfferAtMillis;
 
     public M2BoundedSignalOfferV1(
         int maximumOffers,
-        long presentWindowMillis,
-        long absentGapMillis
+        long retryIntervalMillis
     ) {
         if (maximumOffers < 1) {
             throw new IllegalArgumentException(
                 "maximumOffers must be positive"
             );
         }
-        if (presentWindowMillis < 1 || absentGapMillis < 1) {
+        if (retryIntervalMillis < 1) {
             throw new IllegalArgumentException(
-                "PRESENT window and ABSENT gap must be positive"
+                "retryIntervalMillis must be positive"
             );
         }
         this.maximumOffers = maximumOffers;
-        this.presentWindowMillis = presentWindowMillis;
-        this.absentGapMillis = absentGapMillis;
+        this.retryIntervalMillis = retryIntervalMillis;
     }
 
     public boolean arm(String bottleId, String payload) {
@@ -50,9 +46,8 @@ public final class M2BoundedSignalOfferV1 {
         this.bottleId = bottleId;
         this.payload = payload;
         offerCount = 0;
-        presentWindowActive = false;
-        presentUntilMillis = 0L;
-        nextPresentAtMillis = nowMillis;
+        absentReactionRequired = false;
+        nextOfferAtMillis = nowMillis;
         return true;
     }
 
@@ -64,18 +59,14 @@ public final class M2BoundedSignalOfferV1 {
         if (payload == null) {
             return null;
         }
-        if (presentWindowActive) {
-            if (nowMillis < presentUntilMillis) {
-                return payload;
-            }
-            presentWindowActive = false;
-            nextPresentAtMillis = nowMillis + absentGapMillis;
+        if (absentReactionRequired) {
+            absentReactionRequired = false;
             if (offerCount >= maximumOffers) {
                 clear();
             }
             return null;
         }
-        if (nowMillis < nextPresentAtMillis) {
+        if (nowMillis < nextOfferAtMillis) {
             return null;
         }
         if (offerCount >= maximumOffers) {
@@ -83,8 +74,8 @@ public final class M2BoundedSignalOfferV1 {
             return null;
         }
         offerCount++;
-        presentWindowActive = true;
-        presentUntilMillis = nowMillis + presentWindowMillis;
+        absentReactionRequired = true;
+        nextOfferAtMillis = nowMillis + retryIntervalMillis;
         return payload;
     }
 
@@ -110,8 +101,7 @@ public final class M2BoundedSignalOfferV1 {
         bottleId = null;
         payload = null;
         offerCount = 0;
-        presentWindowActive = false;
-        presentUntilMillis = 0L;
-        nextPresentAtMillis = 0L;
+        absentReactionRequired = false;
+        nextOfferAtMillis = 0L;
     }
 }

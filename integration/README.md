@@ -67,7 +67,7 @@ require a physical end-to-end acceptance run.
   removal evidence are accepted.
 - Duplicate, stale and wrong-bottle events cause no repeated physical work.
 - Cross-Clock-Domain event hand-offs retain one payload for bounded retry,
-  insert an ABSENT gap between PRESENT windows and de-duplicate by bottle ID.
+  expose an ABSENT edge between PRESENT offers and de-duplicate by bottle ID.
 - `BOTTLE_DONE` is emitted once by M2 after verified unloading.
 - FaultSupervisor may request recovery, but only the owning Controller drives
   actuators and only M1 authorises global resume.

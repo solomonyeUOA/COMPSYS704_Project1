@@ -67,10 +67,11 @@ bottleId|L|500|GEOM_L|PACK_L
 
 The event-valued M2 hand-offs `BOTTLE_AT_CONVEYOR`, `LOAD_BOTTLE`,
 `MARK_LABELLED`, `UNLOAD_READY`, `P6_CLEAR` and `BOTTLE_READY_FOR_SORT` retain
-one pending bottle payload and offer it in at most three 500 ms `PRESENT`
-windows. Every window is separated by a 100 ms `ABSENT` gap, so a receiver can
-observe a new event edge even when Clock Domain phases differ. Copies preserve
-the exact bottle ID and payload.
+one pending bottle payload and offer it as at most three single-reaction
+`PRESENT` pulses. Pulses start 600 ms apart by default and each is followed by
+an explicit `ABSENT` reaction. This preserves bounded retry and observable
+event edges without holding a peer input `PRESENT` for thousands of its fast
+reactions. Copies preserve the exact bottle ID and payload.
 
 The local M2 receivers acknowledge `BOTTLE_AT_CONVEYOR` and `UNLOAD_READY`
 after accepting the matching bottle, which cancels their remaining copies.
@@ -78,8 +79,8 @@ The frozen M2/M3 and M2/M4 interfaces contain no acknowledgement for the other
 events, so those offers stop after the bounded retry count. Receiver models
 de-duplicate matching copies and reject conflicting payloads without repeating
 physical work. The defaults can be adjusted for an integration experiment
-with `m2.handoff.maximumOffers`, `m2.handoff.presentWindowMillis` and
-`m2.handoff.absentGapMillis`; production signal contracts are unchanged.
+with `m2.handoff.maximumOffers` and `m2.handoff.retryIntervalMillis`;
+production signal names, payloads, ports and receiver ownership are unchanged.
 
 ## Digital Twin IP
 
@@ -117,7 +118,7 @@ used when no detail is required.
 - `*ControllerModelV1.java`: deterministic Controller state machines.
 - `M2PlantStateV1.java`: deterministic high-level Plant model.
 - `M2MachineStateV1.java`: SystemJ-facing state facade.
-- `M2BoundedSignalOfferV1.java`: retained PRESENT/ABSENT transport windows.
+- `M2BoundedSignalOfferV1.java`: retained bounded retry-pulse transport.
 - `WorkpieceTwin.java`, `ResourceTwin.java`, `DigitalTwinStoreV1.java`: twin
   models and single-owner store.
 - `M2TransferFault*V2_1.java`: frozen V2.1 payload/correlation implementation.
@@ -161,9 +162,9 @@ $cp = "build\member2-classes;$lib\*"
 & $java -cp $cp Member2ReliableHandoffSelfTest
 ```
 
-All five tests must print `PASSED`. The reliable hand-off test checks every
-relative receiver phase for two different asynchronous sampling periods. The
-real M2/M3 model compatibility test
+All five tests must print `PASSED`. The reliable hand-off test checks bounded
+retry timing, mandatory `ABSENT` reactions, lost-pulse recovery and receiver
+de-duplication. The real M2/M3 model compatibility test
 also uses M3's existing Java sources:
 
 ```powershell
@@ -188,8 +189,8 @@ $m4Java = Get-ChildItem machines\filling_capping -Filter *.java |
 ```
 
 This covers the quantity-one (`q1`) and quantity-three (`q3`) reliable
-Sort/Pack scenarios. It deliberately drops the first transport window and
-verifies that the retry is accepted exactly once. Then run the project
+Sort/Pack scenarios. It deliberately drops the first transport pulse and
+verifies that a retry is accepted exactly once. Then run the project
 topology validator:
 
 ```powershell
