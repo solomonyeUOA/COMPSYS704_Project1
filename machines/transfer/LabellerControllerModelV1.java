@@ -22,14 +22,22 @@ public final class LabellerControllerModelV1 {
         catch (IllegalArgumentException exception) {
             return false;
         }
-        if (activeBottleId != null || status != M2StatusV1.READY ||
+        if (bottleId.equals(activeBottleId) ||
             completedBottleIds.contains(bottleId)) {
+            return true;
+        }
+        if (activeBottleId != null || status != M2StatusV1.READY) {
             return false;
         }
         activeBottleId = bottleId;
         labelCommandPending = true;
         status = M2StatusV1.BUSY;
         return true;
+    }
+
+    public boolean hasSeenBottle(String bottleId) {
+        return bottleId != null && (bottleId.equals(activeBottleId) ||
+            completedBottleIds.contains(bottleId));
     }
 
     public String takeLabelCommand() {

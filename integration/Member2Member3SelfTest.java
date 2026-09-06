@@ -29,12 +29,19 @@ public final class Member2Member3SelfTest {
             "B501|true|true|true|true|true"
         ), "P1 stable evidence accepted");
         String loadBottle = conveyor.takeLoadBottle();
+        M2BoundedSignalOfferV1 loadOffer = delayedOffer(
+            loadBottle, loadBottle, "LOAD_BOTTLE"
+        );
 
         RotaryTablePlantModelV1 rotary = new RotaryTablePlantModelV1();
         check(rotary.registerContext(contextPayload),
             "M3 registers same context");
-        check(rotary.loadBottle(loadBottle),
-            "M3 accepts M2 LOAD_BOTTLE identity");
+        check(rotary.loadBottle(loadOffer.nextReactionValue(600L)),
+            "M3 accepts retained M2 LOAD_BOTTLE identity");
+        check(loadOffer.nextReactionValue(601L) == null,
+            "M2 returns LOAD_BOTTLE to ABSENT after the retry pulse");
+        check(!rotary.loadBottle(loadOffer.nextReactionValue(1200L)),
+            "M3 does not load a later transport retry twice");
         rotate(rotary, 1L, 0L);
         check(rotary.markFilled("B501"), "M4 fill stub");
         rotate(rotary, 2L, 1000L);
@@ -52,8 +59,17 @@ public final class Member2Member3SelfTest {
             "M2 label command");
         check(labeller.acceptVerification("B501|PASS"),
             "M2 independent label verification");
-        check(rotary.markLabelled(labeller.takeMarkLabelled()),
-            "M3 accepts M2 MARK_LABELLED");
+        String marked = labeller.takeMarkLabelled();
+        M2BoundedSignalOfferV1 labelledOffer = delayedOffer(
+            marked, marked, "MARK_LABELLED"
+        );
+        check(rotary.markLabelled(labelledOffer.nextReactionValue(600L)),
+            "M3 accepts retained M2 MARK_LABELLED");
+        check(labelledOffer.nextReactionValue(601L) == null,
+            "M2 returns MARK_LABELLED to ABSENT after the retry pulse");
+        check(!rotary.markLabelled(
+            labelledOffer.nextReactionValue(1200L)
+        ), "M3 does not apply a later label retry twice");
 
         BottleUnloaderControllerModelV1 unloader =
             new BottleUnloaderControllerModelV1(500L);
@@ -65,8 +81,16 @@ public final class Member2Member3SelfTest {
             "M2 unloads matching bottle");
         check(unloader.acceptRemovalConfirmed("B501|true", 5000L),
             "physical removal and empty-P6 evidence");
-        check(rotary.clearP6(unloader.takeP6Clear()),
-            "M3 accepts M2 P6_CLEAR");
+        String clear = unloader.takeP6Clear();
+        M2BoundedSignalOfferV1 clearOffer = delayedOffer(
+            clear, clear, "P6_CLEAR"
+        );
+        check(rotary.clearP6(clearOffer.nextReactionValue(600L)),
+            "M3 accepts retained M2 P6_CLEAR");
+        check(clearOffer.nextReactionValue(601L) == null,
+            "M2 returns P6_CLEAR to ABSENT after the retry pulse");
+        check(!rotary.clearP6(clearOffer.nextReactionValue(1200L)),
+            "M3 does not clear P6 twice for a later retry");
         check(contextPayload.equals(unloader.takeSortContext()),
             "M2 preserves context for M4 SortPack");
         check(unloader.isBottleDonePresent(5000L),
@@ -107,6 +131,22 @@ public final class Member2Member3SelfTest {
         check("SUCCESS".equals(parsedResult.outcome) &&
             parsedResult.resultingStateVersion == 8L,
             "M3 parses M2 result");
+    }
+
+    /** Drops the first window and returns an offer positioned at retry two. */
+    private static M2BoundedSignalOfferV1 delayedOffer(
+        String bottleId,
+        String payload,
+        String signalName
+    ) {
+        M2BoundedSignalOfferV1 offer =
+            new M2BoundedSignalOfferV1(3, 600L);
+        check(offer.arm(bottleId, payload, 0L), signalName + " arms");
+        check(payload.equals(offer.nextReactionValue(0L)),
+            signalName + " first pulse is available but simulated lost");
+        check(offer.nextReactionValue(1L) == null,
+            signalName + " inserts an ABSENT reaction");
+        return offer;
     }
 
     private static void rotate(

@@ -1,13 +1,14 @@
 import java.util.ArrayDeque;
-import java.util.HashSet;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Queue;
-import java.util.Set;
 
 /** Admission-controlled M2 Bottle Loader state machine. */
 public final class BottleLoaderControllerModelV1 {
     private final Queue<M2BottleContextV1> profiles =
         new ArrayDeque<M2BottleContextV1>();
-    private final Set<String> acceptedBottleIds = new HashSet<String>();
+    private final Map<String, String> acceptedProfiles =
+        new HashMap<String, String>();
     private int status = M2StatusV1.READY;
     private int requiredQuantity;
     private int completedQuantity;
@@ -53,17 +54,23 @@ public final class BottleLoaderControllerModelV1 {
         catch (IllegalArgumentException exception) {
             return false;
         }
-        if (!acceptedBottleIds.add(context.getBottleId())) {
-            return false;
+        String encoded = context.encode();
+        String previous = acceptedProfiles.get(context.getBottleId());
+        if (previous != null) {
+            return previous.equals(encoded);
         }
         int reserved = profiles.size() + completedQuantity +
             (active == null ? 0 : 1);
         if (batchActive && reserved >= requiredQuantity) {
-            acceptedBottleIds.remove(context.getBottleId());
             return false;
         }
+        acceptedProfiles.put(context.getBottleId(), encoded);
         profiles.add(context);
         return true;
+    }
+
+    public boolean hasAcceptedProfile(String bottleId) {
+        return acceptedProfiles.containsKey(bottleId);
     }
 
     /** Returns one bottleId command only when the downstream entry is free. */

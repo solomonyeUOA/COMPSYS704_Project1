@@ -51,7 +51,7 @@ require a physical end-to-end acceptance run.
 
 1. Keep M1, M2, M3 and M4 independent self-tests passing.
 2. Run `tools/validate_integration.py` against all canonical production XML.
-3. Run the M2/M3 and M3/M4 compatibility tests.
+3. Run the M2/M3, M2/M4 and M3/M4 compatibility tests.
 4. Run the M4 two-size demo and verify both capacity/geometry paths.
 5. Run one bottle through P1 to P6, then a multi-bottle pipeline.
 6. Inject each supported fault and verify bounded recovery, M1 HOLD and no
@@ -66,6 +66,8 @@ require a physical end-to-end acceptance run.
 - P6 rotation remains blocked until both label verification and physical
   removal evidence are accepted.
 - Duplicate, stale and wrong-bottle events cause no repeated physical work.
+- Cross-Clock-Domain event hand-offs retain one payload for bounded retry,
+  expose an ABSENT edge between PRESENT offers and de-duplicate by bottle ID.
 - `BOTTLE_DONE` is emitted once by M2 after verified unloading.
 - FaultSupervisor may request recovery, but only the owning Controller drives
   actuators and only M1 authorises global resume.

@@ -21,6 +21,8 @@ public final class BottleUnloaderControllerModelV1 {
         new LinkedHashSet<String>();
     private final Set<String> completedBottleIds =
         new LinkedHashSet<String>();
+    private final Map<String, String> completedProfiles =
+        new LinkedHashMap<String, String>();
     private final long bottleDoneHoldMillis;
     private int status = M2StatusV1.READY;
     private M2BottleContextV1 active;
@@ -59,8 +61,9 @@ public final class BottleUnloaderControllerModelV1 {
         if (previous != null) {
             return previous.encode().equals(context.encode());
         }
-        if (completedBottleIds.contains(context.getBottleId())) {
-            return false;
+        String completed = completedProfiles.get(context.getBottleId());
+        if (completed != null) {
+            return completed.equals(context.encode());
         }
         profiles.put(context.getBottleId(), context);
         return true;
@@ -74,8 +77,9 @@ public final class BottleUnloaderControllerModelV1 {
             return false;
         }
         if (completedBottleIds.contains(bottleId) ||
+            readyBottleIds.contains(bottleId) ||
             (active != null && active.getBottleId().equals(bottleId))) {
-            return false;
+            return true;
         }
         return readyBottleIds.add(bottleId);
     }
@@ -168,6 +172,7 @@ public final class BottleUnloaderControllerModelV1 {
         }
         String bottleId = active.getBottleId();
         completedBottleIds.add(bottleId);
+        completedProfiles.put(bottleId, active.encode());
         profiles.remove(bottleId);
         active = null;
         status = M2StatusV1.READY;
