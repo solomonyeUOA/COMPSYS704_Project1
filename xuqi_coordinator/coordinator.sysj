@@ -94,12 +94,6 @@ Coordinator(
                 }
                 else {
                     emit START_ORDER(CoordinatorStateV1.requiredBottles);
-                    emit FILL_A_RATIO(
-                        CoordinatorStateV1.currentLiquidARatio
-                    );
-                    emit FILL_B_RATIO(
-                        CoordinatorStateV1.currentLiquidBRatio
-                    );
                     emit VIZ_REQUIRED_BOTTLES(
                         CoordinatorStateV1.requiredBottles
                     );
@@ -309,12 +303,6 @@ Coordinator(
                             emit START_ORDER(
                                 CoordinatorStateV1.requiredBottles
                             );
-                            emit FILL_A_RATIO(
-                                CoordinatorStateV1.currentLiquidARatio
-                            );
-                            emit FILL_B_RATIO(
-                                CoordinatorStateV1.currentLiquidBRatio
-                            );
                             emit VIZ_REQUIRED_BOTTLES(
                                 CoordinatorStateV1.requiredBottles
                             );
@@ -343,6 +331,26 @@ Coordinator(
             }
             else {
                 CoordinatorStateV1.consumeBottleDoneEdge(false);
+            }
+            pause;
+        }
+    }
+    ||
+    // Keep the active product recipe PRESENT in every logical reaction.
+    // This branch deliberately sits outside the one-second status poll and
+    // runs after order/product state transitions above, so a delayed M4 read
+    // still observes the current Integer ratios. completeOrder() clears
+    // orderActive before this branch runs, ending recipe publication without
+    // changing START_ORDER or completion semantics.
+    {
+        loop {
+            if (CoordinatorStateV1.orderActive) {
+                emit FILL_A_RATIO(
+                    CoordinatorStateV1.currentLiquidARatio
+                );
+                emit FILL_B_RATIO(
+                    CoordinatorStateV1.currentLiquidBRatio
+                );
             }
             pause;
         }
