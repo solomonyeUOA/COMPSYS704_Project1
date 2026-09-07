@@ -43,9 +43,9 @@ import javax.swing.Timer;
  * Handwritten Swing view for the Overall ABS Visualisation Plant.
  *
  * It receives data only through ABSVisualisationPlantCD. It has no Controller
- * connections and contains no machine or Plant control logic. This Phase 1
- * view is intentionally symbolic: it shows Controller state, batch progress
- * and shared visual-only bottle records without claiming real bottle tracking.
+ * connections and contains no machine or Plant control logic. This view is
+ * intentionally symbolic: it shows Controller state, batch progress and
+ * shared visual-only bottle records without claiming real bottle tracking.
  */
 public final class ABSVisualisation {
     private static final int LOADER = 0;
@@ -67,6 +67,18 @@ public final class ABSVisualisation {
     private static final double DEMO_LIQUID_B_PERCENT = 40.0;
     private static final Color LIQUID_A_COLOR = new Color(42, 132, 210);
     private static final Color LIQUID_B_COLOR = new Color(124, 86, 190);
+    private static final Color ACTIVE_FLOW_COLOR = new Color(31, 132, 190);
+    private static final Color PASSIVE_FLOW_COLOR = new Color(170, 184, 198);
+    private static final Font MODULE_PHASE_FONT =
+        new Font(Font.SANS_SERIF, Font.PLAIN, 8);
+    private static final String[] ROTARY_POSITION_LABELS = {
+        "P1 LOAD",
+        "P2 FILL",
+        "P3 LID",
+        "P4 CAP",
+        "P5 TRANSFER",
+        "P6 LABEL"
+    };
     private static final boolean TRACE_ENABLED =
         Boolean.getBoolean("abs.visualisation.trace");
 
@@ -125,7 +137,7 @@ public final class ABSVisualisation {
         header.add(title);
 
         JLabel subtitle = new JLabel(
-            "Phase 1 detailed symbolic process demonstration",
+            "Real-state-anchored production flow and shared detail timeline",
             SwingConstants.CENTER
         );
         subtitle.setAlignmentX(Component.CENTER_ALIGNMENT);
@@ -191,7 +203,7 @@ public final class ABSVisualisation {
             new ActionListener() {
                 @Override
                 public void actionPerformed(ActionEvent event) {
-                    VISUAL_MODEL.tick();
+                    VISUAL_MODEL.tickElapsed(System.nanoTime());
                     renderSnapshot = VISUAL_MODEL.getSnapshot();
                     productionLinePanel.repaint();
                     refreshDetailPanels();
@@ -615,9 +627,6 @@ public final class ABSVisualisation {
             new Rectangle(740, 142, 112, 164),
             new Rectangle(992, 142, 146, 164)
         };
-        private static final Rectangle OUTPUT_CONVEYOR_HIT_REGION =
-            new Rectangle(870, 160, 104, 128);
-
         private final DetailWindowOpener detailWindowOpener;
         private int hoveredModule = -1;
 
@@ -666,9 +675,6 @@ public final class ABSVisualisation {
 
         int moduleAtDesignPoint(int designX, int designY) {
             Point point = new Point(designX, designY);
-            if (OUTPUT_CONVEYOR_HIT_REGION.contains(point)) {
-                return CONVEYOR;
-            }
             for (int index = 0;
                 index < MODULE_HIT_REGIONS.length;
                 index++) {
@@ -677,6 +683,23 @@ public final class ABSVisualisation {
                 }
             }
             return -1;
+        }
+
+        @Override
+        public String getToolTipText(MouseEvent event) {
+            Point designPoint = toDesignPoint(event.getPoint());
+            int index = moduleAtDesignPoint(designPoint.x, designPoint.y);
+            if (index < 0) {
+                return "Read-only real-state-anchored production overview";
+            }
+            ABSVisualisationFlowModel.ModuleSnapshot module =
+                renderModule(index);
+            String bottle = module.getCurrentBottleId() > 0 ?
+                "Symbolic Bottle B" + module.getCurrentBottleId() :
+                "No active symbolic bottle";
+            return "<html><b>" + MACHINE_NAMES[index] + "</b><br>" +
+                bottle + "<br>Visual: " + module.getPhase() +
+                "<br>Click for shared detail view</html>";
         }
 
         private void updateHover(Point componentPoint) {
@@ -782,6 +805,7 @@ public final class ABSVisualisation {
                 27
             );
 
+            drawFlowRibbon(g2);
             drawFlowConnections(g2);
             drawLoader(g2, 20, 142, 116, 164, statuses, received);
             drawConveyor(
@@ -798,10 +822,7 @@ public final class ABSVisualisation {
             );
             drawLidLoader(g2, 607, 142, 112, 164, statuses, received);
             drawCapper(g2, 740, 142, 112, 164, statuses, received);
-            drawConveyor(
-                g2, 870, 160, 104, 128, "Symbolic Exit Transfer",
-                statuses, received
-            );
+            drawPassiveDownstreamBoundary(g2, 870, 160, 104, 128);
             drawUnloader(g2, 992, 142, 146, 164, statuses, received);
 
             g2.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 12));
@@ -814,10 +835,24 @@ public final class ABSVisualisation {
             );
         }
 
+        private void drawFlowRibbon(Graphics2D g2) {
+            g2.setColor(new Color(233, 240, 247));
+            g2.fillRoundRect(28, 40, DESIGN_WIDTH - 56, 25, 12, 12);
+            g2.setColor(new Color(44, 78, 108));
+            g2.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 11));
+            drawCenteredText(
+                g2,
+                "INPUT  >  LOAD  >  TRANSPORT  >  ROTARY PROCESSING  >  " +
+                "FILL A  >  FILL B  >  LID  >  CAP  >  UNLOAD  >  COMPLETION",
+                DESIGN_WIDTH / 2,
+                57
+            );
+        }
+
         private void drawFlowConnections(Graphics2D g2) {
             Stroke originalStroke = g2.getStroke();
             g2.setStroke(new BasicStroke(2.1f));
-            g2.setColor(new Color(76, 93, 112));
+            g2.setColor(PASSIVE_FLOW_COLOR);
 
             drawArrow(g2, 136, 224, 153, 224);
             drawArrow(g2, 257, 224, 275, 224);
@@ -836,7 +871,59 @@ public final class ABSVisualisation {
             drawArrow(g2, 719, 224, 740, 224);
             drawArrow(g2, 852, 224, 870, 224);
             drawArrow(g2, 974, 224, 992, 224);
+
+            drawActiveConnector(g2, LOADER, 136, 224, 153, 224);
+            drawActiveConnector(g2, CONVEYOR, 257, 224, 275, 224);
+            drawActiveConnector(g2, FILLER_A, 433, 218, 452, 141);
+            drawActiveConnector(g2, FILLER_B, 433, 224, 452, 305);
+            drawActiveConnector(g2, LID, 580, 141, 607, 224);
+            drawActiveConnector(g2, CAPPER, 719, 224, 740, 224);
+            drawActiveConnector(g2, UNLOADER, 852, 224, 992, 224);
             g2.setStroke(originalStroke);
+        }
+
+        private void drawActiveConnector(
+            Graphics2D g2,
+            int moduleIndex,
+            double startX,
+            double startY,
+            double endX,
+            double endY
+        ) {
+            ABSVisualisationFlowModel.ModuleSnapshot module =
+                renderModule(moduleIndex);
+            if (module.getCurrentBottleId() <= 0) {
+                return;
+            }
+            double progress = ease(module.getProgress() / 100.0);
+            double markerX = startX + (endX - startX) * progress;
+            double markerY = startY + (endY - startY) * progress;
+            Stroke original = g2.getStroke();
+            g2.setStroke(new BasicStroke(
+                4.2f,
+                BasicStroke.CAP_ROUND,
+                BasicStroke.JOIN_ROUND
+            ));
+            g2.setColor(new Color(
+                ACTIVE_FLOW_COLOR.getRed(),
+                ACTIVE_FLOW_COLOR.getGreen(),
+                ACTIVE_FLOW_COLOR.getBlue(),
+                145
+            ));
+            g2.draw(new Line2D.Double(
+                startX,
+                startY,
+                markerX,
+                markerY
+            ));
+            g2.setColor(ACTIVE_FLOW_COLOR);
+            g2.fill(new Ellipse2D.Double(
+                markerX - 3.5,
+                markerY - 3.5,
+                7.0,
+                7.0
+            ));
+            g2.setStroke(original);
         }
 
         private void drawLoader(
@@ -911,6 +998,12 @@ public final class ABSVisualisation {
             }
             drawBottle(g2, bottleX, bottleY, 14, 28,
                 null, 0, false, false);
+            drawBottleIdentity(
+                g2,
+                bottleX + 7,
+                bottleY + 29,
+                shared.getCurrentBottleId()
+            );
             if (busy) {
                 g2.setColor(statusColor(BUSY_STATUS));
                 drawArrow(g2, centreX + 13, y + 111,
@@ -939,7 +1032,6 @@ public final class ABSVisualisation {
             boolean done = isDone(CONVEYOR, statuses, received);
             ABSVisualisationFlowModel.ModuleSnapshot shared =
                 renderModule(CONVEYOR);
-            boolean outputConveyor = title.startsWith("Symbolic");
             int beltX = x + 12;
             int beltY = y + 66;
             int beltWidth = width - 24;
@@ -983,19 +1075,22 @@ public final class ABSVisualisation {
             );
             int bottleX = beltX + 4 + travel;
             int bottleY = beltY - 28;
-            Color bottleLiquid = outputConveyor ?
-                new Color(92, 151, 204) : null;
-            int bottleLevel = outputConveyor ? 72 : 0;
             drawBottle(
                 g2,
                 bottleX,
                 bottleY,
                 15,
                 28,
-                bottleLiquid,
-                bottleLevel,
-                outputConveyor,
-                outputConveyor
+                null,
+                0,
+                false,
+                false
+            );
+            drawBottleIdentity(
+                g2,
+                bottleX + 7,
+                bottleY + 29,
+                shared.getCurrentBottleId()
             );
             if (done) {
                 drawDoneTick(g2, x + width - 15, y + 36);
@@ -1037,10 +1132,11 @@ public final class ABSVisualisation {
             );
             g2.fillOval(centreX - 10, centreY - 10, 20, 20);
 
-            for (int station = 0; station < 5; station++) {
+            int stationCount = shared.getRotaryStationCount();
+            for (int station = 0; station < stationCount; station++) {
                 double phaseAngle = Math.toRadians(shared.getRotaryAngle());
                 double angle = -Math.PI / 2.0 + phaseAngle + station *
-                    (Math.PI * 2.0 / 5.0);
+                    (Math.PI * 2.0 / stationCount);
                 int stationX = centreX + (int)(Math.cos(angle) * 38);
                 int stationY = centreY + (int)(Math.sin(angle) * 38);
                 g2.setColor(new Color(248, 250, 252));
@@ -1059,7 +1155,23 @@ public final class ABSVisualisation {
                         false,
                         false
                     );
+                    drawBottleIdentity(
+                        g2,
+                        stationX,
+                        stationY + 13,
+                        shared.getRotaryStationBottleId(station)
+                    );
                 }
+                int labelX = centreX + (int)(Math.cos(angle) * 48);
+                int labelY = centreY + (int)(Math.sin(angle) * 48);
+                g2.setColor(new Color(55, 70, 84));
+                g2.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 7));
+                drawCenteredText(
+                    g2,
+                    "P" + (station + 1),
+                    labelX,
+                    labelY + 3
+                );
             }
 
             double indicatorAngle = Math.toRadians(
@@ -1087,7 +1199,8 @@ public final class ABSVisualisation {
                 centreX - 59, centreY + 15);
             g2.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 10));
             g2.setColor(new Color(79, 88, 99));
-            drawCenteredText(g2, "5 symbolic stations", centreX, y + 174);
+            drawCenteredText(g2, "6-position symbolic process map",
+                centreX, y + 174);
             drawCenteredText(
                 g2,
                 shared.getRotaryPhase(),
@@ -1166,6 +1279,12 @@ public final class ABSVisualisation {
                 false,
                 false
             );
+            drawBottleIdentity(
+                g2,
+                nozzleX + 3,
+                y + 109,
+                shared.getCurrentBottleId()
+            );
 
             if (busy) {
                 int dropOffset = (int)Math.round(
@@ -1233,6 +1352,12 @@ public final class ABSVisualisation {
                 done,
                 false
             );
+            drawBottleIdentity(
+                g2,
+                x + 73,
+                y + 127,
+                shared.getCurrentBottleId()
+            );
             if (busy) {
                 g2.setColor(statusColor(BUSY_STATUS));
                 drawArrow(g2, x + 92, y + 60, x + 92, y + 86);
@@ -1289,6 +1414,12 @@ public final class ABSVisualisation {
                 (int)Math.round(DEMO_LIQUID_B_PERCENT),
                 true,
                 done
+            );
+            drawBottleIdentity(
+                g2,
+                centreX,
+                y + 128,
+                shared.getCurrentBottleId()
             );
 
             if (busy) {
@@ -1369,6 +1500,12 @@ public final class ABSVisualisation {
                 true,
                 true
             );
+            drawBottleIdentity(
+                g2,
+                bottleX + 9,
+                bottleY + 35,
+                shared.getCurrentBottleId()
+            );
             g2.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 10));
             g2.setColor(new Color(79, 88, 99));
             drawCenteredText(
@@ -1426,8 +1563,24 @@ public final class ABSVisualisation {
             g2.setFont(new Font(Font.SANS_SERIF, Font.BOLD, fontSize));
             drawCenteredText(g2, title, x + width / 2, y + 21);
 
+            ABSVisualisationFlowModel.ModuleSnapshot module =
+                renderModule(index);
+            String visualPhase = module.getCurrentBottleId() > 0 ?
+                "VISUAL B" + module.getCurrentBottleId() + ": " +
+                    module.getPhase() :
+                "VISUAL: " + module.getPhase();
+            g2.setColor(new Color(76, 86, 98));
+            g2.setFont(MODULE_PHASE_FONT);
+            drawClippedCenteredText(
+                g2,
+                visualPhase,
+                x + 6,
+                y + height - 29,
+                width - 12
+            );
+
             drawStatusBadge(
-                g2, x + 8, y + height - 28, width - 16, 20,
+                g2, x + 8, y + height - 23, width - 16, 16,
                 index, statuses, received
             );
         }
@@ -1442,15 +1595,15 @@ public final class ABSVisualisation {
             int[] statuses,
             boolean[] received
         ) {
-            String text = received[index] ?
-                statusName(statuses[index]) : "WAITING";
+            String text = "REAL " + (received[index] ?
+                statusName(statuses[index]) : "WAITING");
             Color color = received[index] ?
                 statusColor(statuses[index]) : statusColor(-1);
             g2.setColor(color);
             g2.fillRoundRect(x, y, width, height, 8, 8);
             g2.setColor(Color.WHITE);
             g2.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 10));
-            drawCenteredText(g2, text, x + width / 2, y + 14);
+            drawCenteredText(g2, text, x + width / 2, y + 12);
         }
 
         private static boolean isBusy(
@@ -1520,6 +1673,68 @@ public final class ABSVisualisation {
                         neckX + neckWidth + 1, y + 5);
                 }
             }
+        }
+
+        private void drawPassiveDownstreamBoundary(
+            Graphics2D g2,
+            int x,
+            int y,
+            int width,
+            int height
+        ) {
+            g2.setColor(new Color(244, 247, 250));
+            g2.fillRoundRect(x, y, width, height, 14, 14);
+            Stroke original = g2.getStroke();
+            g2.setStroke(new BasicStroke(
+                1.5f,
+                BasicStroke.CAP_ROUND,
+                BasicStroke.JOIN_ROUND,
+                1.0f,
+                new float[] {5.0f, 5.0f},
+                0.0f
+            ));
+            g2.setColor(new Color(148, 162, 176));
+            g2.drawRoundRect(x, y, width, height, 14, 14);
+            g2.setStroke(original);
+            g2.setColor(new Color(67, 80, 94));
+            g2.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 10));
+            drawCenteredText(g2, "DOWNSTREAM", x + width / 2, y + 24);
+            g2.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 9));
+            drawCenteredText(g2, "PROCESS /", x + width / 2, y + 47);
+            drawCenteredText(g2, "COMPLETION", x + width / 2, y + 60);
+            drawCenteredText(g2, "BOUNDARY", x + width / 2, y + 73);
+            g2.setColor(PASSIVE_FLOW_COLOR);
+            g2.setStroke(new BasicStroke(2.0f));
+            for (int markerX = x + 15; markerX < x + width - 18;
+                markerX += 22) {
+                drawArrow(g2, markerX, y + 94, markerX + 13, y + 94);
+            }
+            g2.setStroke(original);
+            g2.setColor(new Color(91, 105, 119));
+            g2.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 8));
+            drawCenteredText(g2, "NO LIVE STATUS", x + width / 2,
+                y + height - 13);
+        }
+
+        private static void drawBottleIdentity(
+            Graphics2D g2,
+            int centreX,
+            int topY,
+            int bottleId
+        ) {
+            if (bottleId <= 0) {
+                return;
+            }
+            String text = "B" + bottleId;
+            Font originalFont = g2.getFont();
+            g2.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 8));
+            FontMetrics metrics = g2.getFontMetrics();
+            int width = Math.max(18, metrics.stringWidth(text) + 6);
+            g2.setColor(new Color(24, 104, 168));
+            g2.fillRoundRect(centreX - width / 2, topY, width, 12, 7, 7);
+            g2.setColor(Color.WHITE);
+            drawCenteredText(g2, text, centreX, topY + 9);
+            g2.setFont(originalFont);
         }
 
         private static void drawLayeredBottle(
@@ -1652,6 +1867,34 @@ public final class ABSVisualisation {
             FontMetrics metrics = g2.getFontMetrics();
             int textX = centreX - metrics.stringWidth(text) / 2;
             g2.drawString(text, textX, baselineY);
+        }
+
+        private static double ease(double value) {
+            double bounded = Math.max(0.0, Math.min(1.0, value));
+            return bounded * bounded * (3.0 - 2.0 * bounded);
+        }
+
+        private static void drawClippedCenteredText(
+            Graphics2D g2,
+            String text,
+            int x,
+            int baselineY,
+            int maximumWidth
+        ) {
+            FontMetrics metrics = g2.getFontMetrics();
+            String visible = text;
+            while (visible.length() > 4 &&
+                metrics.stringWidth(visible + "...") > maximumWidth) {
+                visible = visible.substring(0, visible.length() - 1);
+            }
+            if (!visible.equals(text)) {
+                visible += "...";
+            }
+            int textX = x + Math.max(
+                0,
+                (maximumWidth - metrics.stringWidth(visible)) / 2
+            );
+            g2.drawString(visible, textX, baselineY);
         }
     }
 
@@ -1835,9 +2078,9 @@ public final class ABSVisualisation {
                 wrapInformationText(
                     "Lifecycle: <b>" + detailModel.getLifecycle() +
                     "</b><br>Phase: <b>" + detailModel.getPhase() +
-                    "</b><br>Shared visual bottle: <b>" +
+                    "</b><br>Current symbolic bottle: <b>" +
                     (detailModel.getCurrentBottleId() > 0 ?
-                        "#" + detailModel.getCurrentBottleId() : "--") +
+                        "B" + detailModel.getCurrentBottleId() : "--") +
                     "</b><br>Reconciliation: <b>" +
                     VISUAL_MODEL.getModeName() + "</b>"
                 )
@@ -1853,7 +2096,13 @@ public final class ABSVisualisation {
                     );
                     secondaryMetricValue.setText(
                         wrapInformationText(
-                            "Gate and bottle motion: symbolic local cycle"
+                            "Queue remaining: " +
+                            renderSnapshot.getQueuedCount() +
+                            "<br>Release position: " +
+                            (detailModel.getCurrentBottleId() > 0 ?
+                                "B" + detailModel.getCurrentBottleId() +
+                                    " of " + renderSnapshot.getRequired() :
+                                "waiting for real Loader cycle")
                         )
                     );
                     break;
@@ -1881,7 +2130,8 @@ public final class ABSVisualisation {
                         wrapInformationText(
                             "Current index movement: " +
                             oneDecimal(detailModel.getRotaryAngle()) +
-                            " / 72.0 deg<br>Occupied stations: " +
+                            " deg (60 deg per real cycle)<br>" +
+                            "Occupied symbolic positions: " +
                             detailModel.getRotaryOccupiedCount() + " / " +
                             detailModel.getRotaryStationCount()
                         )
@@ -1899,16 +2149,15 @@ public final class ABSVisualisation {
                 case FILLER_A:
                     primaryMetricValue.setText(
                         wrapInformationText(
-                            "Liquid A: " +
+                            "Symbolic A phase display: " +
                             oneDecimal(detailModel.getLiquidALevel()) +
-                            "%<br>Liquid B: 0.0%"
+                            "%<br>Symbolic B phase display: 0.0%"
                         )
                     );
                     secondaryMetricValue.setText(
                         wrapInformationText(
-                            "IDEALISED target A: " +
-                            oneDecimal(DEMO_LIQUID_A_PERCENT) +
-                            "%<br>Total fill: " +
+                            "No recipe telemetry is available to IP." +
+                            "<br>Total symbolic level: " +
                             oneDecimal(detailModel.getTotalFillLevel()) +
                             "%<br>Valve: " +
                             (detailModel.isRunning() ?
@@ -1920,17 +2169,16 @@ public final class ABSVisualisation {
                 case FILLER_B:
                     primaryMetricValue.setText(
                         wrapInformationText(
-                            "Liquid A retained: " +
+                            "Symbolic A layer retained: " +
                             oneDecimal(detailModel.getLiquidALevel()) +
-                            "%<br>Liquid B added: " +
+                            "%<br>Symbolic B layer added: " +
                             oneDecimal(detailModel.getLiquidBLevel()) + "%"
                         )
                     );
                     secondaryMetricValue.setText(
                         wrapInformationText(
-                            "IDEALISED target B: " +
-                            oneDecimal(DEMO_LIQUID_B_PERCENT) +
-                            "%<br>Total fill: " +
+                            "No recipe telemetry is available to IP." +
+                            "<br>Total symbolic level: " +
                             oneDecimal(detailModel.getTotalFillLevel()) +
                             "%<br>Valve: " +
                             (detailModel.isRunning() ?
@@ -1976,7 +2224,9 @@ public final class ABSVisualisation {
                     );
                     secondaryMetricValue.setText(
                         wrapInformationText(
-                            "Shared visual bottle identity only; not real telemetry"
+                            detailModel.getPhase() +
+                            "<br>Completion is counted only after real " +
+                            "VIZ_COMPLETED_BOTTLES increases."
                         )
                     );
                     updateRealBatchInformation();
@@ -2013,16 +2263,17 @@ public final class ABSVisualisation {
         }
 
         private String rotaryOccupancyText() {
-            StringBuilder text = new StringBuilder("Stations: ");
+            StringBuilder text = new StringBuilder("Symbolic positions: ");
             for (int station = 0;
                 station < detailModel.getRotaryStationCount();
                 station++) {
                 if (station > 0) {
                     text.append("  ");
                 }
-                text.append(station + 1).append('=')
-                    .append(detailModel.isRotaryStationOccupied(station) ?
-                        "BOTTLE" : "empty");
+                int bottleId =
+                    detailModel.getRotaryStationBottleId(station);
+                text.append('P').append(station + 1).append('=')
+                    .append(bottleId > 0 ? "B" + bottleId : "empty");
             }
             return text.toString();
         }
@@ -2316,8 +2567,8 @@ public final class ABSVisualisation {
                 g2.drawString("MOVING BELT + ROLLERS", 158, 326);
                 g2.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 12));
                 g2.drawString(
-                    "Input and output overview graphics share one REAL status.",
-                    78,
+                    "One REAL entry Conveyor; downstream boundary is passive.",
+                    68,
                     365
                 );
             }
@@ -2421,6 +2672,12 @@ public final class ABSVisualisation {
                             false,
                             false
                         );
+                        ProductionLinePanel.drawBottleIdentity(
+                            g2,
+                            holder.x,
+                            holder.y + 25,
+                            detailModel.getRotaryStationBottleId(station)
+                        );
                     }
 
                     Point label = rotaryPoint(
@@ -2431,15 +2688,17 @@ public final class ABSVisualisation {
                         0.0
                     );
                     g2.setColor(Color.WHITE);
-                    g2.fillOval(label.x - 12, label.y - 12, 24, 24);
+                    g2.fillRoundRect(label.x - 23, label.y - 11, 46, 22,
+                        10, 10);
                     g2.setColor(new Color(45, 60, 75));
-                    g2.drawOval(label.x - 12, label.y - 12, 24, 24);
-                    g2.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 12));
+                    g2.drawRoundRect(label.x - 23, label.y - 11, 46, 22,
+                        10, 10);
+                    g2.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 9));
                     ProductionLinePanel.drawCenteredText(
                         g2,
-                        String.valueOf(station + 1),
+                        ROTARY_POSITION_LABELS[station],
                         label.x,
-                        label.y + 5
+                        label.y + 3
                     );
                 }
 
@@ -2459,6 +2718,12 @@ public final class ABSVisualisation {
                         0,
                         false,
                         false
+                    );
+                    ProductionLinePanel.drawBottleIdentity(
+                        g2,
+                        bottleX,
+                        entryStation.y + 24,
+                        detailModel.getCurrentBottleId()
                     );
                 }
 
@@ -2480,6 +2745,12 @@ public final class ABSVisualisation {
                         false,
                         false
                     );
+                    ProductionLinePanel.drawBottleIdentity(
+                        g2,
+                        bottleX,
+                        exitStation.y + 24,
+                        detailModel.getCurrentBottleId()
+                    );
                 }
 
                 g2.setColor(detailModel.isRunning() ?
@@ -2500,7 +2771,7 @@ public final class ABSVisualisation {
                 g2.drawString("EXIT", 25, exitStation.y - 27);
                 ProductionLinePanel.drawCenteredText(
                     g2,
-                    "FIVE IDEALISED STATIONS - EMPTY BOTTLES ONLY",
+                    "SIX-POSITION M3 PROCESS MAP - SYMBOLIC OCCUPANCY ONLY",
                     centreX,
                     382
                 );
@@ -2514,7 +2785,9 @@ public final class ABSVisualisation {
                 double movementAngle
             ) {
                 double angle = Math.toRadians(
-                    150.0 - station * 72.0 - movementAngle
+                    180.0 - station *
+                        (360.0 / detailModel.getRotaryStationCount()) -
+                        movementAngle
                 );
                 return new Point(
                     centreX + (int)Math.round(Math.cos(angle) * radius),

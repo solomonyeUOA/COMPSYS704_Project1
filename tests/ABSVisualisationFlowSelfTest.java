@@ -19,9 +19,12 @@ public final class ABSVisualisationFlowSelfTest {
         caseGBoundedCatchUpWithoutTeleport();
         caseHDuplicateStatusesDoNotDuplicateCycles();
         caseINewBatchResetHasNoStateLeakage();
+        caseJSixPositionRotaryIdentity();
+        caseKDelayedCompletionHoldsAtExit();
+        caseLLongIdleAndElapsedTimerDoNotDrift();
         System.out.println(
             "ABSVisualisationFlowSelfTest PASS (" + assertions +
-            " assertions; cases A-I)"
+            " assertions; cases A-L)"
         );
     }
 
@@ -115,6 +118,12 @@ public final class ABSVisualisationFlowSelfTest {
                 ABSVisualisationFlowModel.READY_STATUS);
         }
         tick(model, 300);
+        ABSVisualisationFlowModel.ModuleSnapshot rotary =
+            model.getSnapshot().getModule(ABSVisualisationFlowModel.ROTARY);
+        ABSVisualisationFlowModel.ModuleSnapshot fillerA =
+            model.getSnapshot().getModule(ABSVisualisationFlowModel.FILLER_A);
+        ABSVisualisationFlowModel.ModuleSnapshot fillerB =
+            model.getSnapshot().getModule(ABSVisualisationFlowModel.FILLER_B);
         for (int module = 0;
             module < ABSVisualisationFlowModel.MODULE_COUNT;
             module++) {
@@ -125,6 +134,12 @@ public final class ABSVisualisationFlowSelfTest {
             model.getStartedCycles(ABSVisualisationFlowModel.LOADER));
         assertEquals("E no visual completions", 0,
             model.getSnapshot().getVisualCompleted());
+        assertNear("E Rotary READY has no angle drift", 0.0,
+            rotary.getRotaryAngle(), 0.0);
+        assertNear("E Filler A READY has no liquid rise", 0.0,
+            fillerA.getLiquidALevel(), 0.0);
+        assertNear("E Filler B READY has no liquid rise", 0.0,
+            fillerB.getLiquidBLevel(), 0.0);
     }
 
     private static void caseFModuleLocalFaultFreezeAndResume() {
@@ -251,6 +266,120 @@ public final class ABSVisualisationFlowSelfTest {
                 reset.getBatchGeneration(), bottle.getBatchGeneration());
         }
         assertTrue("I invariants", model.invariantsHold());
+    }
+
+    private static void caseJSixPositionRotaryIdentity() {
+        ABSVisualisationFlowModel model = new ABSVisualisationFlowModel();
+        model.acceptRequired(1);
+        completeStage(model, ABSVisualisationFlowModel.LOADER);
+        completeStage(model, ABSVisualisationFlowModel.CONVEYOR);
+        completeStage(model, ABSVisualisationFlowModel.ROTARY);
+
+        ABSVisualisationFlowModel.ModuleSnapshot rotary =
+            model.getSnapshot().getModule(ABSVisualisationFlowModel.ROTARY);
+        assertEquals("J current M3 rotary has six positions", 6,
+            rotary.getRotaryStationCount());
+        assertEquals("J B1 identity is seated at P1", 1,
+            rotary.getRotaryStationBottleId(0));
+        assertEquals("J only one rotary position is occupied", 1,
+            rotary.getRotaryOccupiedCount());
+        for (int position = 1;
+            position < rotary.getRotaryStationCount();
+            position++) {
+            assertEquals("J no duplicate B1 at rotary position " + position,
+                0, rotary.getRotaryStationBottleId(position));
+        }
+        assertTrue("J rotary identity invariants", model.invariantsHold());
+    }
+
+    private static void caseKDelayedCompletionHoldsAtExit() {
+        ABSVisualisationFlowModel model = new ABSVisualisationFlowModel();
+        model.acceptRequired(1);
+        routeBottleToUnloader(model);
+        completeStage(model, ABSVisualisationFlowModel.UNLOADER);
+
+        ABSVisualisationFlowModel.ModuleSnapshot waiting =
+            model.getSnapshot().getModule(ABSVisualisationFlowModel.UNLOADER);
+        assertNear("K bottle reaches symbolic exit", 100.0,
+            waiting.getProgress(), 0.001);
+        assertEquals("K exit waits for real completed count",
+            "WAITING FOR COMPLETION CONFIRMATION", waiting.getPhase());
+        assertEquals("K unconfirmed exit lifecycle holds",
+            ABSVisualisationFlowModel.ModuleLifecycle.HOLDING,
+            waiting.getLifecycle());
+        assertEquals("K visual completion does not run ahead", 0,
+            model.getSnapshot().getVisualCompleted());
+        assertEquals("K B1 remains at Unloader", 1,
+            waiting.getCurrentBottleId());
+
+        tick(model, 600);
+        ABSVisualisationFlowModel.ModuleSnapshot stillWaiting =
+            model.getSnapshot().getModule(ABSVisualisationFlowModel.UNLOADER);
+        assertNear("K delayed evidence has no exit drift", 100.0,
+            stillWaiting.getProgress(), 0.0);
+        assertEquals("K delayed evidence keeps B1", 1,
+            stillWaiting.getCurrentBottleId());
+        assertEquals("K still no fake completion", 0,
+            model.getSnapshot().getVisualCompleted());
+
+        model.acceptCompleted(1);
+        tick(model, 1);
+        assertEquals("K real count releases visual completion", 1,
+            model.getSnapshot().getVisualCompleted());
+        assertEquals("K completed B1 leaves Unloader", 0,
+            model.getSnapshot().getModule(
+                ABSVisualisationFlowModel.UNLOADER).getCurrentBottleId());
+    }
+
+    private static void caseLLongIdleAndElapsedTimerDoNotDrift() {
+        ABSVisualisationFlowModel idle = new ABSVisualisationFlowModel();
+        idle.acceptRequired(3);
+        for (int module = 0;
+            module < ABSVisualisationFlowModel.MODULE_COUNT;
+            module++) {
+            idle.acceptStatus(module,
+                ABSVisualisationFlowModel.READY_STATUS);
+        }
+        long now = 1000000000L;
+        idle.tickElapsed(now);
+        for (int frame = 0; frame < 5000; frame++) {
+            now += 30000000L;
+            idle.tickElapsed(now);
+        }
+        ABSVisualisationFlowModel.FlowSnapshot idleSnapshot =
+            idle.getSnapshot();
+        assertEquals("L long idle keeps all three bottles queued", 3,
+            idleSnapshot.getQueuedCount());
+        assertEquals("L long idle has no visual completion", 0,
+            idleSnapshot.getVisualCompleted());
+        for (int module = 0;
+            module < ABSVisualisationFlowModel.MODULE_COUNT;
+            module++) {
+            assertNear("L long idle module has no drift " + module, 0.0,
+                idleSnapshot.getModule(module).getProgress(), 0.0);
+        }
+        assertNear("L long idle Rotary has no drift", 0.0,
+            idleSnapshot.getModule(
+                ABSVisualisationFlowModel.ROTARY).getRotaryAngle(), 0.0);
+
+        ABSVisualisationFlowModel stalledEdt =
+            new ABSVisualisationFlowModel();
+        stalledEdt.acceptRequired(1);
+        stalledEdt.acceptStatus(ABSVisualisationFlowModel.LOADER,
+            ABSVisualisationFlowModel.BUSY_STATUS);
+        stalledEdt.tickElapsed(1000000000L);
+        double beforeStall = moduleProgress(stalledEdt,
+            ABSVisualisationFlowModel.LOADER);
+        stalledEdt.tickElapsed(11000000000L);
+        double afterStall = moduleProgress(stalledEdt,
+            ABSVisualisationFlowModel.LOADER);
+        assertTrue("L elapsed-time catch-up still advances active work",
+            afterStall > beforeStall);
+        assertAtMost("L stalled EDT is bounded to two frames",
+            afterStall - beforeStall, 2.401);
+        assertAtMost("L stalled EDT cannot cross BUSY hold",
+            afterStall, ABSVisualisationFlowModel.BUSY_HOLD_PERCENT);
+        assertTrue("L elapsed timer invariants", stalledEdt.invariantsHold());
     }
 
     private static void processBottleThroughPlant(

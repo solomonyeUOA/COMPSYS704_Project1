@@ -29,7 +29,8 @@ final class ABSVisualisationFlowModel {
 
     static final double BUSY_HOLD_PERCENT = 92.0;
     static final double MAX_CATCH_UP_MULTIPLIER = 2.2;
-    private static final int ROTARY_STATION_COUNT = 5;
+    private static final int ROTARY_STATION_COUNT = 6;
+    private static final double ROTARY_STEP_DEGREES = 60.0;
     private static final int BATCH_TRANSITION_TICKS = 8;
     private static final double COMPLETE_EPSILON = 0.001;
     private static final boolean TRACE_ENABLED =
@@ -151,7 +152,7 @@ final class ABSVisualisationFlowModel {
         private final double rotaryAngle;
         private final double rotaryEntryProgress;
         private final double rotaryExitProgress;
-        private final boolean[] rotaryStations;
+        private final int[] rotaryStationBottleIds;
         private final int rotaryBottlesEntered;
         private final int rotaryBottlesExited;
         private final double liquidALevel;
@@ -172,7 +173,7 @@ final class ABSVisualisationFlowModel {
             double rotary,
             double entryProgress,
             double exitProgress,
-            boolean[] stations,
+            int[] stationBottleIds,
             int entered,
             int exited,
             double liquidA,
@@ -192,7 +193,7 @@ final class ABSVisualisationFlowModel {
             rotaryAngle = rotary;
             rotaryEntryProgress = entryProgress;
             rotaryExitProgress = exitProgress;
-            rotaryStations = stations.clone();
+            rotaryStationBottleIds = stationBottleIds.clone();
             rotaryBottlesEntered = entered;
             rotaryBottlesExited = exited;
             liquidALevel = liquidA;
@@ -238,18 +239,25 @@ final class ABSVisualisationFlowModel {
         }
 
         int getRotaryStationCount() {
-            return rotaryStations.length;
+            return rotaryStationBottleIds.length;
         }
 
         boolean isRotaryStationOccupied(int station) {
-            return station >= 0 && station < rotaryStations.length &&
-                rotaryStations[station];
+            return getRotaryStationBottleId(station) > 0;
+        }
+
+        int getRotaryStationBottleId(int station) {
+            return station >= 0 &&
+                station < rotaryStationBottleIds.length ?
+                    rotaryStationBottleIds[station] : 0;
         }
 
         int getRotaryOccupiedCount() {
             int occupied = 0;
-            for (int index = 0; index < rotaryStations.length; index++) {
-                if (rotaryStations[index]) {
+            for (int index = 0;
+                index < rotaryStationBottleIds.length;
+                index++) {
+                if (rotaryStationBottleIds[index] > 0) {
                     occupied++;
                 }
             }
@@ -366,6 +374,16 @@ final class ABSVisualisationFlowModel {
         List<BottleSnapshot> getBottles() {
             return bottles;
         }
+
+        int getQueuedCount() {
+            int queued = 0;
+            for (BottleSnapshot bottle : bottles) {
+                if (bottle.getLifecycle() == BottleLifecycle.QUEUED) {
+                    queued++;
+                }
+            }
+            return queued;
+        }
     }
 
     private final int[] statuses = new int[MODULE_COUNT];
@@ -392,6 +410,7 @@ final class ABSVisualisationFlowModel {
     private double rollerAngle;
     private double rotaryBaseAngle;
     private long version;
+    private long lastRealtimeTickNanos;
     private FlowSnapshot published;
 
     ABSVisualisationFlowModel() {
@@ -475,6 +494,23 @@ final class ABSVisualisationFlowModel {
     }
 
     synchronized void tick() {
+        tickInternal(1.0);
+    }
+
+    /** EDT entry point: coalesced timer delays are bounded to two frames. */
+    synchronized void tickElapsed(long nowNanos) {
+        double frameScale = 1.0;
+        if (lastRealtimeTickNanos > 0L && nowNanos > lastRealtimeTickNanos) {
+            double elapsedMillis =
+                (nowNanos - lastRealtimeTickNanos) / 1000000.0;
+            frameScale = Math.max(0.33, Math.min(2.0,
+                elapsedMillis / 30.0));
+        }
+        lastRealtimeTickNanos = nowNanos;
+        tickInternal(frameScale);
+    }
+
+    private void tickInternal(double frameScale) {
         if (batchTransitionTicks > 0) {
             batchTransitionTicks--;
             if (batchTransitionTicks == 0 && pendingRequired >= 0) {
@@ -487,8 +523,8 @@ final class ABSVisualisationFlowModel {
         confirmUnloaderFromRealCount();
         backfillMissedCyclesFromCompletedCount();
         claimPendingStages();
-        advanceLinearWork();
-        advanceRotaryCycle();
+        advanceLinearWork(frameScale);
+        advanceRotaryCycle(frameScale);
         claimPendingStages();
         finishVisuallyConfirmedBottle();
         publish();
@@ -681,7 +717,7 @@ final class ABSVisualisationFlowModel {
         rotaryCycle.completionConfirmed = completedCycles[ROTARY] >= cycle;
     }
 
-    private void advanceLinearWork() {
+    private void advanceLinearWork(double frameScale) {
         for (int index = 0; index < MODULE_COUNT; index++) {
             if (index == ROTARY || work[index] == null) {
                 continue;
@@ -701,7 +737,11 @@ final class ABSVisualisationFlowModel {
             double target = current.completionConfirmed ? 100.0 :
                 (statuses[index] == BUSY_STATUS ? BUSY_HOLD_PERCENT :
                     current.progress);
-            current.progress = advanceToward(current.progress, target);
+            current.progress = advanceToward(
+                current.progress,
+                target,
+                frameScale
+            );
             current.bottle.progress = current.progress;
             if (current.completionConfirmed &&
                 current.progress < 100.0 - COMPLETE_EPSILON) {
@@ -721,12 +761,12 @@ final class ABSVisualisationFlowModel {
 
             if (index == CONVEYOR && statuses[index] == BUSY_STATUS) {
                 rollerAngle = normaliseAngle(rollerAngle +
-                    5.0 * calculateCatchUpMultiplier());
+                    5.0 * calculateCatchUpMultiplier() * frameScale);
             }
         }
     }
 
-    private void advanceRotaryCycle() {
+    private void advanceRotaryCycle(double frameScale) {
         if (rotaryCycle == null) {
             return;
         }
@@ -740,7 +780,11 @@ final class ABSVisualisationFlowModel {
         double target = rotaryCycle.completionConfirmed ? 100.0 :
             (statuses[ROTARY] == BUSY_STATUS ? BUSY_HOLD_PERCENT :
                 rotaryCycle.progress);
-        rotaryCycle.progress = advanceToward(rotaryCycle.progress, target);
+        rotaryCycle.progress = advanceToward(
+            rotaryCycle.progress,
+            target,
+            frameScale
+        );
         if (rotaryCycle.entryBottle != null) {
             rotaryCycle.entryBottle.progress = rotaryCycle.progress;
             rotaryCycle.entryBottle.lifecycle =
@@ -766,7 +810,9 @@ final class ABSVisualisationFlowModel {
                 rotaryStations[station] = rotaryStations[station - 1];
             }
             rotaryStations[0] = null;
-            rotaryBaseAngle = normaliseAngle(rotaryBaseAngle + 72.0);
+            rotaryBaseAngle = normaliseAngle(
+                rotaryBaseAngle + ROTARY_STEP_DEGREES
+            );
         }
         rotaryCycle = null;
     }
@@ -884,13 +930,17 @@ final class ABSVisualisationFlowModel {
         return count;
     }
 
-    private double advanceToward(double current, double target) {
+    private double advanceToward(
+        double current,
+        double target,
+        double frameScale
+    ) {
         if (target <= current) {
             return current;
         }
         double remaining = target - current;
         double baseStep = Math.max(0.18, Math.min(1.20, remaining * 0.045));
-        double step = baseStep * calculateCatchUpMultiplier();
+        double step = baseStep * calculateCatchUpMultiplier() * frameScale;
         return remaining <= step ? target : current + step;
     }
 
@@ -940,14 +990,15 @@ final class ABSVisualisationFlowModel {
     private void publish() {
         version++;
         ModuleSnapshot[] moduleSnapshots = new ModuleSnapshot[MODULE_COUNT];
-        boolean[] stationOccupancy = new boolean[ROTARY_STATION_COUNT];
-        for (int station = 0; station < stationOccupancy.length; station++) {
-            stationOccupancy[station] = rotaryStations[station] != null;
+        int[] stationBottleIds = new int[ROTARY_STATION_COUNT];
+        for (int station = 0; station < stationBottleIds.length; station++) {
+            stationBottleIds[station] = rotaryStations[station] == null ?
+                0 : rotaryStations[station].displayId;
         }
         for (int index = 0; index < MODULE_COUNT; index++) {
             moduleSnapshots[index] = createModuleSnapshot(
                 index,
-                stationOccupancy
+                stationBottleIds
             );
         }
         List<BottleSnapshot> bottleSnapshots =
@@ -969,7 +1020,7 @@ final class ABSVisualisationFlowModel {
 
     private ModuleSnapshot createModuleSnapshot(
         int index,
-        boolean[] stationOccupancy
+        int[] stationBottleIds
     ) {
         WorkState current = index == ROTARY ? null : work[index];
         double progress = current == null ? 0.0 : current.progress;
@@ -993,7 +1044,8 @@ final class ABSVisualisationFlowModel {
                     rotaryPhase = progress < BUSY_HOLD_PERCENT ?
                         "ROTATING" : "SETTLING";
                     rotaryAngle = normaliseAngle(
-                        rotaryBaseAngle + smoothStep(progress / 100.0) * 72.0
+                        rotaryBaseAngle + smoothStep(progress / 100.0) *
+                            ROTARY_STEP_DEGREES
                     );
                 }
             }
@@ -1017,11 +1069,11 @@ final class ABSVisualisationFlowModel {
         double liquidA = 0.0;
         double liquidB = 0.0;
         if (index == FILLER_A) {
-            liquidA = progress * 0.60;
+            liquidA = smoothStep(progress / 100.0) * 60.0;
         }
         else if (index == FILLER_B) {
             liquidA = current == null ? 0.0 : 60.0;
-            liquidB = progress * 0.40;
+            liquidB = smoothStep(progress / 100.0) * 40.0;
         }
         double tighteningAngle = index == CAPPER ?
             smoothStep(progress / 100.0) * 1080.0 : 0.0;
@@ -1035,7 +1087,7 @@ final class ABSVisualisationFlowModel {
             rotaryAngle,
             entryProgress,
             exitProgress,
-            stationOccupancy,
+            stationBottleIds,
             rotaryBottlesEntered,
             rotaryBottlesExited,
             liquidA,
@@ -1063,6 +1115,9 @@ final class ABSVisualisationFlowModel {
             rotaryCycle != null && rotaryCycle.completionConfirmed :
             work[index] != null && work[index].completionConfirmed;
         if (progress >= 100.0 - COMPLETE_EPSILON) {
+            if (index == UNLOADER && realCompleted <= visualCompleted) {
+                return ModuleLifecycle.HOLDING;
+            }
             return confirmed ? ModuleLifecycle.COMPLETE :
                 ModuleLifecycle.HOLDING;
         }
@@ -1117,7 +1172,7 @@ final class ABSVisualisationFlowModel {
                     "HEAD ASCENDING");
         }
         return progress < 75.0 ? "SYMBOLIC UNLOAD" :
-            "WAITING FOR COMPLETED COUNT";
+            "WAITING FOR COMPLETION CONFIRMATION";
     }
 
     private String determineMode() {
