@@ -83,8 +83,10 @@ public final class ABSVisualisation {
     private static final int[] STATUSES = new int[MACHINE_NAMES.length];
     private static final boolean[] HAS_STATUS =
         new boolean[MACHINE_NAMES.length];
-    private static final VisualisationSyncModel VISUAL_MODEL =
-        new VisualisationSyncModel();
+    private static final ABSVisualisationFlowModel VISUAL_MODEL =
+        new ABSVisualisationFlowModel();
+    private static volatile ABSVisualisationFlowModel.FlowSnapshot
+        renderSnapshot = VISUAL_MODEL.getSnapshot();
 
     private static volatile ABSVisualisation instance;
     private static int requiredBottles = 0;
@@ -190,6 +192,7 @@ public final class ABSVisualisation {
                 @Override
                 public void actionPerformed(ActionEvent event) {
                     VISUAL_MODEL.tick();
+                    renderSnapshot = VISUAL_MODEL.getSnapshot();
                     productionLinePanel.repaint();
                     refreshDetailPanels();
                     refreshVisualProgressLabel();
@@ -386,7 +389,7 @@ public final class ABSVisualisation {
         legend.add(createLegendChip("DONE", 3));
         legend.add(createLegendChip("FAULT", 4));
         JLabel note = new JLabel(
-            "  REAL status anchors one shared IDEALISED batch model; DONE finalises motion."
+            "  REAL status anchors one shared IDEALISED model; BUSY holds before completion."
         );
         note.setForeground(new Color(75, 82, 92));
         legend.add(note);
@@ -450,15 +453,6 @@ public final class ABSVisualisation {
         }
     }
 
-    private static void traceVisualStage(int bottleId, String stage) {
-        if (TRACE_ENABLED) {
-            System.out.println(
-                "ABS_VIZ_VISUAL timestamp=" + System.currentTimeMillis() +
-                " bottle=" + bottleId + " stage=\"" + stage + "\""
-            );
-        }
-    }
-
     private static void refreshStatusOnSwing() {
         final ABSVisualisation ui = instance;
         if (ui == null) {
@@ -467,6 +461,7 @@ public final class ABSVisualisation {
         SwingUtilities.invokeLater(new Runnable() {
             @Override
             public void run() {
+                renderSnapshot = VISUAL_MODEL.getSnapshot();
                 ui.productionLinePanel.repaint();
                 ui.refreshDetailPanels();
             }
@@ -488,6 +483,7 @@ public final class ABSVisualisation {
         SwingUtilities.invokeLater(new Runnable() {
             @Override
             public void run() {
+                renderSnapshot = VISUAL_MODEL.getSnapshot();
                 ui.applyProgress(
                     required,
                     completed,
@@ -501,6 +497,7 @@ public final class ABSVisualisation {
 
     private void refreshAll() {
         synchronized (ABSVisualisation.class) {
+            renderSnapshot = VISUAL_MODEL.getSnapshot();
             productionLinePanel.repaint();
             applyProgress(
                 requiredBottles,
@@ -510,6 +507,12 @@ public final class ABSVisualisation {
             );
             refreshDetailPanels();
         }
+    }
+
+    private static ABSVisualisationFlowModel.ModuleSnapshot renderModule(
+        int index
+    ) {
+        return renderSnapshot.getModule(index);
     }
 
     private void applyProgress(
@@ -796,7 +799,8 @@ public final class ABSVisualisation {
             drawLidLoader(g2, 607, 142, 112, 164, statuses, received);
             drawCapper(g2, 740, 142, 112, 164, statuses, received);
             drawConveyor(
-                g2, 870, 160, 104, 128, "Output Conveyor", statuses, received
+                g2, 870, 160, 104, 128, "Symbolic Exit Transfer",
+                statuses, received
             );
             drawUnloader(g2, 992, 142, 146, 164, statuses, received);
 
@@ -804,7 +808,7 @@ public final class ABSVisualisation {
             g2.setColor(new Color(78, 86, 98));
             drawCenteredText(
                 g2,
-                "Bottle IDs/positions are IDEALISED shared visual records only; both belts share VIZ_CONVEYOR_STATUS.",
+                "Bottle IDs/positions are IDEALISED shared visual records only; the exit graphic is not a second Controller.",
                 DESIGN_WIDTH / 2,
                 400
             );
@@ -850,8 +854,8 @@ public final class ABSVisualisation {
             );
             boolean busy = isBusy(LOADER, statuses, received);
             boolean done = isDone(LOADER, statuses, received);
-            DetailAnimationModel shared =
-                VISUAL_MODEL.getDetailModel(LOADER);
+            ABSVisualisationFlowModel.ModuleSnapshot shared =
+                renderModule(LOADER);
             double progress = shared.getProgress();
             int centreX = x + width / 2;
 
@@ -933,9 +937,9 @@ public final class ABSVisualisation {
             );
             boolean busy = isBusy(CONVEYOR, statuses, received);
             boolean done = isDone(CONVEYOR, statuses, received);
-            DetailAnimationModel shared =
-                VISUAL_MODEL.getDetailModel(CONVEYOR);
-            boolean outputConveyor = title.startsWith("Output");
+            ABSVisualisationFlowModel.ModuleSnapshot shared =
+                renderModule(CONVEYOR);
+            boolean outputConveyor = title.startsWith("Symbolic");
             int beltX = x + 12;
             int beltY = y + 66;
             int beltWidth = width - 24;
@@ -1014,8 +1018,8 @@ public final class ABSVisualisation {
             Stroke originalStroke = g2.getStroke();
             boolean busy = isBusy(ROTARY, statuses, received);
             boolean done = isDone(ROTARY, statuses, received);
-            DetailAnimationModel shared =
-                VISUAL_MODEL.getDetailModel(ROTARY);
+            ABSVisualisationFlowModel.ModuleSnapshot shared =
+                renderModule(ROTARY);
             int centreX = x + width / 2;
             int centreY = y + 105;
             int radius = 52;
@@ -1114,8 +1118,8 @@ public final class ABSVisualisation {
             );
             boolean busy = isBusy(index, statuses, received);
             boolean done = isDone(index, statuses, received);
-            DetailAnimationModel shared =
-                VISUAL_MODEL.getDetailModel(index);
+            ABSVisualisationFlowModel.ModuleSnapshot shared =
+                renderModule(index);
             int tankX = x + 12;
             int tankY = y + 37;
             int tankWidth = 45;
@@ -1196,7 +1200,8 @@ public final class ABSVisualisation {
             );
             boolean busy = isBusy(LID, statuses, received);
             boolean done = isDone(LID, statuses, received);
-            DetailAnimationModel shared = VISUAL_MODEL.getDetailModel(LID);
+            ABSVisualisationFlowModel.ModuleSnapshot shared =
+                renderModule(LID);
             int motion = (int)Math.round(
                 Math.min(1.0, shared.getProgress() / 100.0) * 34.0
             );
@@ -1253,8 +1258,8 @@ public final class ABSVisualisation {
             Stroke originalStroke = g2.getStroke();
             boolean busy = isBusy(CAPPER, statuses, received);
             boolean done = isDone(CAPPER, statuses, received);
-            DetailAnimationModel shared =
-                VISUAL_MODEL.getDetailModel(CAPPER);
+            ABSVisualisationFlowModel.ModuleSnapshot shared =
+                renderModule(CAPPER);
             double capProgress = shared.getProgress();
             int motion = capProgress < 30.0 ?
                 (int)Math.round(capProgress / 30.0 * 20.0) :
@@ -1323,8 +1328,8 @@ public final class ABSVisualisation {
             Stroke originalStroke = g2.getStroke();
             boolean busy = isBusy(UNLOADER, statuses, received);
             boolean done = isDone(UNLOADER, statuses, received);
-            DetailAnimationModel shared =
-                VISUAL_MODEL.getDetailModel(UNLOADER);
+            ABSVisualisationFlowModel.ModuleSnapshot shared =
+                renderModule(UNLOADER);
 
             g2.setColor(new Color(80, 93, 107));
             g2.setStroke(new BasicStroke(3.0f));
@@ -1650,1297 +1655,6 @@ public final class ABSVisualisation {
         }
     }
 
-    enum VisualLifecycle {
-        IDLE,
-        RUNNING,
-        FINALISING,
-        COMPLETE,
-        FAULTED
-    }
-
-    /** A visualisation-only record; it is not a real bottle or Digital Twin. */
-    static final class VirtualBottle {
-        private final int displayId;
-        private String idealisedStage;
-        private double idealisedProgress;
-
-        VirtualBottle(int id) {
-            displayId = id;
-            idealisedStage = "LOADER QUEUE";
-            idealisedProgress = 0.0;
-        }
-    }
-
-    /**
-     * One shared, read-only reconciliation model for every overview/detail view.
-     * Real Controller states and real batch counts only anchor this model. No
-     * value produced here is sent to Coordinator or to a Controller.
-     */
-    static final class VisualisationSyncModel {
-        private static final int ROTARY_STATIONS = 5;
-        private static final int NO_BOTTLE = -1;
-        private static final int MAX_CATCH_UP_STEPS = 6;
-
-        private final DetailAnimationModel[] moduleViews =
-            new DetailAnimationModel[MACHINE_NAMES.length];
-        private final int[] moduleBottle =
-            new int[MACHINE_NAMES.length];
-        private final int[] rotaryBottle = new int[ROTARY_STATIONS];
-        private final int[] realStatus = new int[MACHINE_NAMES.length];
-        private final boolean[] hasRealStatus =
-            new boolean[MACHINE_NAMES.length];
-        private final int[] observedCycles =
-            new int[MACHINE_NAMES.length];
-        private final int[] completedCycles =
-            new int[MACHINE_NAMES.length];
-        private final int[] consumedCycles =
-            new int[MACHINE_NAMES.length];
-        private final int[] activeCycle =
-            new int[MACHINE_NAMES.length];
-        private final int[] batchCycleBaseline =
-            new int[MACHINE_NAMES.length];
-        private final boolean[] cycleOpen =
-            new boolean[MACHINE_NAMES.length];
-        private final int[] inferredCyclesAwaitingConfirmation =
-            new int[MACHINE_NAMES.length];
-
-        private VirtualBottle[] bottles = new VirtualBottle[0];
-        private String[] tracedStages = new String[0];
-        private int required;
-        private int realCompleted;
-        private int visualCompleted;
-        private int nextBottle;
-        private boolean hasRequired;
-        private boolean hasCompleted;
-        private boolean batchActive;
-        private boolean catchUp;
-        private String mode = "IDLE";
-
-        private String rotaryPhase = "ENTRY";
-        private int rotaryEntryBottle = NO_BOTTLE;
-        private int rotaryExitBottle = NO_BOTTLE;
-        private double rotaryEntryProgress;
-        private double rotaryAngle;
-        private double rotaryExitProgress;
-        private int rotarySettlingTicks;
-        private int rotaryEntered;
-        private int rotaryExited;
-        private int rotaryActiveCycle;
-
-        VisualisationSyncModel() {
-            for (int index = 0; index < moduleViews.length; index++) {
-                moduleViews[index] = new DetailAnimationModel(index);
-                moduleBottle[index] = NO_BOTTLE;
-                realStatus[index] = -1;
-            }
-            for (int station = 0; station < rotaryBottle.length; station++) {
-                rotaryBottle[station] = NO_BOTTLE;
-            }
-            publishRotaryView("WAITING FOR BATCH");
-        }
-
-        synchronized void acceptRequired(int value) {
-            int safeRequired = Math.max(0, value);
-            if (!hasRequired || safeRequired != required) {
-                resetBatch(safeRequired);
-            }
-            hasRequired = true;
-        }
-
-        synchronized void acceptCompleted(int value) {
-            int safeCompleted = Math.max(0, value);
-            boolean startsNewCycle = hasCompleted &&
-                safeCompleted < realCompleted && hasRequired;
-            if (startsNewCycle) {
-                resetBatch(required);
-                hasRequired = true;
-            }
-            hasCompleted = true;
-            realCompleted = hasRequired ?
-                Math.min(safeCompleted, required) : safeCompleted;
-            if (hasRequired && required > 0) {
-                batchActive = true;
-                inferCompletedThrough(UNLOADER, realCompleted);
-            }
-        }
-
-        synchronized void acceptStatus(int index, int status) {
-            if (index < 0 || index >= moduleViews.length) {
-                return;
-            }
-            int previousStatus = realStatus[index];
-            boolean previouslyReceived = hasRealStatus[index];
-            realStatus[index] = status;
-            hasRealStatus[index] = true;
-            if (status == BUSY_STATUS) {
-                if (!cycleOpen[index]) {
-                    observedCycles[index]++;
-                    cycleOpen[index] = true;
-                }
-            }
-            else if (status == DONE_STATUS) {
-                // DONE without a sampled BUSY is still one trustworthy cycle.
-                if (!cycleOpen[index]) {
-                    if (inferredCyclesAwaitingConfirmation[index] > 0) {
-                        inferredCyclesAwaitingConfirmation[index]--;
-                    }
-                    else {
-                        observedCycles[index]++;
-                    }
-                }
-                completedCycles[index] = observedCycles[index];
-                cycleOpen[index] = false;
-            }
-            else if ((status == READY_STATUS || status == 0) &&
-                cycleOpen[index]) {
-                // Conveyor and some other Controllers can return BUSY -> READY
-                // without leaving a poll-visible DONE interval.
-                completedCycles[index] = observedCycles[index];
-                cycleOpen[index] = false;
-            }
-            else if (status == FAULT_STATUS) {
-                cycleOpen[index] = false;
-            }
-            moduleViews[index].setSharedRealStatus(status);
-            if (hasRequired && batchActive &&
-                observedCycles[index] > batchCycleBaseline[index]) {
-                int batchOrdinal = observedCycles[index] -
-                    batchCycleBaseline[index];
-                if (index == ROTARY) {
-                    // Rotary emits several index cycles for one bottle.
-                    batchOrdinal = 1;
-                }
-                inferCompletedThrough(index - 1, batchOrdinal);
-            }
-            if (TRACE_ENABLED && previouslyReceived &&
-                previousStatus != status) {
-                System.out.println(
-                    "ABS_VIZ_ANCHOR timestamp=" +
-                    System.currentTimeMillis() + " module=" +
-                    signalName(index) + " cycles=" +
-                    observedCycles[index] + " completed=" +
-                    completedCycles[index]
-                );
-            }
-        }
-
-        synchronized void tick() {
-            if (!hasRequired || required <= 0) {
-                mode = "IDLE";
-                return;
-            }
-            if (hasFault()) {
-                mode = "FAULTED";
-                catchUp = false;
-                return;
-            }
-            if (!batchActive && visualCompleted >= required) {
-                mode = "COMPLETE";
-                return;
-            }
-
-            int gap = Math.max(0, realCompleted - visualCompleted);
-            catchUp = gap > 0;
-            int steps = catchUp ?
-                Math.min(MAX_CATCH_UP_STEPS, 2 + gap) : 1;
-            mode = catchUp ? "CATCH_UP" : "RUNNING";
-            for (int step = 0; step < steps; step++) {
-                advanceOneStep();
-                traceStageChanges();
-            }
-
-            boolean drained = visualCompleted >= required && !hasWork();
-            if (drained) {
-                batchActive = false;
-                catchUp = false;
-                mode = "COMPLETE";
-                publishRotaryView("COMPLETE - STABLE EMPTY TABLE");
-                for (int index = 0; index < moduleViews.length; index++) {
-                    moduleViews[index].markSharedBatchComplete();
-                }
-            }
-            else {
-                updateLifecycleForCurrentWork();
-            }
-        }
-
-        synchronized DetailAnimationModel getDetailModel(int index) {
-            return moduleViews[index];
-        }
-
-        synchronized boolean isModuleMoving(int index) {
-            return index >= 0 && index < moduleViews.length &&
-                moduleViews[index].isRunning();
-        }
-
-        synchronized int getVisualCompleted() {
-            return visualCompleted;
-        }
-
-        synchronized int getRealCompleted() {
-            return realCompleted;
-        }
-
-        synchronized int getRequired() {
-            return required;
-        }
-
-        synchronized String getModeName() {
-            return mode;
-        }
-
-        synchronized int getVirtualBottleCount() {
-            return bottles.length;
-        }
-
-        synchronized int getRotaryOccupiedCount() {
-            int count = 0;
-            for (int station = 0; station < rotaryBottle.length; station++) {
-                if (rotaryBottle[station] != NO_BOTTLE) {
-                    count++;
-                }
-            }
-            return count;
-        }
-
-        synchronized String getBottleStage(int displayId) {
-            int index = displayId - 1;
-            return index >= 0 && index < bottles.length ?
-                bottles[index].idealisedStage : "UNKNOWN";
-        }
-
-        synchronized int getObservedCycleCount(int index) {
-            return observedCycles[index];
-        }
-
-        synchronized int getConsumedCycleCount(int index) {
-            return consumedCycles[index];
-        }
-
-        private void resetBatch(int newRequired) {
-            required = newRequired;
-            realCompleted = 0;
-            visualCompleted = 0;
-            nextBottle = 0;
-            hasCompleted = false;
-            batchActive = newRequired > 0;
-            catchUp = false;
-            mode = newRequired > 0 ? "RUNNING" : "IDLE";
-            bottles = new VirtualBottle[newRequired];
-            tracedStages = new String[newRequired];
-            for (int bottle = 0; bottle < bottles.length; bottle++) {
-                bottles[bottle] = new VirtualBottle(bottle + 1);
-            }
-            for (int index = 0; index < moduleBottle.length; index++) {
-                moduleBottle[index] = NO_BOTTLE;
-                moduleViews[index].resetSharedBatch();
-                if (hasRealStatus[index]) {
-                    moduleViews[index].setSharedRealStatus(realStatus[index]);
-                }
-            }
-            for (int station = 0; station < rotaryBottle.length; station++) {
-                rotaryBottle[station] = NO_BOTTLE;
-            }
-            rotaryPhase = "ENTRY";
-            rotaryEntryBottle = NO_BOTTLE;
-            rotaryExitBottle = NO_BOTTLE;
-            rotaryEntryProgress = 0.0;
-            rotaryAngle = 0.0;
-            rotaryExitProgress = 0.0;
-            rotarySettlingTicks = 0;
-            rotaryEntered = 0;
-            rotaryExited = 0;
-            rotaryActiveCycle = 0;
-            for (int index = 0; index < moduleViews.length; index++) {
-                // Ignore stale Controller cycles from the preceding batch.
-                consumedCycles[index] = observedCycles[index];
-                activeCycle[index] = 0;
-                batchCycleBaseline[index] = observedCycles[index];
-                inferredCyclesAwaitingConfirmation[index] = 0;
-            }
-            publishRotaryView(newRequired > 0 ?
-                "ENTRY - WAITING FOR BOTTLE #1" : "WAITING FOR BATCH");
-            traceStageChanges();
-        }
-
-        private boolean hasFault() {
-            for (int index = 0; index < realStatus.length; index++) {
-                if (hasRealStatus[index] && realStatus[index] == 4) {
-                    return true;
-                }
-            }
-            return false;
-        }
-
-        private boolean hasStagePermission(int stage) {
-            return stage >= 0 && stage < moduleViews.length &&
-                consumedCycles[stage] < observedCycles[stage];
-        }
-
-        private int reserveStageCycle(int stage) {
-            if (!hasStagePermission(stage)) {
-                return 0;
-            }
-            consumedCycles[stage]++;
-            activeCycle[stage] = consumedCycles[stage];
-            return activeCycle[stage];
-        }
-
-        private boolean activeStageCompleted(int stage) {
-            return activeCycle[stage] > 0 &&
-                completedCycles[stage] >= activeCycle[stage];
-        }
-
-        private boolean activeStageBusy(int stage) {
-            return activeCycle[stage] > 0 && cycleOpen[stage] &&
-                hasRealStatus[stage] && realStatus[stage] == BUSY_STATUS;
-        }
-
-        private void beginStage(int stage, int bottle) {
-            if (reserveStageCycle(stage) == 0) {
-                return;
-            }
-            moduleBottle[stage] = bottle;
-            bottles[bottle].idealisedStage = MACHINE_NAMES[stage];
-            bottles[bottle].idealisedProgress = 0.0;
-            moduleViews[stage].beginSharedBottle(bottle + 1);
-        }
-
-        private void advanceAnchoredGeometry(int stage, int bottle) {
-            DetailAnimationModel view = moduleViews[stage];
-            if (activeStageCompleted(stage)) {
-                view.completeSharedBottleFromRealStatus();
-            }
-            else if (activeStageBusy(stage)) {
-                view.resumeSharedBottle();
-                view.advanceSharedBottle();
-            }
-            else {
-                view.pauseForRealStatus();
-            }
-            bottles[bottle].idealisedProgress = view.getProgress();
-        }
-
-        private void inferCompletionFromDownstream(
-            int stage,
-            int downstreamStage
-        ) {
-            if (moduleBottle[stage] != NO_BOTTLE &&
-                hasStagePermission(downstreamStage) &&
-                !activeStageCompleted(stage)) {
-                completedCycles[stage] = Math.max(
-                    completedCycles[stage], activeCycle[stage]
-                );
-            }
-        }
-
-        private void inferCompletedThrough(int lastStage, int batchCount) {
-            if (batchCount <= 0) {
-                return;
-            }
-            int boundedLast = Math.min(UNLOADER, lastStage);
-            for (int stage = LOADER; stage <= boundedLast; stage++) {
-                if (stage == ROTARY) {
-                    // A downstream module proves Rotary exit, but not how many
-                    // of the five idealised table indexes were poll-visible.
-                    continue;
-                }
-                int target = batchCycleBaseline[stage] + batchCount;
-                if (target > observedCycles[stage]) {
-                    inferredCyclesAwaitingConfirmation[stage] +=
-                        target - observedCycles[stage];
-                }
-                observedCycles[stage] = Math.max(
-                    observedCycles[stage], target
-                );
-                completedCycles[stage] = Math.max(
-                    completedCycles[stage], target
-                );
-            }
-        }
-
-        private void traceStageChanges() {
-            if (!TRACE_ENABLED) {
-                return;
-            }
-            for (int bottle = 0; bottle < bottles.length; bottle++) {
-                String stage = bottles[bottle].idealisedStage;
-                if (tracedStages[bottle] == null ||
-                    !tracedStages[bottle].equals(stage)) {
-                    tracedStages[bottle] = stage;
-                    traceVisualStage(bottle + 1, stage);
-                }
-            }
-        }
-
-        private void advanceOneStep() {
-            advanceUnloader();
-            advanceLinearStage(CAPPER, UNLOADER);
-            advanceLinearStage(LID, CAPPER);
-            advanceLinearStage(FILLER_B, LID);
-            advanceLinearStage(FILLER_A, FILLER_B);
-            advanceRotary();
-            advanceConveyor();
-            advanceLoader();
-            admitNextBottle();
-        }
-
-        private void admitNextBottle() {
-            if (moduleBottle[LOADER] != NO_BOTTLE ||
-                nextBottle >= bottles.length ||
-                !hasStagePermission(LOADER)) {
-                return;
-            }
-            int bottle = nextBottle++;
-            beginStage(LOADER, bottle);
-        }
-
-        private void advanceLoader() {
-            advanceLinearStage(LOADER, CONVEYOR);
-        }
-
-        private void advanceConveyor() {
-            int bottle = moduleBottle[CONVEYOR];
-            if (bottle == NO_BOTTLE) {
-                return;
-            }
-            DetailAnimationModel view = moduleViews[CONVEYOR];
-            inferCompletionFromDownstream(CONVEYOR, ROTARY);
-            advanceAnchoredGeometry(CONVEYOR, bottle);
-            if (view.getProgress() >= 100.0) {
-                bottles[bottle].idealisedStage = "ROTARY ENTRY QUEUE";
-                view.setSharedWaitingPhase(
-                    "TRANSFER COMPLETE - WAITING FOR ROTARY ENTRY"
-                );
-            }
-        }
-
-        private void advanceLinearStage(int stage, int nextStage) {
-            int bottle = moduleBottle[stage];
-            if (bottle == NO_BOTTLE) {
-                return;
-            }
-            DetailAnimationModel view = moduleViews[stage];
-            inferCompletionFromDownstream(stage, nextStage);
-            advanceAnchoredGeometry(stage, bottle);
-            if (view.getProgress() >= 100.0 &&
-                moduleBottle[nextStage] == NO_BOTTLE &&
-                hasStagePermission(nextStage)) {
-                moduleBottle[stage] = NO_BOTTLE;
-                view.finishSharedTransfer(bottle + 1);
-                beginStage(nextStage, bottle);
-            }
-        }
-
-        private void advanceUnloader() {
-            int bottle = moduleBottle[UNLOADER];
-            if (bottle == NO_BOTTLE) {
-                return;
-            }
-            DetailAnimationModel view = moduleViews[UNLOADER];
-            if (realCompleted > visualCompleted) {
-                completedCycles[UNLOADER] = Math.max(
-                    completedCycles[UNLOADER], activeCycle[UNLOADER]
-                );
-            }
-            advanceAnchoredGeometry(UNLOADER, bottle);
-            if (view.getProgress() < 100.0) {
-                return;
-            }
-            if (visualCompleted >= realCompleted) {
-                view.setSharedWaitingPhase(
-                    "WAITING FOR REAL VIZ_COMPLETED_BOTTLES ANCHOR"
-                );
-                return;
-            }
-            moduleBottle[UNLOADER] = NO_BOTTLE;
-            visualCompleted++;
-            bottles[bottle].idealisedStage = "VISUALLY COMPLETE";
-            bottles[bottle].idealisedProgress = 100.0;
-            view.finishSharedTransfer(bottle + 1);
-        }
-
-        private void advanceRotary() {
-            if ("EXITING".equals(rotaryPhase)) {
-                advanceRotaryExit();
-                return;
-            }
-
-            if (rotaryActiveCycle == 0 &&
-                moduleBottle[FILLER_A] == NO_BOTTLE &&
-                hasStagePermission(FILLER_A) &&
-                prepareRotaryExitFromFillerAnchor()) {
-                advanceRotaryExit();
-                return;
-            }
-
-            if (rotaryActiveCycle == 0) {
-                if (!hasStagePermission(ROTARY)) {
-                    publishRotaryView(
-                        "ENTRY - WAITING FOR REAL VIZ_ROTARY_STATUS"
-                    );
-                    return;
-                }
-                int conveyorBottle = moduleBottle[CONVEYOR];
-                if (conveyorBottle != NO_BOTTLE &&
-                    moduleViews[CONVEYOR].getProgress() >= 100.0 &&
-                    rotaryBottle[0] == NO_BOTTLE) {
-                    rotaryActiveCycle = reserveStageCycle(ROTARY);
-                    rotaryEntryBottle = conveyorBottle;
-                    rotaryEntryProgress = 0.0;
-                    rotaryPhase = "ENTRY";
-                    bottles[conveyorBottle].idealisedStage = "ROTARY ENTRY";
-                }
-                else if (hasRotaryBottle() &&
-                    rotaryBottle[ROTARY_STATIONS - 1] == NO_BOTTLE) {
-                    rotaryActiveCycle = reserveStageCycle(ROTARY);
-                    rotaryAngle = 0.0;
-                    rotaryPhase = "ROTATING";
-                }
-                else {
-                    publishRotaryView(
-                        "ENTRY - REAL ROTARY CYCLE WAITING FOR VISUAL BOTTLE"
-                    );
-                    return;
-                }
-            }
-
-            if ("ENTRY".equals(rotaryPhase)) {
-                advanceRotaryEntry();
-            }
-            else if ("ROTATING".equals(rotaryPhase)) {
-                advanceRotaryIndex();
-            }
-            else if ("SETTLING".equals(rotaryPhase)) {
-                advanceRotarySettling();
-            }
-        }
-
-        private void advanceRotaryEntry() {
-            if (rotaryEntryBottle == NO_BOTTLE || rotaryActiveCycle == 0) {
-                rotaryActiveCycle = 0;
-                rotaryPhase = "ENTRY";
-                publishRotaryView("ENTRY - WAITING FOR ANCHORED BOTTLE");
-                return;
-            }
-            if (rotaryCycleCompleted()) {
-                rotaryEntryProgress = 1.0;
-            }
-            else if (rotaryCycleBusy()) {
-                rotaryEntryProgress = Math.min(
-                    1.0,
-                    rotaryEntryProgress + 0.04
-                );
-            }
-            publishRotaryView(
-                "ENTRY - BOTTLE #" + (rotaryEntryBottle + 1) +
-                " MOVING INTO STATION 1"
-            );
-            if (rotaryEntryProgress >= 1.0 && rotaryCycleCompleted()) {
-                rotaryBottle[0] = rotaryEntryBottle;
-                moduleBottle[CONVEYOR] = NO_BOTTLE;
-                moduleViews[CONVEYOR].finishSharedTransfer(
-                    rotaryEntryBottle + 1
-                );
-                bottles[rotaryEntryBottle].idealisedStage =
-                    "ROTARY STATION 1";
-                bottles[rotaryEntryBottle].idealisedProgress = 0.0;
-                rotaryEntered++;
-                rotaryEntryBottle = NO_BOTTLE;
-                rotaryEntryProgress = 0.0;
-                beginRotarySettling();
-            }
-            else if (rotaryEntryProgress >= 1.0) {
-                publishRotaryView(
-                    "ENTRY - ANIMATION COMPLETE; WAITING FOR REAL DONE"
-                );
-            }
-        }
-
-        private void advanceRotaryIndex() {
-            if (rotaryActiveCycle == 0) {
-                rotaryPhase = "ENTRY";
-                return;
-            }
-            if (rotaryCycleCompleted()) {
-                rotaryAngle = 72.0;
-            }
-            else if (rotaryCycleBusy()) {
-                rotaryAngle = Math.min(72.0, rotaryAngle + 4.0);
-            }
-            publishRotaryView("ROTATING - INDEXING ONE STATION");
-            if (rotaryAngle >= 72.0 && rotaryCycleCompleted()) {
-                for (int station = ROTARY_STATIONS - 1;
-                    station > 0;
-                    station--) {
-                    rotaryBottle[station] = rotaryBottle[station - 1];
-                }
-                rotaryBottle[0] = NO_BOTTLE;
-                updateRotaryBottleRecords();
-                rotaryAngle = 0.0;
-                beginRotarySettling();
-            }
-            else if (rotaryAngle >= 72.0) {
-                publishRotaryView(
-                    "ROTATING - ANIMATION COMPLETE; WAITING FOR REAL DONE"
-                );
-            }
-        }
-
-        private void advanceRotarySettling() {
-            if (rotarySettlingTicks < 10) {
-                rotarySettlingTicks++;
-                publishRotaryView("SETTLING - INDEX POSITION LOCKING");
-                return;
-            }
-            rotaryActiveCycle = 0;
-            activeCycle[ROTARY] = 0;
-            rotaryPhase = "ENTRY";
-            publishRotaryView("ENTRY - WAITING FOR NEXT REAL ROTARY CYCLE");
-        }
-
-        private void advanceRotaryExit() {
-            if (rotaryExitBottle == NO_BOTTLE) {
-                rotaryPhase = "ENTRY";
-                return;
-            }
-            if (activeStageCompleted(FILLER_A)) {
-                rotaryExitProgress = 1.0;
-            }
-            else if (activeStageBusy(FILLER_A)) {
-                rotaryExitProgress = Math.min(
-                    1.0,
-                    rotaryExitProgress + 0.04
-                );
-            }
-            publishRotaryView(
-                "EXITING - BOTTLE #" + (rotaryExitBottle + 1) +
-                " MOVING TO FILLER A"
-            );
-            if (rotaryExitProgress >= 1.0) {
-                int bottle = rotaryExitBottle;
-                rotaryBottle[ROTARY_STATIONS - 1] = NO_BOTTLE;
-                rotaryExitBottle = NO_BOTTLE;
-                rotaryExitProgress = 0.0;
-                rotaryExited++;
-                moduleBottle[FILLER_A] = bottle;
-                bottles[bottle].idealisedStage = "Filler A";
-                bottles[bottle].idealisedProgress = 0.0;
-                moduleViews[FILLER_A].beginSharedBottle(bottle + 1);
-                rotaryPhase = "ENTRY";
-                publishRotaryView(
-                    rotaryPhase + " - EXIT TRANSFER COMPLETE"
-                );
-            }
-        }
-
-        private boolean rotaryCycleCompleted() {
-            return rotaryActiveCycle > 0 &&
-                completedCycles[ROTARY] >= rotaryActiveCycle;
-        }
-
-        private boolean rotaryCycleBusy() {
-            return rotaryActiveCycle > 0 && cycleOpen[ROTARY] &&
-                hasRealStatus[ROTARY] &&
-                realStatus[ROTARY] == BUSY_STATUS;
-        }
-
-        private void beginRotarySettling() {
-            rotarySettlingTicks = 0;
-            rotaryPhase = "SETTLING";
-            publishRotaryView("SETTLING - REAL INDEX COMPLETE");
-        }
-
-        private boolean prepareRotaryExitFromFillerAnchor() {
-            int sourceStation = NO_BOTTLE;
-            for (int station = ROTARY_STATIONS - 1;
-                station >= 0;
-                station--) {
-                if (rotaryBottle[station] != NO_BOTTLE) {
-                    sourceStation = station;
-                    break;
-                }
-            }
-            if (sourceStation != NO_BOTTLE) {
-                rotaryExitBottle = rotaryBottle[sourceStation];
-                rotaryBottle[sourceStation] = NO_BOTTLE;
-            }
-            else {
-                int conveyorBottle = moduleBottle[CONVEYOR];
-                if (conveyorBottle == NO_BOTTLE ||
-                    moduleViews[CONVEYOR].getProgress() < 100.0) {
-                    return false;
-                }
-                rotaryExitBottle = conveyorBottle;
-                moduleBottle[CONVEYOR] = NO_BOTTLE;
-                moduleViews[CONVEYOR].finishSharedTransfer(
-                    conveyorBottle + 1
-                );
-            }
-            if (reserveStageCycle(FILLER_A) == 0) {
-                return false;
-            }
-            rotaryExitProgress = 0.0;
-            rotaryPhase = "EXITING";
-            bottles[rotaryExitBottle].idealisedStage = "ROTARY EXITING";
-            publishRotaryView(
-                "EXITING - REAL FILLER A CYCLE ANCHORED BOTTLE #" +
-                (rotaryExitBottle + 1)
-            );
-            return true;
-        }
-
-        private void updateRotaryBottleRecords() {
-            for (int station = 0; station < rotaryBottle.length; station++) {
-                int bottle = rotaryBottle[station];
-                if (bottle != NO_BOTTLE) {
-                    bottles[bottle].idealisedStage =
-                        "ROTARY STATION " + (station + 1);
-                    bottles[bottle].idealisedProgress = 0.0;
-                }
-            }
-        }
-
-        private boolean hasRotaryBottle() {
-            for (int station = 0; station < rotaryBottle.length; station++) {
-                if (rotaryBottle[station] != NO_BOTTLE) {
-                    return true;
-                }
-            }
-            return false;
-        }
-
-        private boolean hasWork() {
-            if (nextBottle < bottles.length || rotaryEntryBottle != NO_BOTTLE ||
-                rotaryExitBottle != NO_BOTTLE || hasRotaryBottle()) {
-                return true;
-            }
-            for (int index = 0; index < moduleBottle.length; index++) {
-                if (moduleBottle[index] != NO_BOTTLE) {
-                    return true;
-                }
-            }
-            return false;
-        }
-
-        private void updateLifecycleForCurrentWork() {
-            for (int index = 0; index < moduleViews.length; index++) {
-                boolean currentWork = index == ROTARY ?
-                    (rotaryEntryBottle != NO_BOTTLE ||
-                        rotaryExitBottle != NO_BOTTLE || hasRotaryBottle()) :
-                    moduleBottle[index] != NO_BOTTLE;
-                moduleViews[index].reconcileSharedLifecycle(
-                    currentWork,
-                    visualCompleted >= required && !hasWork()
-                );
-            }
-        }
-
-        private void publishRotaryView(String phaseText) {
-            moduleViews[ROTARY].setSharedRotaryState(
-                rotaryBottle,
-                rotaryEntryBottle,
-                rotaryExitBottle,
-                rotaryPhase,
-                rotaryEntryProgress,
-                rotaryAngle,
-                rotaryExitProgress,
-                rotarySettlingTicks,
-                rotaryEntered,
-                rotaryExited,
-                phaseText
-            );
-        }
-    }
-
-    /**
-     * Shared animation state for a module detail view.
-     *
-     * The real frozen interface supplies only the Controller status. Every
-     * numeric field below is therefore an IDEALISED visualisation variable.
-     * Future Phase 2 telemetry can replace these fields without changing the
-     * overview, dialog lifecycle or read-only Coordinator boundary.
-     */
-    static final class DetailAnimationModel {
-        private static final int ROTARY_STATION_COUNT = 5;
-
-        private final int machineIndex;
-        private final double demoFillTarget;
-        private final boolean[] rotaryStationOccupied =
-            new boolean[ROTARY_STATION_COUNT];
-
-        private boolean running;
-        private double progress;
-        private double conveyorBottlePosition;
-        private double rollerAngle;
-        private double rotaryAngle;
-        private double rotaryEntryProgress;
-        private double rotaryExitProgress;
-        private int rotarySettlingTicks;
-        private int rotaryBottlesEntered;
-        private int rotaryBottlesExited;
-        private String rotaryPhase;
-        private double liquidALevel;
-        private double liquidBLevel;
-        private double tighteningAngle;
-        private String phase;
-        private VisualLifecycle lifecycle;
-        private int currentBottleId;
-        private int sharedRealStatus = -1;
-
-        DetailAnimationModel(int index) {
-            machineIndex = index;
-            demoFillTarget = index == FILLER_A ? DEMO_LIQUID_A_PERCENT :
-                (index == FILLER_B ? DEMO_LIQUID_B_PERCENT : 0.0);
-            resetGeometry();
-            phase = "WAITING FOR REAL STATUS";
-            lifecycle = VisualLifecycle.IDLE;
-            currentBottleId = 0;
-        }
-
-        void resetSharedBatch() {
-            resetGeometry();
-            running = false;
-            currentBottleId = 0;
-            lifecycle = VisualLifecycle.IDLE;
-            phase = "NEW BATCH - SHARED MODEL RESET";
-        }
-
-        void setSharedRealStatus(int status) {
-            sharedRealStatus = status;
-            if (status == 4) {
-                running = false;
-                lifecycle = VisualLifecycle.FAULTED;
-                phase = "FAULT - IDEALISED MOTION STOPPED IMMEDIATELY";
-            }
-            else if (status == 3) {
-                lifecycle = VisualLifecycle.FINALISING;
-                if (!running) {
-                    phase = "DONE - FINALISING SHARED BATCH MODEL";
-                }
-            }
-            else if (status == BUSY_STATUS) {
-                lifecycle = VisualLifecycle.RUNNING;
-            }
-            else if (!running) {
-                lifecycle = VisualLifecycle.IDLE;
-            }
-        }
-
-        void beginSharedBottle(int bottleId) {
-            resetGeometry();
-            currentBottleId = bottleId;
-            running = true;
-            lifecycle = sharedRealStatus == 3 ?
-                VisualLifecycle.FINALISING : VisualLifecycle.RUNNING;
-            switch (machineIndex) {
-                case LOADER:
-                    phase = "BOTTLE #" + bottleId + " - GATE OPENING";
-                    break;
-                case CONVEYOR:
-                    phase = "BOTTLE #" + bottleId + " - TRANSFERRING";
-                    break;
-                case FILLER_A:
-                    phase = "BOTTLE #" + bottleId + " - FILLING A";
-                    break;
-                case FILLER_B:
-                    phase = "BOTTLE #" + bottleId + " - ADDING B";
-                    break;
-                case LID:
-                    phase = "BOTTLE #" + bottleId + " - SEPARATING LID";
-                    break;
-                case CAPPER:
-                    phase = "BOTTLE #" + bottleId + " - HEAD DESCENDING";
-                    break;
-                case UNLOADER:
-                    phase = "BOTTLE #" + bottleId + " - DISCHARGING";
-                    break;
-                default:
-                    phase = "BOTTLE #" + bottleId + " - SHARED PROCESS";
-                    break;
-            }
-        }
-
-        void advanceSharedBottle() {
-            if (!running || lifecycle == VisualLifecycle.FAULTED) {
-                return;
-            }
-            switch (machineIndex) {
-                case LOADER:
-                    progress = Math.min(100.0, progress + 2.0);
-                    phase = "BOTTLE #" + currentBottleId + " - " +
-                        loaderPhase(progress);
-                    break;
-                case CONVEYOR:
-                    progress = Math.min(100.0, progress + 1.7);
-                    conveyorBottlePosition = progress / 100.0;
-                    rollerAngle = (rollerAngle + 7.0) % 360.0;
-                    phase = "BOTTLE #" + currentBottleId +
-                        " - TRANSFERRING ON SHARED BELT";
-                    break;
-                case FILLER_A:
-                    liquidALevel = Math.min(
-                        DEMO_LIQUID_A_PERCENT,
-                        liquidALevel + 1.5
-                    );
-                    progress = liquidALevel /
-                        DEMO_LIQUID_A_PERCENT * 100.0;
-                    phase = "BOTTLE #" + currentBottleId +
-                        " - FILLING LIQUID A";
-                    break;
-                case FILLER_B:
-                    liquidBLevel = Math.min(
-                        DEMO_LIQUID_B_PERCENT,
-                        liquidBLevel + 1.25
-                    );
-                    progress = liquidBLevel /
-                        DEMO_LIQUID_B_PERCENT * 100.0;
-                    phase = "BOTTLE #" + currentBottleId +
-                        " - ADDING LIQUID B";
-                    break;
-                case LID:
-                    progress = Math.min(100.0, progress + 2.0);
-                    phase = "BOTTLE #" + currentBottleId + " - " +
-                        lidPhase(progress);
-                    break;
-                case CAPPER:
-                    progress = Math.min(100.0, progress + 2.0);
-                    if (progress >= 30.0 && progress <= 72.0) {
-                        tighteningAngle = (tighteningAngle + 9.0) % 360.0;
-                    }
-                    phase = "BOTTLE #" + currentBottleId + " - " +
-                        capperPhase(progress);
-                    break;
-                case UNLOADER:
-                    progress = Math.min(100.0, progress + 2.0);
-                    phase = "BOTTLE #" + currentBottleId +
-                        (progress < 100.0 ? " - DISCHARGING" :
-                            " - AT COLLECTION POSITION");
-                    break;
-                default:
-                    break;
-            }
-            if (progress >= 100.0) {
-                running = false;
-            }
-        }
-
-        void resumeSharedBottle() {
-            if (currentBottleId <= 0 ||
-                lifecycle == VisualLifecycle.FAULTED ||
-                progress >= 100.0) {
-                return;
-            }
-            running = true;
-            lifecycle = VisualLifecycle.RUNNING;
-        }
-
-        void pauseForRealStatus() {
-            if (currentBottleId <= 0 || progress >= 100.0 ||
-                lifecycle == VisualLifecycle.FAULTED) {
-                return;
-            }
-            running = false;
-            lifecycle = VisualLifecycle.IDLE;
-            phase = "PAUSED - WAITING FOR REAL CONTROLLER STATUS";
-        }
-
-        void completeSharedBottleFromRealStatus() {
-            if (currentBottleId <= 0 ||
-                lifecycle == VisualLifecycle.FAULTED) {
-                return;
-            }
-            progress = 100.0;
-            running = false;
-            lifecycle = VisualLifecycle.FINALISING;
-            switch (machineIndex) {
-                case CONVEYOR:
-                    conveyorBottlePosition = 1.0;
-                    break;
-                case FILLER_A:
-                    liquidALevel = DEMO_LIQUID_A_PERCENT;
-                    break;
-                case FILLER_B:
-                    liquidALevel = DEMO_LIQUID_A_PERCENT;
-                    liquidBLevel = DEMO_LIQUID_B_PERCENT;
-                    break;
-                default:
-                    break;
-            }
-            phase = "BOTTLE #" + currentBottleId +
-                " - REAL CYCLE COMPLETE";
-        }
-
-        void finishSharedTransfer(int bottleId) {
-            running = false;
-            progress = 100.0;
-            currentBottleId = bottleId;
-            phase = "BOTTLE #" + bottleId + " - TRANSFER COMPLETE";
-        }
-
-        void setSharedWaitingPhase(String text) {
-            running = false;
-            phase = text;
-        }
-
-        void reconcileSharedLifecycle(boolean hasWork, boolean batchComplete) {
-            if (lifecycle == VisualLifecycle.FAULTED) {
-                return;
-            }
-            if (batchComplete) {
-                markSharedBatchComplete();
-            }
-            else if (sharedRealStatus == 3) {
-                lifecycle = VisualLifecycle.FINALISING;
-            }
-            else if (hasWork || sharedRealStatus == BUSY_STATUS) {
-                lifecycle = VisualLifecycle.RUNNING;
-            }
-            else {
-                lifecycle = VisualLifecycle.IDLE;
-            }
-        }
-
-        void markSharedBatchComplete() {
-            if (lifecycle == VisualLifecycle.FAULTED) {
-                return;
-            }
-            running = false;
-            lifecycle = VisualLifecycle.COMPLETE;
-            if (machineIndex == ROTARY) {
-                phase = "COMPLETE - STABLE EMPTY TABLE";
-            }
-            else {
-                phase = "COMPLETE - SHARED BATCH RECONCILED";
-            }
-        }
-
-        void setSharedRotaryState(
-            int[] stationBottle,
-            int entryBottle,
-            int exitBottle,
-            String sharedPhase,
-            double entryProgress,
-            double angle,
-            double exitProgress,
-            int settlingTicks,
-            int entered,
-            int exited,
-            String phaseText
-        ) {
-            for (int station = 0;
-                station < rotaryStationOccupied.length;
-                station++) {
-                rotaryStationOccupied[station] =
-                    stationBottle[station] >= 0;
-            }
-            rotaryPhase = sharedPhase;
-            rotaryEntryProgress = entryProgress;
-            rotaryAngle = angle;
-            rotaryExitProgress = exitProgress;
-            rotarySettlingTicks = settlingTicks;
-            rotaryBottlesEntered = entered;
-            rotaryBottlesExited = exited;
-            currentBottleId = entryBottle >= 0 ? entryBottle + 1 :
-                (exitBottle >= 0 ? exitBottle + 1 : currentBottleId);
-            if ("ENTRY".equals(sharedPhase)) {
-                progress = entryProgress * 100.0;
-                running = entryBottle >= 0;
-            }
-            else if ("ROTATING".equals(sharedPhase)) {
-                progress = angle / 72.0 * 100.0;
-                running = true;
-            }
-            else if ("SETTLING".equals(sharedPhase)) {
-                progress = Math.min(100.0, settlingTicks * 10.0);
-                running = settlingTicks < 10;
-            }
-            else if ("EXITING".equals(sharedPhase)) {
-                progress = exitProgress * 100.0;
-                running = exitBottle >= 0;
-            }
-            else {
-                running = false;
-            }
-            if (sharedRealStatus == 4) {
-                running = false;
-                lifecycle = VisualLifecycle.FAULTED;
-                phase = "FAULT - IDEALISED MOTION STOPPED IMMEDIATELY";
-            }
-            else {
-                lifecycle = sharedRealStatus == 3 ?
-                    VisualLifecycle.FINALISING :
-                    (running ? VisualLifecycle.RUNNING : lifecycle);
-                phase = phaseText;
-            }
-        }
-
-        double getProgress() {
-            return progress;
-        }
-
-        double getConveyorBottlePosition() {
-            return conveyorBottlePosition;
-        }
-
-        double getRollerAngle() {
-            return rollerAngle;
-        }
-
-        double getRotaryAngle() {
-            return rotaryAngle;
-        }
-
-        double getFillLevel() {
-            return machineIndex == FILLER_B ?
-                liquidBLevel : liquidALevel;
-        }
-
-        double getLiquidALevel() {
-            return liquidALevel;
-        }
-
-        double getLiquidBLevel() {
-            return liquidBLevel;
-        }
-
-        double getTotalFillLevel() {
-            return liquidALevel + liquidBLevel;
-        }
-
-        double getDemoFillTarget() {
-            return demoFillTarget;
-        }
-
-        double getTighteningAngle() {
-            return tighteningAngle;
-        }
-
-        String getPhase() {
-            return phase;
-        }
-
-        VisualLifecycle getLifecycle() {
-            return lifecycle;
-        }
-
-        int getCurrentBottleId() {
-            return currentBottleId;
-        }
-
-        boolean isRunning() {
-            return running;
-        }
-
-        int getRotaryStationCount() {
-            return ROTARY_STATION_COUNT;
-        }
-
-        boolean isRotaryStationOccupied(int station) {
-            return station >= 0 && station < ROTARY_STATION_COUNT &&
-                rotaryStationOccupied[station];
-        }
-
-        int getRotaryOccupiedCount() {
-            int count = 0;
-            for (int station = 0;
-                station < ROTARY_STATION_COUNT;
-                station++) {
-                if (rotaryStationOccupied[station]) {
-                    count++;
-                }
-            }
-            return count;
-        }
-
-        double getRotaryEntryProgress() {
-            return rotaryEntryProgress;
-        }
-
-        double getRotaryExitProgress() {
-            return rotaryExitProgress;
-        }
-
-        int getRotaryBottlesEntered() {
-            return rotaryBottlesEntered;
-        }
-
-        int getRotaryBottlesExited() {
-            return rotaryBottlesExited;
-        }
-
-        String getRotaryPhase() {
-            return rotaryPhase;
-        }
-
-        private void resetGeometry() {
-            progress = 0.0;
-            conveyorBottlePosition = 0.0;
-            rollerAngle = 0.0;
-            rotaryAngle = 0.0;
-            rotaryEntryProgress = 0.0;
-            rotaryExitProgress = 0.0;
-            rotarySettlingTicks = 0;
-            rotaryBottlesEntered = 0;
-            rotaryBottlesExited = 0;
-            rotaryPhase = "WAITING";
-            for (int station = 0;
-                station < ROTARY_STATION_COUNT;
-                station++) {
-                rotaryStationOccupied[station] = false;
-            }
-            liquidALevel = machineIndex == FILLER_B ?
-                DEMO_LIQUID_A_PERCENT : 0.0;
-            liquidBLevel = 0.0;
-            tighteningAngle = 0.0;
-        }
-
-        private static String loaderPhase(double value) {
-            if (value < 20.0) {
-                return "GATE OPENING";
-            }
-            if (value < 55.0) {
-                return "RELEASING BOTTLE";
-            }
-            if (value < 85.0) {
-                return "TRANSFER TO OUTPUT";
-            }
-            if (value < 100.0) {
-                return "GATE CLOSING";
-            }
-            return "COMPLETE - AWAITING REAL STATUS";
-        }
-
-        private static String lidPhase(double value) {
-            if (value < 28.0) {
-                return "SEPARATING LID";
-            }
-            if (value < 66.0) {
-                return "FEEDING LID";
-            }
-            if (value < 100.0) {
-                return "PLACING LID";
-            }
-            return "LID PLACED - AWAITING REAL STATUS";
-        }
-
-        private static String capperPhase(double value) {
-            if (value < 30.0) {
-                return "HEAD DESCENDING";
-            }
-            if (value < 42.0) {
-                return "CONTACT";
-            }
-            if (value < 72.0) {
-                return "TIGHTENING / ROTATING";
-            }
-            if (value < 100.0) {
-                return "HEAD ASCENDING";
-            }
-            return "CAP SECURED - AWAITING REAL STATUS";
-        }
-    }
-
     /** Read-only dialog content sharing the same state as the overview. */
     static final class ModuleDetailPanel extends JPanel {
         private static final long serialVersionUID = 1L;
@@ -2948,7 +1662,7 @@ public final class ABSVisualisation {
         private static final int DETAIL_HEIGHT = 430;
 
         private final int machineIndex;
-        private final DetailAnimationModel detailModel;
+        private ABSVisualisationFlowModel.ModuleSnapshot detailModel;
         private final DetailCanvas detailCanvas;
         private final JLabel realStatusValue;
         private final JLabel realBatchValue;
@@ -2962,7 +1676,7 @@ public final class ABSVisualisation {
 
         ModuleDetailPanel(int index) {
             machineIndex = index;
-            detailModel = VISUAL_MODEL.getDetailModel(index);
+            detailModel = renderModule(index);
             setLayout(new BorderLayout(10, 10));
             setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
 
@@ -3092,6 +1806,7 @@ public final class ABSVisualisation {
                 received = HAS_STATUS[machineIndex];
                 status = STATUSES[machineIndex];
             }
+            detailModel = renderModule(machineIndex);
             int effectiveStatus = received ? status : -1;
             if (received != lastStatusReceived ||
                 effectiveStatus != lastRealStatus) {
@@ -3106,7 +1821,7 @@ public final class ABSVisualisation {
             return lastRealStatus;
         }
 
-        DetailAnimationModel getDetailModel() {
+        ABSVisualisationFlowModel.ModuleSnapshot getDetailModel() {
             return detailModel;
         }
 
@@ -3354,7 +2069,7 @@ public final class ABSVisualisation {
             return whole + "." + fraction;
         }
 
-        /** Large mechanism renderer driven only by DetailAnimationModel. */
+        /** Large mechanism renderer driven only by one immutable snapshot. */
         private final class DetailCanvas extends JPanel {
             private static final long serialVersionUID = 1L;
 
