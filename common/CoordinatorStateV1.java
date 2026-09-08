@@ -9,6 +9,8 @@
 public final class CoordinatorStateV1 {
     private static final int COMPLETION_TRANSMISSION_ATTEMPTS = 3;
     private static final long COMPLETION_RETRY_MILLIS = 500L;
+    private static final int SIMULATION_BATCH_TRANSMISSION_ATTEMPTS = 3;
+    private static final long SIMULATION_BATCH_RETRY_MILLIS = 600L;
     private static final long COMPLETION_SIGNAL_HOLD_MILLIS = Math.max(
         1L,
         Long.getLong(
@@ -49,6 +51,16 @@ public final class CoordinatorStateV1 {
     public static long completionSignalUntilMillis = 0;
     public static boolean completionTransmissionStarted = false;
     public static String lastAcceptedOrderId = "";
+
+    // Simulation/integration-only M1 -> M4 batch trigger. This state does not
+    // alter START_ORDER or any frozen Controller interface.
+    private static final M1SimulationBatchOfferV1 m4SimulationBatchOffer =
+        new M1SimulationBatchOfferV1(
+            SIMULATION_BATCH_TRANSMISSION_ATTEMPTS,
+            SIMULATION_BATCH_RETRY_MILLIS
+        );
+    public static boolean m4SimulationBatchTransmissionStarted = false;
+    public static int lastM4SimulationBatchAttempt = 0;
 
     // M3-facing V2.1 safety-coordination state. These fields deliberately
     // store opaque String payloads because the frozen V2.1 contract defines
@@ -127,6 +139,34 @@ public final class CoordinatorStateV1 {
 
     public static String currentProductId() {
         return activeOrder.productIds[currentProductIndex];
+    }
+
+    /** Current stable simulation-only batch identity. */
+    public static String currentM4SimulationBatchId() {
+        return m4SimulationBatchOffer.getBatchId();
+    }
+
+    /** Current stable batchId|quantity payload, including after retries drain. */
+    public static String currentM4SimulationBatchPayload() {
+        return m4SimulationBatchOffer.getStablePayload();
+    }
+
+    /**
+     * Returns at most three identical copies with a 600 ms retry interval and
+     * an ABSENT reaction between copies.
+     */
+    public static String nextM4SimulationBatchRequest() {
+        return nextM4SimulationBatchRequest(System.currentTimeMillis());
+    }
+
+    static String nextM4SimulationBatchRequest(long nowMillis) {
+        int before = m4SimulationBatchOffer.getOfferCount();
+        String payload = m4SimulationBatchOffer.nextReactionValue(nowMillis);
+        lastM4SimulationBatchAttempt =
+            m4SimulationBatchOffer.getOfferCount();
+        m4SimulationBatchTransmissionStarted = payload != null &&
+            lastM4SimulationBatchAttempt > before;
+        return payload;
     }
 
     /** Builds the frozen completion payload and releases the order slot. */
@@ -209,6 +249,8 @@ public final class CoordinatorStateV1 {
             " productIndex=" + currentProductIndex +
             " completionRemaining=" + completionTransmissionsRemaining +
             " completionSignalActive=" + completionSignalActive +
+            " m4SimBatch=" + currentM4SimulationBatchPayload() +
+            " m4SimAttempt=" + lastM4SimulationBatchAttempt +
             " ftHold=" + ftCoordinationHold +
             " ftSafeStopEstablished=" + ftSafeStopEstablished;
     }
@@ -286,6 +328,19 @@ public final class CoordinatorStateV1 {
             activeOrder.liquidBRatios[currentProductIndex];
         requiredBottles = activeOrder.quantities[currentProductIndex];
         completedBottles = 0;
+        if (!m4SimulationBatchOffer.beginProductBatch(
+            activeOrder.orderId,
+            currentProductIndex + 1,
+            requiredBottles,
+            System.currentTimeMillis()
+        )) {
+            throw new IllegalStateException(
+                "conflicting simulation batch quantity for " +
+                activeOrder.orderId
+            );
+        }
+        lastM4SimulationBatchAttempt = 0;
+        m4SimulationBatchTransmissionStarted = false;
     }
 
     private static boolean isPresentPayload(String payload) {

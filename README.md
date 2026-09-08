@@ -63,6 +63,7 @@ Coordinator
  +-- Bottle Unloader
  |
  +-- ABS Visualisation
+ `-- M4 Recognition Simulator [simulation only]
 ```
 
 The Coordinator handles orders, recipes, status supervision and completion
@@ -72,6 +73,16 @@ is owned by the relevant Machine Controllers.
 `BOTTLE_DONE` is sent by Bottle Unloader after one finished bottle reaches the
 collection stage. Capper completion alone does not complete the production
 cycle.
+
+For integrated simulation, each accepted product batch also publishes the
+simulation-only signal `M4_SIM_BATCH_REQUEST:String` as
+`<orderId>-P<two-digit product index>|<quantity>`. The Coordinator sends three
+identical bounded pulses about 600 ms apart with an `ABSENT` reaction between
+pulses. This does not replace `START_ORDER`, change Controller ownership, or
+alter any frozen M1/M2/M3/M4 production interface. Use
+`xuqi_coordinator/coordinator_simulation.xml` together with
+`machines/filling_capping/member4_simulation.xml`; canonical production keeps
+`xuqi_coordinator/coordinator.xml` and `member4_system.xml`.
 
 ## Design basis
 
@@ -127,6 +138,7 @@ The order protocol, product batching logic, `START_ORDER`, `FILL_A_RATIO` and
 | Bottle Context Registry | `BottleContextRegistryCD` | 11011 |
 | Sort / Pack | `SortPackControllerCD` | 11012 |
 | Labeller | `LabellerControllerCD` | 11013 |
+| Recognition Simulator (simulation only) | `RecognitionSimulatorCD` | 11014 |
 | Rotary Table Plant | `RotaryTablePlantCD` | 12003 |
 | Filler A Plant | `FillerAPlantCD` | 12004 |
 | Filler B Plant | `FillerBPlantCD` | 12005 |

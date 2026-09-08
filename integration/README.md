@@ -39,6 +39,9 @@ SortPackControllerCD (11012)                       [M4 implemented]
 SortPackPlantCD (12012)                            [M4 implemented]
 FillerAPlantCD / FillerBPlantCD (12004 / 12005)    [M4 implemented]
 CapperPlantCD (12007)                              [M4 implemented]
+
+RecognitionSimulatorCD (11014)                    [simulation only]
+  receives M1 M4_SIM_BATCH_REQUEST:String as batchId|quantity
 ```
 
 `LabellerControllerCD:11013`, the four M2 Plant Clock Domains and
@@ -46,6 +49,23 @@ CapperPlantCD (12007)                              [M4 implemented]
 Filling, Capping and Sort/Pack modules are implemented in
 `machines/filling_capping/`. Their cross-member profiles and hand-offs still
 require a physical end-to-end acceptance run.
+
+## Simulation-only M1 -> M4 batch trigger
+
+The six-runtime simulation uses
+`xuqi_coordinator/coordinator_simulation.xml` and
+`machines/filling_capping/member4_simulation.xml`. For every product batch,
+M1 derives a stable identity such as `PO0001-P01` and publishes
+`PO0001-P01|10` on `M4_SIM_BATCH_REQUEST`. M4 de-duplicates retries and emits
+exactly `PO0001-P01-B001` through `PO0001-P01-B010`, then waits in `FINISHED`
+for a different batch ID. A second product uses `PO0001-P02` and restarts its
+bottle suffix at `B001`.
+
+This link is environmental simulation orchestration only. It is absent from
+the canonical `machines/filling_capping/member4_system.xml`, changes no
+Controller signal, and grants M1 no M4 actuator ownership. The old
+`m4.sim.quantity` property remains available only through the standalone Java
+state-model entry point; integrated `RecognitionSimulatorCD` ignores it.
 
 ## Merge order
 
