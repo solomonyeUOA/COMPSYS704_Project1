@@ -1,11 +1,17 @@
-// SIMULATION ONLY: finite environmental input, not a Coordinator command.
+// SIMULATION ONLY: batch-driven environmental input, not a Controller command.
 // Enabled by choosing member4_simulation.xml instead of member4_system.xml.
 RecognitionSimulator(
+    input String signal M4_SIM_BATCH_REQUEST;
     output String signal RECOGNITION_REQUEST;
 )
 ->{
-    RecognitionSimulatorStateV1.start();
+    RecognitionSimulatorStateV1.startBatchDriven();
     loop {
+        present(M4_SIM_BATCH_REQUEST) {
+            RecognitionSimulatorStateV1.acceptBatchRequest(
+                #M4_SIM_BATCH_REQUEST
+            );
+        }
         String request = RecognitionSimulatorStateV1.nextRequest();
         if (request != null) {
             emit RECOGNITION_REQUEST(request);

@@ -166,73 +166,66 @@ java -Djava.awt.headless=true \
 
 Generated Java and class files are build artifacts and must not be committed.
 
-## Six-runtime simulation with a bottle input source
+## Six-runtime batch-driven simulation
 
 `RecognitionSimulatorCD` supplies the environmental stimulus that a physical
-camera/size sensor would provide. `RECOGNITION_REQUEST` remains M4-internal:
-neither POS nor M2/M3 needs a new output. This source is included only in
-`member4_simulation.xml`; the canonical `member4_system.xml` has no automatic
-bottle source. All ten existing M4 Clock Domains and their signals are
-identical in both mappings.
+camera/size sensor would provide. It is included only in
+`member4_simulation.xml`; canonical `member4_system.xml` remains unchanged and
+has no automatic source. `RECOGNITION_REQUEST` remains internal to M4.
 
-Keep the other five runtimes (M2, M3, Visualisation, POS and Coordinator).
-Replace the M4 launch configuration with:
+Use these two simulation mappings together:
+
+```text
+xuqi_coordinator/coordinator_simulation.xml
+machines/filling_capping/member4_simulation.xml
+```
+
+When POS submits a product quantity, M1 publishes
+`M4_SIM_BATCH_REQUEST:String` on simulation-only port 11014:
+
+```text
+<orderId>-P<two-digit product index>|<quantity>
+PO0001-P01|3
+```
+
+M1 sends at most three identical copies about 600 ms apart and inserts an
+`ABSENT` reaction after every pulse. M4 accepts one logical batch
+idempotently, generates `PO0001-P01-B001` through `PO0001-P01-B003`, then
+waits for a different batch. The same ID and quantity never restarts; the same
+ID with a different quantity is a protocol conflict; a different ID cannot
+interleave while a batch is active.
+
+Launch M4 integrated simulation without a quantity VM argument:
 
 ```sh
-java -Djava.awt.headless=true \
-  -Dm4.sim.quantity=1 -Dm4.sim.size=S \
-  -Dm4.sim.bottleIdPrefix=PO0001-B \
-  -Dm4.sim.startDelayMillis=10000 \
-  -cp "build/member4-classes:/path/to/COMPSYS704_Lab_3/lib/*" \
+java -Djava.awt.headless=true -Dm4.sim.size=S \
+  -cp "build/member4-classes:/path/to/COMPSYS704_Project1_SystemJ_lib/*" \
   com.systemj.SystemJRunner machines/filling_capping/member4_simulation.xml
 ```
 
-In Eclipse, use the existing `com.systemj.SystemJRunner` main class, set the
-program argument to `machines/filling_capping/member4_simulation.xml`, and
-place the `-Dm4.sim...` options in **VM arguments**. Use
-`-Djava.awt.headless=false` for Swing windows. Compile the added
-`recognition_simulator.sysj` before launching; generated Java goes to the build
-directory just like the other Clock Domains.
-
-| VM property | Default | Meaning |
+| VM property | Default | Integrated meaning |
 | --- | --- | --- |
-| `m4.sim.quantity` | `1` | Positive, finite number of distinct bottles |
-| `m4.sim.size` | `S` | `S` = 200 mL; `L` = 500 mL |
-| `m4.sim.bottleIdPrefix` | `SIM-B` | Prefix followed by 001, 002, ... |
-| `m4.sim.startDelayMillis` | `10000` | Delay from M4 startup before the first request |
-| `m4.sim.intervalMillis` | `1000` | Gap after one context's transport copies drain |
-| `m4.sim.requestGapMillis` | `100` | Minimum interval between copies of the same request |
-| `m4.sim.timeoutMillis` | `10000` | Maximum wait per bottle for local context distribution |
+| `m4.sim.size` | `S` | Environmental profile: `S` = 200 mL, `L` = 500 mL |
+| `m4.sim.intervalMillis` | `1000` | Gap after one context's local copies drain |
+| `m4.sim.requestGapMillis` | `100` | Minimum interval between request copies |
+| `m4.sim.timeoutMillis` | `10000` | Maximum wait for local context distribution |
 
-Configure one simulated batch to match the quantity and size of the POS test
-scenario. The simulator does not read POS orders and the ID prefix does not
-establish an order association by itself. For the example above, submit one
-60/40 bottle; the simulated identity is `PO0001-B001`. To simulate ten bottles,
-set quantity to 10 on both the simulator and the POS batch. M2 can reject a
-batch if more profiles were queued than its requested quantity.
+`m4.sim.quantity`, `m4.sim.bottleIdPrefix`, and
+`m4.sim.startDelayMillis` are retained only by the standalone legacy Java
+state-model entry point. Integrated `RecognitionSimulatorCD` starts in `IDLE`,
+ignores `m4.sim.quantity`, and waits for M1's batch trigger.
 
-Start all receiver peers before the configured delay expires. For manual
-startup, increase the delay to allow time to launch the other runtimes. Do not
-run `member4_system.xml`, `member4_demo.xml` and `member4_simulation.xml`
-together: their M4 receiver ports overlap. Use one recognition input source
-per simulation. Restart the scenario with fresh runtimes for another batch;
-this source never automatically restarts after its finite sequence.
-
-The simulator repeats each bottle's request until the Registry has accepted
-the matching size and all three local context-output windows have drained.
-It then waits the configured interval before the next identity. This prevents
-the source from overwriting an earlier context's pending transport copies.
-If the local chain stalls, it logs `STOPPED` and stops generating requests.
-
-Expected M4 evidence:
+Expected evidence for `PO0001-P01|3`:
 
 ```text
-[M4-SIM] recognising PO0001-B001|S
-[M4-SIM] context dispatched PO0001-B001 1/1
-[M4-SIM] FINISHED 1 bottle context(s)
+[M4-SIM] batch accepted id=PO0001-P01 quantity=3
+[M4-SIM] recognising PO0001-P01-B001|S
+[M4-SIM] context dispatched PO0001-P01-B001 1/3
+...
+[M4-SIM] FINISHED batch=PO0001-P01 quantity=3
 ```
 
-`FINISHED` means the configured recognition contexts have been dispatched
-locally. It is not an M2/M3 delivery acknowledgment or an order-completion
-claim. Verify M2 Loader admission, M3 bottle positions and POS completion
-separately. The simulator remains idle while the M4 Controllers keep running.
+`FINISHED` means the requested recognition contexts have been dispatched
+locally. It is not an M2/M3 delivery acknowledgment or order-completion claim.
+Do not run `member4_system.xml`, `member4_demo.xml`, and
+`member4_simulation.xml` together because their M4 receiver ports overlap.

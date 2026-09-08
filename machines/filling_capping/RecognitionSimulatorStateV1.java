@@ -1,75 +1,184 @@
 import java.util.Locale;
 import java.util.Properties;
 
-/** Finite, configurable environment stimulus for the simulation-only CD. */
+/** Batch-driven environment stimulus for the simulation-only M4 CD. */
 public final class RecognitionSimulatorStateV1 {
+    public enum BatchStartResult {
+        ACCEPTED,
+        DUPLICATE,
+        CONFLICT,
+        ACTIVE_BATCH,
+        INVALID
+    }
+
     private static RecognitionSimulatorStateV1 runtime;
     private static String lastLoggedBottle;
     private static boolean terminalLogged;
 
-    private final int quantity;
     private final String sizeCode;
-    private final String bottleIdPrefix;
     private final long intervalMillis;
     private final long timeoutMillis;
     private final long requestGapMillis;
+    private String activeBatchId;
+    private int quantity;
     private int distributed;
+    private boolean batchActive;
+    private boolean requestActive;
+    private boolean legacyIdentifiers;
+    private String legacyBottleIdPrefix;
     private long nextBottleMillis;
     private long bottleStartedMillis;
     private long nextRequestMillis;
-    private boolean active;
     private String failure;
 
-    private RecognitionSimulatorStateV1(Properties properties, long nowMillis) {
-        quantity = M4ProtocolV1.unsignedInteger(
-            properties.getProperty("m4.sim.quantity", "1"), "m4.sim.quantity"
-        );
-        if (quantity == 0) {
-            throw new IllegalArgumentException("m4.sim.quantity must be positive");
-        }
+    private RecognitionSimulatorStateV1(Properties properties) {
         sizeCode = properties.getProperty("m4.sim.size", "S");
         if (!M4BottleContextV1.SMALL.equals(sizeCode) &&
             !M4BottleContextV1.LARGE.equals(sizeCode)) {
             throw new IllegalArgumentException("m4.sim.size must be S or L");
         }
-        bottleIdPrefix = properties.getProperty("m4.sim.bottleIdPrefix", "SIM-B");
-        M4ProtocolV1.validateBottleId(bottleIdPrefix);
-        long delay = millis(properties, "m4.sim.startDelayMillis", 10000L, 0L);
-        intervalMillis = millis(properties, "m4.sim.intervalMillis", 1000L, 0L);
-        timeoutMillis = millis(properties, "m4.sim.timeoutMillis", 10000L, 1L);
-        requestGapMillis = millis(properties, "m4.sim.requestGapMillis", 100L, 1L);
+        intervalMillis = millis(
+            properties, "m4.sim.intervalMillis", 1000L, 0L
+        );
+        timeoutMillis = millis(
+            properties, "m4.sim.timeoutMillis", 10000L, 1L
+        );
+        requestGapMillis = millis(
+            properties, "m4.sim.requestGapMillis", 100L, 1L
+        );
         if (requestGapMillis >= timeoutMillis) {
             throw new IllegalArgumentException(
-                "m4.sim.requestGapMillis must be less than m4.sim.timeoutMillis"
+                "m4.sim.requestGapMillis must be less than " +
+                "m4.sim.timeoutMillis"
             );
         }
-        nextBottleMillis = nowMillis + delay;
     }
 
+    /** Legacy standalone/demo mode retained for backwards compatibility. */
     public static RecognitionSimulatorStateV1 fromProperties(
-        Properties properties, long nowMillis
+        Properties properties,
+        long nowMillis
     ) {
-        return new RecognitionSimulatorStateV1(properties, nowMillis);
+        RecognitionSimulatorStateV1 result =
+            new RecognitionSimulatorStateV1(properties);
+        int configuredQuantity = M4ProtocolV1.unsignedInteger(
+            properties.getProperty("m4.sim.quantity", "1"),
+            "m4.sim.quantity"
+        );
+        if (configuredQuantity == 0) {
+            throw new IllegalArgumentException(
+                "m4.sim.quantity must be positive"
+            );
+        }
+        String prefix = properties.getProperty(
+            "m4.sim.bottleIdPrefix", "SIM-B"
+        );
+        M4ProtocolV1.validateBottleId(prefix);
+        long delay = millis(
+            properties, "m4.sim.startDelayMillis", 10000L, 0L
+        );
+        result.startLegacyBatch(
+            prefix,
+            configuredQuantity,
+            nowMillis + delay
+        );
+        return result;
     }
 
-    /** No catch-up bursts: at most one request is returned per call. */
+    /** Preferred integrated mode: starts idle and ignores m4.sim.quantity. */
+    public static RecognitionSimulatorStateV1 batchDrivenFromProperties(
+        Properties properties,
+        long nowMillis
+    ) {
+        return new RecognitionSimulatorStateV1(properties);
+    }
+
+    public BatchStartResult startBatch(String batchId, int requestedQuantity) {
+        return startBatch(
+            batchId,
+            requestedQuantity,
+            System.currentTimeMillis()
+        );
+    }
+
+    public BatchStartResult startBatch(
+        String batchId,
+        int requestedQuantity,
+        long nowMillis
+    ) {
+        try {
+            M4ProtocolV1.validateBottleId(batchId);
+        }
+        catch (IllegalArgumentException invalid) {
+            return BatchStartResult.INVALID;
+        }
+        if (requestedQuantity < 1) {
+            return BatchStartResult.INVALID;
+        }
+
+        if (batchId.equals(activeBatchId)) {
+            return requestedQuantity == quantity ?
+                BatchStartResult.DUPLICATE : BatchStartResult.CONFLICT;
+        }
+        if (batchActive || (activeBatchId != null && !isFinished())) {
+            return BatchStartResult.ACTIVE_BATCH;
+        }
+
+        activeBatchId = batchId;
+        quantity = requestedQuantity;
+        distributed = 0;
+        batchActive = true;
+        requestActive = false;
+        legacyIdentifiers = false;
+        legacyBottleIdPrefix = null;
+        nextBottleMillis = nowMillis;
+        bottleStartedMillis = 0L;
+        nextRequestMillis = nowMillis;
+        failure = null;
+        return BatchStartResult.ACCEPTED;
+    }
+
+    public BatchStartResult startBatchPayload(
+        String payload,
+        long nowMillis
+    ) {
+        try {
+            String[] fields = M4ProtocolV1.fields(payload, 2);
+            int requestedQuantity = M4ProtocolV1.unsignedInteger(
+                fields[1], "quantity"
+            );
+            return startBatch(fields[0], requestedQuantity, nowMillis);
+        }
+        catch (IllegalArgumentException invalid) {
+            return BatchStartResult.INVALID;
+        }
+    }
+
+    /** No catch-up bursts: at most one recognition request per call. */
     public String tick(long nowMillis, boolean contextDistributed) {
-        if (isFinished() || failure != null || nowMillis < nextBottleMillis) {
+        if (!batchActive || failure != null ||
+            nowMillis < nextBottleMillis) {
             return null;
         }
-        if (!active) {
-            active = true;
+        if (!requestActive) {
+            requestActive = true;
             bottleStartedMillis = nowMillis;
             nextRequestMillis = nowMillis;
         }
         if (contextDistributed) {
             distributed++;
-            active = false;
-            nextBottleMillis = nowMillis + intervalMillis;
+            requestActive = false;
+            if (distributed == quantity) {
+                batchActive = false;
+            }
+            else {
+                nextBottleMillis = nowMillis + intervalMillis;
+            }
             return null;
         }
         if (nowMillis - bottleStartedMillis >= timeoutMillis) {
-            failure = "context distribution timed out for " + currentBottleId();
+            failure = "context distribution timed out for " +
+                currentBottleId();
             return null;
         }
         if (nowMillis < nextRequestMillis) {
@@ -80,21 +189,105 @@ public final class RecognitionSimulatorStateV1 {
     }
 
     public String currentBottleId() {
-        return isFinished() ? null : bottleIdPrefix +
-            String.format(Locale.ROOT, "%03d", distributed + 1);
+        if (!batchActive) {
+            return null;
+        }
+        String suffix = String.format(
+            Locale.ROOT,
+            "%03d",
+            Integer.valueOf(distributed + 1)
+        );
+        return legacyIdentifiers ?
+            legacyBottleIdPrefix + suffix : activeBatchId + "-B" + suffix;
     }
 
-    public boolean isFinished() { return distributed == quantity; }
-    public int distributedCount() { return distributed; }
-    public String failureReason() { return failure; }
+    public boolean isFinished() {
+        return activeBatchId != null && !batchActive && failure == null &&
+            distributed == quantity;
+    }
 
+    public boolean isBatchActive() {
+        return batchActive;
+    }
+
+    public String activeBatchId() {
+        return activeBatchId;
+    }
+
+    public int batchQuantity() {
+        return quantity;
+    }
+
+    public int distributedCount() {
+        return distributed;
+    }
+
+    public String failureReason() {
+        return failure;
+    }
+
+    /** Starts the old property-configured finite batch. */
     public static synchronized void start() {
-        runtime = fromProperties(System.getProperties(), System.currentTimeMillis());
-        lastLoggedBottle = null;
-        terminalLogged = false;
-        System.out.println("[M4-SIM] started quantity=" + runtime.quantity +
-            " size=" + runtime.sizeCode + " prefix=" + runtime.bottleIdPrefix +
-            " (simulation input; does not receive POS orders)");
+        runtime = fromProperties(
+            System.getProperties(), System.currentTimeMillis()
+        );
+        resetRuntimeLogging();
+        System.out.println(
+            "[M4-SIM] standalone legacy mode quantity=" +
+            runtime.quantity + " size=" + runtime.sizeCode + " prefix=" +
+            runtime.legacyBottleIdPrefix
+        );
+    }
+
+    /** Starts the preferred integrated receiver in IDLE. */
+    public static synchronized void startBatchDriven() {
+        runtime = batchDrivenFromProperties(
+            System.getProperties(), System.currentTimeMillis()
+        );
+        resetRuntimeLogging();
+        System.out.println(
+            "[M4-SIM] batch-driven mode IDLE; awaiting " +
+            "M4_SIM_BATCH_REQUEST (m4.sim.quantity ignored)"
+        );
+    }
+
+    public static synchronized boolean acceptBatchRequest(String payload) {
+        BatchStartResult result = runtime.startBatchPayload(
+            payload,
+            System.currentTimeMillis()
+        );
+        if (result == BatchStartResult.ACCEPTED) {
+            lastLoggedBottle = null;
+            terminalLogged = false;
+            System.out.println(
+                "[M4-SIM] batch accepted id=" + runtime.activeBatchId +
+                " quantity=" + runtime.quantity
+            );
+            return true;
+        }
+        if (result == BatchStartResult.DUPLICATE) {
+            System.out.println(
+                "[M4-SIM] duplicate batch request ignored " + payload
+            );
+            return true;
+        }
+        if (result == BatchStartResult.CONFLICT) {
+            System.out.println(
+                "[M4-SIM] CONFLICT batch=" + runtime.activeBatchId +
+                " existing=" + runtime.quantity + " received=" +
+                receivedQuantity(payload)
+            );
+            return false;
+        }
+        if (result == BatchStartResult.ACTIVE_BATCH) {
+            System.out.println(
+                "[M4-SIM] ACTIVE batch=" + runtime.activeBatchId +
+                " rejected new request " + payload
+            );
+            return false;
+        }
+        System.out.println("[M4-SIM] INVALID batch request " + payload);
+        return false;
     }
 
     public static synchronized String nextRequest() {
@@ -104,34 +297,78 @@ public final class RecognitionSimulatorStateV1 {
             Member4MachineStateV1.isContextDistributionComplete(
                 bottleId, runtime.sizeCode
             );
-        String request = runtime.tick(System.currentTimeMillis(), distributed);
+        String request = runtime.tick(
+            System.currentTimeMillis(), distributed
+        );
         if (request != null && !bottleId.equals(lastLoggedBottle)) {
             System.out.println("[M4-SIM] recognising " + request);
             lastLoggedBottle = bottleId;
         }
         if (runtime.distributedCount() != before) {
-            System.out.println("[M4-SIM] context dispatched " + bottleId +
-                " " + runtime.distributedCount() + "/" + runtime.quantity);
+            System.out.println(
+                "[M4-SIM] context dispatched " + bottleId + " " +
+                runtime.distributedCount() + "/" + runtime.quantity
+            );
         }
-        if (!terminalLogged && (runtime.isFinished() || runtime.failureReason() != null)) {
+        if (!terminalLogged &&
+            (runtime.isFinished() || runtime.failureReason() != null)) {
             terminalLogged = true;
             System.out.println(runtime.isFinished() ?
-                "[M4-SIM] FINISHED " + runtime.quantity + " bottle context(s)" :
-                "[M4-SIM] STOPPED: " + runtime.failureReason());
+                "[M4-SIM] FINISHED batch=" + runtime.activeBatchId +
+                    " quantity=" + runtime.quantity :
+                "[M4-SIM] STOPPED batch=" + runtime.activeBatchId +
+                    ": " + runtime.failureReason());
         }
         return request;
     }
 
-    private static long millis(Properties properties, String key, long fallback, long minimum) {
+    private void startLegacyBatch(
+        String prefix,
+        int configuredQuantity,
+        long firstBottleMillis
+    ) {
+        activeBatchId = prefix;
+        quantity = configuredQuantity;
+        distributed = 0;
+        batchActive = true;
+        requestActive = false;
+        legacyIdentifiers = true;
+        legacyBottleIdPrefix = prefix;
+        nextBottleMillis = firstBottleMillis;
+        nextRequestMillis = firstBottleMillis;
+    }
+
+    private static void resetRuntimeLogging() {
+        lastLoggedBottle = null;
+        terminalLogged = false;
+    }
+
+    private static String receivedQuantity(String payload) {
+        if (payload == null) {
+            return "?";
+        }
+        int separator = payload.lastIndexOf('|');
+        return separator < 0 ? "?" : payload.substring(separator + 1);
+    }
+
+    private static long millis(
+        Properties properties,
+        String key,
+        long fallback,
+        long minimum
+    ) {
         String value = properties.getProperty(key, String.valueOf(fallback));
         try {
             long result = Long.parseLong(value);
             if (result >= minimum && result <= Integer.MAX_VALUE) {
                 return result;
             }
-        } catch (NumberFormatException ignored) {
-            // Report the property name as well as the allowed range below.
         }
-        throw new IllegalArgumentException(key + " must be " + minimum + ".." + Integer.MAX_VALUE);
+        catch (NumberFormatException ignored) {
+            // Report the property and allowed range below.
+        }
+        throw new IllegalArgumentException(
+            key + " must be " + minimum + ".." + Integer.MAX_VALUE
+        );
     }
 }

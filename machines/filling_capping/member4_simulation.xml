@@ -72,8 +72,15 @@
             <iSignal Name="INJECT_SORT_PACK_FAULT" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="12012" />
             <oSignal Name="SORT_PACK_PLANT_FEEDBACK" To="SortPackControllerCD.SORT_PACK_PLANT_FEEDBACK" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="11012" />
         </ClockDomain>
-        <!-- Output-only environmental stimulus; no new peer input or receiver port. -->
+        <!--
+            SIMULATION ONLY. The M1 Coordinator publishes a bounded,
+            idempotent batchId|quantity trigger on port 11014. This signal is
+            deliberately absent from canonical member4_system.xml.
+        -->
         <ClockDomain Name="RecognitionSimulatorCD" Class="RecognitionSimulator">
+            <iSignal Name="M4_SIM_BATCH_REQUEST"
+                     Class="com.systemj.ipc.SimpleServer"
+                     IP="127.0.0.1" Port="11014" />
             <oSignal Name="RECOGNITION_REQUEST" To="RecognitionPlantCD.RECOGNITION_REQUEST"
                      Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="12011" />
         </ClockDomain>

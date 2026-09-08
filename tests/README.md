@@ -75,6 +75,7 @@ Run the framework-free protocol/state check:
 
 ```powershell
 java -cp "build/classes;<SYSTEMJ_LIB_DIR>/*" OrderV1SelfTest
+java -cp "build/classes;<SYSTEMJ_LIB_DIR>/*" M1M4BatchSyncSelfTest
 ```
 
 Expected output: `OrderV1SelfTest PASSED`. This check now also verifies that an
@@ -85,6 +86,12 @@ completion transport window does not consume multiple attempts, and a late
 copy of a completed order ID cannot restart that order. It also verifies that
 a held `BOTTLE_DONE` window counts once and re-arms only after an `ABSENT`
 reaction.
+
+`M1M4BatchSyncSelfTest` verifies the simulation-only batch contract: retries
+retain an identical `<orderId>-Pnn|quantity` payload, a product transition
+creates the next deterministic batch ID, conflicting quantities do not mutate
+the current identity, and the generated Coordinator exposes the expected
+`M4_SIM_BATCH_REQUEST` value.
 
 ## Run the four runtimes
 

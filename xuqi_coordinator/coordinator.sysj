@@ -19,6 +19,9 @@ Coordinator(
     output Integer signal FILL_A_RATIO;
     output Integer signal FILL_B_RATIO;
 
+    // SIMULATION / FULL-INTEGRATION ONLY. Not a Controller interface.
+    output String signal M4_SIM_BATCH_REQUEST;
+
     output signal LOADER_STATUS_REQUEST;
     output signal CONVEYOR_STATUS_REQUEST;
     output signal ROTARY_STATUS_REQUEST;
@@ -114,6 +117,30 @@ Coordinator(
                     System.out.println(
                         "[COORD-LIFECYCLE] accepted " +
                         CoordinatorStateV1.lifecycleSnapshot()
+                    );
+                }
+            }
+            pause;
+        }
+    }
+    ||
+    // Bounded simulation-only product-batch publication. The helper retains
+    // one stable batchId|quantity payload for 3 pulses about 600 ms apart and
+    // inserts an ABSENT reaction between copies.
+    {
+        loop {
+            String simulationBatchRequest =
+                CoordinatorStateV1.nextM4SimulationBatchRequest();
+            if (simulationBatchRequest != null) {
+                emit M4_SIM_BATCH_REQUEST(simulationBatchRequest);
+                if (
+                    CoordinatorStateV1.
+                        m4SimulationBatchTransmissionStarted
+                ) {
+                    System.out.println(
+                        "[M1-M4-SIM] batch request " +
+                        simulationBatchRequest + " attempt=" +
+                        CoordinatorStateV1.lastM4SimulationBatchAttempt
                     );
                 }
             }
