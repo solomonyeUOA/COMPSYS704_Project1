@@ -39,6 +39,8 @@ Coordinator(
     output Integer signal VIZ_UNLOADER_STATUS;
     output Integer signal VIZ_REQUIRED_BOTTLES;
     output Integer signal VIZ_COMPLETED_BOTTLES;
+    // M1 IP-only read-only projection; not a frozen Controller signal.
+    output String signal VIZ_FT_EVIDENCE;
 
     input Integer signal LOADER_STATUS;
     input Integer signal CONVEYOR_STATUS;
@@ -409,4 +411,15 @@ Coordinator(
             }
         } pause;}}
     }
+    ||
+    // Single display-only publisher for Coordinator-observed FT evidence.
+    // It cannot acknowledge, resume or command any Controller.
+    {loop {
+        String ftVisualEvidence =
+            CoordinatorStateV1.takeFtVisualEvidence();
+        if (ftVisualEvidence != null) {
+            emit VIZ_FT_EVIDENCE(ftVisualEvidence);
+        }
+        pause;
+    }}
 }

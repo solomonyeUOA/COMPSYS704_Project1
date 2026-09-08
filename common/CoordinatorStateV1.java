@@ -61,6 +61,16 @@ public final class CoordinatorStateV1 {
     public static boolean ftSafeStopEstablished = false;
     public static boolean ftBatchTransitionHeld = false;
 
+    // M1-only, display-only projection of the FT evidence already received by
+    // CoordinatorCD. It never creates an acknowledgement, recovery decision
+    // or Controller command.
+    private static String ftVisualState = "NORMAL";
+    private static String ftVisualSource = "M3_FAULT_SUPERVISOR";
+    private static String ftVisualEvent = "none";
+    private static String ftVisualSafeStop = "NOT_REQUESTED";
+    private static String ftVisualRecovery = "NOT_ACTIVE";
+    private static String pendingFtVisualEvidence = visualFtEvidence();
+
     /** Parses and accepts a new order only when no order is active. */
     public static boolean accept(String payload) {
         // completionPending belongs to the previous order's transport retry.
@@ -219,6 +229,11 @@ public final class CoordinatorStateV1 {
             return false;
         }
         latestFtFaultAlert = payload;
+        ftVisualState = "FAULT_ALERT";
+        updateFtVisualIdentity(payload, true);
+        ftVisualSafeStop = "NOT_REQUESTED";
+        ftVisualRecovery = "NOT_ACTIVE";
+        queueFtVisualEvidence();
         return true;
     }
 
@@ -234,6 +249,11 @@ public final class CoordinatorStateV1 {
         pendingFtSafeStopRequest = payload;
         ftCoordinationHold = true;
         ftSafeStopEstablished = false;
+        ftVisualState = "FAULT_HOLD";
+        updateFtVisualIdentity(payload, false);
+        ftVisualSafeStop = "REQUESTED_HOLD_ACTIVE";
+        ftVisualRecovery = "AWAITING_EVIDENCE";
+        queueFtVisualEvidence();
         return true;
     }
 
@@ -243,6 +263,10 @@ public final class CoordinatorStateV1 {
             return false;
         }
         latestFtRecoveryReady = payload;
+        ftVisualState = "RECOVERY_READY_HOLD";
+        updateFtVisualIdentity(payload, false);
+        ftVisualRecovery = "READY_AWAITING_M1";
+        queueFtVisualEvidence();
         return true;
     }
 
@@ -254,7 +278,25 @@ public final class CoordinatorStateV1 {
         latestFtRecoveryFailed = payload;
         ftCoordinationHold = true;
         ftSafeStopEstablished = false;
+        ftVisualState = "RECOVERY_FAILED_HOLD";
+        updateFtVisualIdentity(payload, false);
+        ftVisualRecovery = "FAILED_HOLD_RETAINED";
+        queueFtVisualEvidence();
         return true;
+    }
+
+    /** Takes one pending M1-only visual evidence snapshot, if available. */
+    public static synchronized String takeFtVisualEvidence() {
+        String evidence = pendingFtVisualEvidence;
+        pendingFtVisualEvidence = null;
+        return evidence;
+    }
+
+    /** Current display projection; useful for deterministic regression tests. */
+    public static synchronized String visualFtEvidence() {
+        return "V1|" + ftVisualState + "|" + ftVisualSource + "|" +
+            ftVisualEvent + "|" + ftVisualSafeStop + "|" +
+            ftVisualRecovery;
     }
 
     /**
@@ -277,6 +319,33 @@ public final class CoordinatorStateV1 {
                 isPresentPayload(latestFtRecoveryReady) +
             " hasRecoveryFailed=" +
                 isPresentPayload(latestFtRecoveryFailed);
+    }
+
+    private static void updateFtVisualIdentity(
+        String payload,
+        boolean includesSubsystem
+    ) {
+        String[] fields = payload.split("\\|", -1);
+        if (fields.length >= 2 && "V2".equals(fields[0])) {
+            ftVisualEvent = safeVisualToken(fields[1], "unknown_event");
+            if (includesSubsystem && fields.length >= 4) {
+                ftVisualSource = safeVisualToken(
+                    fields[3],
+                    "M3_FAULT_SUPERVISOR"
+                );
+            }
+        }
+    }
+
+    private static void queueFtVisualEvidence() {
+        pendingFtVisualEvidence = visualFtEvidence();
+    }
+
+    private static String safeVisualToken(String value, String fallback) {
+        if (value == null || value.trim().length() == 0) {
+            return fallback;
+        }
+        return value.trim().replaceAll("[^A-Za-z0-9_.:-]", "_");
     }
 
     private static void loadCurrentProduct() {

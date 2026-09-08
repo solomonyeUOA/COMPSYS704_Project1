@@ -10,6 +10,7 @@ import java.awt.FontMetrics;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.GraphicsEnvironment;
+import java.awt.GridLayout;
 import java.awt.Point;
 import java.awt.Polygon;
 import java.awt.Rectangle;
@@ -30,6 +31,7 @@ import java.awt.geom.RoundRectangle2D;
 import javax.swing.BorderFactory;
 import javax.swing.Box;
 import javax.swing.BoxLayout;
+import javax.swing.JButton;
 import javax.swing.JDialog;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
@@ -97,8 +99,12 @@ public final class ABSVisualisation {
         new boolean[MACHINE_NAMES.length];
     private static final ABSVisualisationFlowModel VISUAL_MODEL =
         new ABSVisualisationFlowModel();
+    private static final ABSVisualisationTeamIpModel TEAM_IP_MODEL =
+        new ABSVisualisationTeamIpModel();
     private static volatile ABSVisualisationFlowModel.FlowSnapshot
         renderSnapshot = VISUAL_MODEL.getSnapshot();
+    private static volatile ABSVisualisationTeamIpModel.Snapshot
+        teamIpSnapshot = TEAM_IP_MODEL.getSnapshot();
 
     private static volatile ABSVisualisation instance;
     private static int requiredBottles = 0;
@@ -108,6 +114,7 @@ public final class ABSVisualisation {
 
     private final JFrame frame;
     private final ProductionLinePanel productionLinePanel;
+    private final TeamIpExtensionsPanel teamIpExtensionsPanel;
     private final JLabel requiredLabel;
     private final JLabel completedLabel;
     private final JLabel progressLabel;
@@ -115,6 +122,8 @@ public final class ABSVisualisation {
     private final Timer animationTimer;
     private final JDialog[] detailDialogs;
     private final ModuleDetailPanel[] detailPanels;
+    private final JDialog[] teamIpDialogs;
+    private final TeamIpDetailPanel[] teamIpDetailPanels;
 
     private ABSVisualisation() {
         frame = new JFrame(
@@ -124,6 +133,12 @@ public final class ABSVisualisation {
         frame.setLayout(new BorderLayout(12, 10));
         detailDialogs = new JDialog[MACHINE_NAMES.length];
         detailPanels = new ModuleDetailPanel[MACHINE_NAMES.length];
+        teamIpDialogs = new JDialog[
+            ABSVisualisationTeamIpModel.EXTENSION_COUNT
+        ];
+        teamIpDetailPanels = new TeamIpDetailPanel[
+            ABSVisualisationTeamIpModel.EXTENSION_COUNT
+        ];
 
         JPanel header = new JPanel();
         header.setLayout(new BoxLayout(header, BoxLayout.Y_AXIS));
@@ -160,7 +175,20 @@ public final class ABSVisualisation {
             BorderFactory.createEmptyBorder(5, 5, 5, 5)
         ));
         schematicPanel.add(productionLinePanel, BorderLayout.CENTER);
-        frame.add(schematicPanel, BorderLayout.CENTER);
+
+        teamIpExtensionsPanel = new TeamIpExtensionsPanel(
+            new TeamIpWindowOpener() {
+                @Override
+                public void openTeamIpDetail(int extensionIndex) {
+                    openTeamIpDetailWindow(extensionIndex);
+                }
+            }
+        );
+        JPanel hierarchyPanel = new JPanel(new BorderLayout(0, 8));
+        hierarchyPanel.setBorder(BorderFactory.createEmptyBorder(0, 8, 0, 8));
+        hierarchyPanel.add(schematicPanel, BorderLayout.CENTER);
+        hierarchyPanel.add(teamIpExtensionsPanel, BorderLayout.SOUTH);
+        frame.add(hierarchyPanel, BorderLayout.CENTER);
 
         JPanel footer = new JPanel(new BorderLayout(0, 6));
         footer.setBorder(BorderFactory.createEmptyBorder(0, 10, 10, 10));
@@ -205,7 +233,9 @@ public final class ABSVisualisation {
                 public void actionPerformed(ActionEvent event) {
                     VISUAL_MODEL.tickElapsed(System.nanoTime());
                     renderSnapshot = VISUAL_MODEL.getSnapshot();
+                    teamIpSnapshot = TEAM_IP_MODEL.getSnapshot();
                     productionLinePanel.repaint();
+                    teamIpExtensionsPanel.syncState();
                     refreshDetailPanels();
                     refreshVisualProgressLabel();
                 }
@@ -226,8 +256,8 @@ public final class ABSVisualisation {
             }
         });
 
-        frame.setPreferredSize(new Dimension(1260, 760));
-        frame.setMinimumSize(new Dimension(1080, 680));
+        frame.setPreferredSize(new Dimension(1280, 900));
+        frame.setMinimumSize(new Dimension(1080, 780));
         frame.pack();
         frame.setLocationByPlatform(true);
         frame.setResizable(true);
@@ -306,6 +336,59 @@ public final class ABSVisualisation {
         dialog.setVisible(true);
     }
 
+    private void openTeamIpDetailWindow(final int extensionIndex) {
+        if (!SwingUtilities.isEventDispatchThread()) {
+            SwingUtilities.invokeLater(new Runnable() {
+                @Override
+                public void run() {
+                    openTeamIpDetailWindow(extensionIndex);
+                }
+            });
+            return;
+        }
+        if (extensionIndex < 0 || extensionIndex >=
+            ABSVisualisationTeamIpModel.EXTENSION_COUNT) {
+            return;
+        }
+
+        JDialog existing = teamIpDialogs[extensionIndex];
+        if (existing != null && existing.isDisplayable()) {
+            existing.setVisible(true);
+            existing.toFront();
+            existing.requestFocus();
+            return;
+        }
+
+        final TeamIpDetailPanel detailPanel =
+            new TeamIpDetailPanel(extensionIndex);
+        ABSVisualisationTeamIpModel.ExtensionSnapshot extension =
+            teamIpSnapshot.getExtension(extensionIndex);
+        final JDialog dialog = new JDialog(
+            frame,
+            extension.getMember() + " " + extension.getTitle() +
+                " - Team IP Detail",
+            false
+        );
+        dialog.setDefaultCloseOperation(JDialog.DISPOSE_ON_CLOSE);
+        dialog.setContentPane(detailPanel);
+        dialog.setSize(new Dimension(760, 560));
+        dialog.setMinimumSize(new Dimension(660, 500));
+        dialog.setLocationRelativeTo(frame);
+        dialog.addWindowListener(new WindowAdapter() {
+            @Override
+            public void windowClosed(WindowEvent event) {
+                if (teamIpDialogs[extensionIndex] == dialog) {
+                    teamIpDialogs[extensionIndex] = null;
+                    teamIpDetailPanels[extensionIndex] = null;
+                }
+            }
+        });
+        teamIpDialogs[extensionIndex] = dialog;
+        teamIpDetailPanels[extensionIndex] = detailPanel;
+        detailPanel.syncState();
+        dialog.setVisible(true);
+    }
+
     private void closeAllDetailWindows() {
         for (int index = 0; index < detailDialogs.length; index++) {
             if (detailPanels[index] != null) {
@@ -318,12 +401,25 @@ public final class ABSVisualisation {
             detailPanels[index] = null;
             detailDialogs[index] = null;
         }
+        for (int index = 0; index < teamIpDialogs.length; index++) {
+            if (teamIpDialogs[index] != null &&
+                teamIpDialogs[index].isDisplayable()) {
+                teamIpDialogs[index].dispose();
+            }
+            teamIpDetailPanels[index] = null;
+            teamIpDialogs[index] = null;
+        }
     }
 
     private void refreshDetailPanels() {
         for (int index = 0; index < detailPanels.length; index++) {
             if (detailPanels[index] != null) {
                 detailPanels[index].syncRealState();
+            }
+        }
+        for (int index = 0; index < teamIpDetailPanels.length; index++) {
+            if (teamIpDetailPanels[index] != null) {
+                teamIpDetailPanels[index].syncState();
             }
         }
     }
@@ -372,6 +468,30 @@ public final class ABSVisualisation {
         traceRealInput("VIZ_COMPLETED_BOTTLES", completed);
         VISUAL_MODEL.acceptCompleted(completed);
         printAndRefreshProgress();
+    }
+
+    /** Accepts M1-only read-only evidence already validated by Coordinator. */
+    public static synchronized void updateFtEvidence(String evidence) {
+        if (!TEAM_IP_MODEL.acceptM3Evidence(evidence)) {
+            return;
+        }
+        teamIpSnapshot = TEAM_IP_MODEL.getSnapshot();
+        if (TRACE_ENABLED) {
+            System.out.println(
+                "ABS_VIZ_REAL timestamp=" + System.currentTimeMillis() +
+                " signal=VIZ_FT_EVIDENCE value=" + evidence
+            );
+        }
+        final ABSVisualisation ui = instance;
+        if (ui != null) {
+            SwingUtilities.invokeLater(new Runnable() {
+                @Override
+                public void run() {
+                    ui.teamIpExtensionsPanel.syncState();
+                    ui.refreshDetailPanels();
+                }
+            });
+        }
     }
 
     public static String statusName(int status) {
@@ -510,7 +630,9 @@ public final class ABSVisualisation {
     private void refreshAll() {
         synchronized (ABSVisualisation.class) {
             renderSnapshot = VISUAL_MODEL.getSnapshot();
+            teamIpSnapshot = TEAM_IP_MODEL.getSnapshot();
             productionLinePanel.repaint();
+            teamIpExtensionsPanel.syncState();
             applyProgress(
                 requiredBottles,
                 completedBottles,
@@ -558,7 +680,7 @@ public final class ABSVisualisation {
         }
 
         int idealised = VISUAL_MODEL.getVisualCompleted();
-        String mode = VISUAL_MODEL.getModeName();
+        String mode = displayModeName(VISUAL_MODEL.getModeName());
         progressLabel.setText(
             summary + "  |  IDEALISED: " + idealised +
             (requiredReceived ? " / " + required : "") + " (" + mode + ")"
@@ -570,6 +692,13 @@ public final class ABSVisualisation {
         progressBar.setMaximum(maximum);
         progressBar.setValue(value);
         progressBar.setString(summary);
+    }
+
+    private static String displayModeName(String mode) {
+        if (!TRACE_ENABLED && "BOUNDED CATCH-UP".equals(mode)) {
+            return "Synchronising with production";
+        }
+        return mode;
     }
 
     private void refreshVisualProgressLabel() {
@@ -610,6 +739,215 @@ public final class ABSVisualisation {
 
     private interface DetailWindowOpener {
         void openDetail(int machineIndex);
+    }
+
+    private interface TeamIpWindowOpener {
+        void openTeamIpDetail(int extensionIndex);
+    }
+
+    /** Second hierarchy level: team extensions around the GP flow. */
+    static final class TeamIpExtensionsPanel extends JPanel {
+        private static final long serialVersionUID = 1L;
+        private final JButton[] cards = new JButton[
+            ABSVisualisationTeamIpModel.EXTENSION_COUNT
+        ];
+
+        TeamIpExtensionsPanel(final TeamIpWindowOpener opener) {
+            setLayout(new BorderLayout(0, 6));
+            setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createTitledBorder(
+                    "Team IP Extensions - represented by M1"
+                ),
+                BorderFactory.createEmptyBorder(4, 8, 8, 8)
+            ));
+            JLabel relationship = new JLabel(
+                "M2 Digital Twin  |  M3 Fault Tolerance  |  " +
+                "M4 Two-Size Context   ->   " +
+                "M1 read-only hierarchical visualisation",
+                SwingConstants.CENTER
+            );
+            relationship.setFont(new Font(
+                Font.SANS_SERIF,
+                Font.PLAIN,
+                11
+            ));
+            relationship.setForeground(new Color(65, 77, 91));
+            add(relationship, BorderLayout.NORTH);
+
+            JPanel cardRow = new JPanel(new GridLayout(1, 3, 10, 0));
+            for (int index = 0; index < cards.length; index++) {
+                final int extensionIndex = index;
+                JButton card = new JButton();
+                card.setCursor(Cursor.getPredefinedCursor(
+                    Cursor.HAND_CURSOR
+                ));
+                card.setFocusPainted(false);
+                card.setOpaque(true);
+                card.setBorder(BorderFactory.createCompoundBorder(
+                    BorderFactory.createLineBorder(
+                        teamIpAccent(index),
+                        2,
+                        true
+                    ),
+                    BorderFactory.createEmptyBorder(5, 8, 5, 8)
+                ));
+                card.addActionListener(new ActionListener() {
+                    @Override
+                    public void actionPerformed(ActionEvent event) {
+                        opener.openTeamIpDetail(extensionIndex);
+                    }
+                });
+                cards[index] = card;
+                cardRow.add(card);
+            }
+            cardRow.setPreferredSize(new Dimension(0, 106));
+            add(cardRow, BorderLayout.CENTER);
+            syncState();
+        }
+
+        void syncState() {
+            ABSVisualisationTeamIpModel.Snapshot snapshot = teamIpSnapshot;
+            for (int index = 0; index < cards.length; index++) {
+                ABSVisualisationTeamIpModel.ExtensionSnapshot extension =
+                    snapshot.getExtension(index);
+                cards[index].setText(cardText(extension));
+                cards[index].setBackground(cardBackground(index, extension));
+                cards[index].setToolTipText(
+                    "Open " + extension.getMember() + " " +
+                    extension.getTitle() + " integration detail"
+                );
+            }
+        }
+
+        private static String cardText(
+            ABSVisualisationTeamIpModel.ExtensionSnapshot extension
+        ) {
+            return "<html><div style='text-align:center'>" +
+                "<b>" + extension.getMember() + " " +
+                extension.getTitle() + "</b><br>" +
+                extension.getSummary() + "<br>" +
+                "<font color='#3d5268'>" + extension.getMode() +
+                "</font><br><b>" + extension.getLiveHeadline() +
+                "</b></div></html>";
+        }
+
+        private static Color cardBackground(
+            int index,
+            ABSVisualisationTeamIpModel.ExtensionSnapshot extension
+        ) {
+            if (index == ABSVisualisationTeamIpModel.M3_FAULT_TOLERANCE &&
+                extension.getLiveHeadline().indexOf("FAULT") >= 0) {
+                return new Color(255, 232, 232);
+            }
+            if (index == ABSVisualisationTeamIpModel.M3_FAULT_TOLERANCE &&
+                extension.getLiveHeadline().indexOf("RECOVERY") >= 0) {
+                return new Color(255, 246, 218);
+            }
+            return new Color(245, 249, 252);
+        }
+
+        private static Color teamIpAccent(int index) {
+            switch (index) {
+                case ABSVisualisationTeamIpModel.M2_DIGITAL_TWIN:
+                    return new Color(54, 116, 173);
+                case ABSVisualisationTeamIpModel.M3_FAULT_TOLERANCE:
+                    return new Color(185, 75, 56);
+                default:
+                    return new Color(99, 79, 164);
+            }
+        }
+    }
+
+    /** Read-only detail view; it shares the current team-IP snapshot. */
+    static final class TeamIpDetailPanel extends JPanel {
+        private static final long serialVersionUID = 1L;
+        private final int extensionIndex;
+        private final JLabel title = new JLabel();
+        private final JLabel owner = new JLabel();
+        private final JLabel capability = new JLabel();
+        private final JLabel evidence = new JLabel();
+        private final JLabel boundary = new JLabel();
+
+        TeamIpDetailPanel(int index) {
+            extensionIndex = index;
+            setLayout(new BorderLayout(12, 12));
+            setBorder(BorderFactory.createEmptyBorder(18, 18, 18, 18));
+
+            JPanel heading = new JPanel();
+            heading.setLayout(new BoxLayout(heading, BoxLayout.Y_AXIS));
+            title.setAlignmentX(Component.CENTER_ALIGNMENT);
+            title.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 22));
+            owner.setAlignmentX(Component.CENTER_ALIGNMENT);
+            owner.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 12));
+            owner.setForeground(new Color(72, 83, 96));
+            heading.add(title);
+            heading.add(Box.createVerticalStrut(5));
+            heading.add(owner);
+            add(heading, BorderLayout.NORTH);
+
+            JPanel sections = new JPanel(new GridLayout(1, 2, 12, 0));
+            sections.add(sectionPanel("IMPLEMENTED CAPABILITY", capability));
+            sections.add(sectionPanel("AVAILABLE LIVE EVIDENCE", evidence));
+            add(sections, BorderLayout.CENTER);
+
+            boundary.setHorizontalAlignment(SwingConstants.CENTER);
+            boundary.setOpaque(true);
+            boundary.setBackground(new Color(235, 241, 247));
+            boundary.setForeground(new Color(48, 66, 84));
+            boundary.setBorder(BorderFactory.createEmptyBorder(10, 8, 10, 8));
+            add(boundary, BorderLayout.SOUTH);
+            syncState();
+        }
+
+        void syncState() {
+            ABSVisualisationTeamIpModel.ExtensionSnapshot extension =
+                teamIpSnapshot.getExtension(extensionIndex);
+            title.setText(extension.getMember() + " IP - " +
+                extension.getTitle());
+            owner.setText(extension.getOwner() + "  |  " +
+                extension.getMode());
+            capability.setText(linesHtml(
+                extension.getSummary(),
+                extension.getCapabilityLines()
+            ));
+            evidence.setText(linesHtml(
+                extension.getLiveHeadline(),
+                extension.getLiveLines()
+            ));
+            boundary.setText(
+                "<html><b>M1 boundary:</b> representation and observation " +
+                "only - no actuator, reset, safe-stop or resume command" +
+                "</html>"
+            );
+        }
+
+        private static JPanel sectionPanel(String heading, JLabel content) {
+            JPanel panel = new JPanel(new BorderLayout(0, 8));
+            panel.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(new Color(194, 205, 216)),
+                BorderFactory.createEmptyBorder(14, 14, 14, 14)
+            ));
+            JLabel label = new JLabel(heading, SwingConstants.CENTER);
+            label.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 14));
+            label.setForeground(new Color(46, 67, 88));
+            panel.add(label, BorderLayout.NORTH);
+            content.setVerticalAlignment(SwingConstants.TOP);
+            content.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 13));
+            panel.add(content, BorderLayout.CENTER);
+            return panel;
+        }
+
+        private static String linesHtml(String headline, String[] lines) {
+            StringBuilder text = new StringBuilder(
+                "<html><div style='width:260px'><b>"
+            );
+            text.append(headline).append("</b><br><br>");
+            for (String line : lines) {
+                text.append("&#8226; ").append(line).append("<br><br>");
+            }
+            text.append("</div></html>");
+            return text.toString();
+        }
     }
 
     /** Custom symbolic plant renderer; it never infers bottle locations. */
@@ -1529,9 +1867,18 @@ public final class ABSVisualisation {
             int[] statuses,
             boolean[] received
         ) {
-            Color stateColor = received[index] ?
-                statusColor(statuses[index]) : statusColor(-1);
-            g2.setColor(paleStatusColor(statuses[index], received[index]));
+            ABSVisualisationFlowModel.ModuleSnapshot module =
+                renderModule(index);
+            boolean historicalDone = received[index] &&
+                statuses[index] == DONE_STATUS &&
+                module.getCurrentBottleId() <= 0;
+            Color stateColor = historicalDone ?
+                new Color(92, 112, 130) :
+                (received[index] ? statusColor(statuses[index]) :
+                    statusColor(-1));
+            g2.setColor(historicalDone ?
+                new Color(239, 243, 247) :
+                paleStatusColor(statuses[index], received[index]));
             g2.fill(new RoundRectangle2D.Double(
                 x, y, width, height, 14, 14
             ));
@@ -1563,8 +1910,6 @@ public final class ABSVisualisation {
             g2.setFont(new Font(Font.SANS_SERIF, Font.BOLD, fontSize));
             drawCenteredText(g2, title, x + width / 2, y + 21);
 
-            ABSVisualisationFlowModel.ModuleSnapshot module =
-                renderModule(index);
             String visualPhase = module.getCurrentBottleId() > 0 ?
                 "VISUAL B" + module.getCurrentBottleId() + ": " +
                     module.getPhase() :
@@ -1595,10 +1940,17 @@ public final class ABSVisualisation {
             int[] statuses,
             boolean[] received
         ) {
-            String text = "REAL " + (received[index] ?
-                statusName(statuses[index]) : "WAITING");
-            Color color = received[index] ?
-                statusColor(statuses[index]) : statusColor(-1);
+            ABSVisualisationFlowModel.ModuleSnapshot module =
+                renderModule(index);
+            boolean historicalDone = received[index] &&
+                statuses[index] == DONE_STATUS &&
+                module.getCurrentBottleId() <= 0;
+            String text = historicalDone ? "LAST CYCLE COMPLETE" :
+                "REAL " + (received[index] ?
+                    statusName(statuses[index]) : "WAITING");
+            Color color = historicalDone ? new Color(92, 112, 130) :
+                (received[index] ? statusColor(statuses[index]) :
+                    statusColor(-1));
             g2.setColor(color);
             g2.fillRoundRect(x, y, width, height, 8, 8);
             g2.setColor(Color.WHITE);
@@ -1619,7 +1971,8 @@ public final class ABSVisualisation {
             int[] statuses,
             boolean[] received
         ) {
-            return received[index] && statuses[index] == 3;
+            return received[index] && statuses[index] == DONE_STATUS &&
+                renderModule(index).getCurrentBottleId() > 0;
         }
 
         private static void drawBottle(
@@ -2069,11 +2422,18 @@ public final class ABSVisualisation {
         }
 
         private void updateInformation() {
-            String realStatusText = lastStatusReceived ?
-                statusName(lastRealStatus) : "WAITING";
-            realStatusValue.setText("Status: " + realStatusText);
-            realStatusValue.setBackground(lastStatusReceived ?
-                statusColor(lastRealStatus) : statusColor(-1));
+            boolean historicalDone = lastStatusReceived &&
+                lastRealStatus == DONE_STATUS &&
+                detailModel.getCurrentBottleId() <= 0;
+            String realStatusText = historicalDone ?
+                "DONE (last cycle complete)" :
+                (lastStatusReceived ? statusName(lastRealStatus) :
+                    "WAITING");
+            realStatusValue.setText("Raw state: " + realStatusText);
+            realStatusValue.setBackground(historicalDone ?
+                new Color(92, 112, 130) :
+                (lastStatusReceived ? statusColor(lastRealStatus) :
+                    statusColor(-1)));
             phaseValue.setText(
                 wrapInformationText(
                     "Lifecycle: <b>" + detailModel.getLifecycle() +
@@ -2082,7 +2442,7 @@ public final class ABSVisualisation {
                     (detailModel.getCurrentBottleId() > 0 ?
                         "B" + detailModel.getCurrentBottleId() : "--") +
                     "</b><br>Reconciliation: <b>" +
-                    VISUAL_MODEL.getModeName() + "</b>"
+                    displayModeName(VISUAL_MODEL.getModeName()) + "</b>"
                 )
             );
 
@@ -3079,10 +3439,11 @@ public final class ABSVisualisation {
             }
 
             private void drawStateOverlay(Graphics2D g2) {
-                if (lastRealStatus == 3) {
+                if (lastRealStatus == DONE_STATUS &&
+                    detailModel.getCurrentBottleId() > 0) {
                     ProductionLinePanel.drawDoneTick(g2, 466, 48);
                 }
-                if (lastRealStatus == 4) {
+                if (lastRealStatus == FAULT_STATUS) {
                     Stroke original = g2.getStroke();
                     g2.setColor(new Color(190, 43, 43));
                     g2.setStroke(new BasicStroke(5.0f));
