@@ -10,6 +10,7 @@ import java.awt.FontMetrics;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.GraphicsEnvironment;
+import java.awt.GridLayout;
 import java.awt.Point;
 import java.awt.Polygon;
 import java.awt.Rectangle;
@@ -30,6 +31,7 @@ import java.awt.geom.RoundRectangle2D;
 import javax.swing.BorderFactory;
 import javax.swing.Box;
 import javax.swing.BoxLayout;
+import javax.swing.JButton;
 import javax.swing.JDialog;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
@@ -43,9 +45,9 @@ import javax.swing.Timer;
  * Handwritten Swing view for the Overall ABS Visualisation Plant.
  *
  * It receives data only through ABSVisualisationPlantCD. It has no Controller
- * connections and contains no machine or Plant control logic. This Phase 1
- * view is intentionally symbolic: it shows Controller state, batch progress
- * and shared visual-only bottle records without claiming real bottle tracking.
+ * connections and contains no machine or Plant control logic. This view is
+ * intentionally symbolic: it shows Controller state, batch progress and
+ * shared visual-only bottle records without claiming real bottle tracking.
  */
 public final class ABSVisualisation {
     private static final int LOADER = 0;
@@ -67,6 +69,18 @@ public final class ABSVisualisation {
     private static final double DEMO_LIQUID_B_PERCENT = 40.0;
     private static final Color LIQUID_A_COLOR = new Color(42, 132, 210);
     private static final Color LIQUID_B_COLOR = new Color(124, 86, 190);
+    private static final Color ACTIVE_FLOW_COLOR = new Color(31, 132, 190);
+    private static final Color PASSIVE_FLOW_COLOR = new Color(170, 184, 198);
+    private static final Font MODULE_PHASE_FONT =
+        new Font(Font.SANS_SERIF, Font.PLAIN, 8);
+    private static final String[] ROTARY_POSITION_LABELS = {
+        "P1 LOAD",
+        "P2 FILL",
+        "P3 LID",
+        "P4 CAP",
+        "P5 TRANSFER",
+        "P6 LABEL"
+    };
     private static final boolean TRACE_ENABLED =
         Boolean.getBoolean("abs.visualisation.trace");
 
@@ -83,8 +97,14 @@ public final class ABSVisualisation {
     private static final int[] STATUSES = new int[MACHINE_NAMES.length];
     private static final boolean[] HAS_STATUS =
         new boolean[MACHINE_NAMES.length];
-    private static final VisualisationSyncModel VISUAL_MODEL =
-        new VisualisationSyncModel();
+    private static final ABSVisualisationFlowModel VISUAL_MODEL =
+        new ABSVisualisationFlowModel();
+    private static final ABSVisualisationTeamIpModel TEAM_IP_MODEL =
+        new ABSVisualisationTeamIpModel();
+    private static volatile ABSVisualisationFlowModel.FlowSnapshot
+        renderSnapshot = VISUAL_MODEL.getSnapshot();
+    private static volatile ABSVisualisationTeamIpModel.Snapshot
+        teamIpSnapshot = TEAM_IP_MODEL.getSnapshot();
 
     private static volatile ABSVisualisation instance;
     private static int requiredBottles = 0;
@@ -94,6 +114,7 @@ public final class ABSVisualisation {
 
     private final JFrame frame;
     private final ProductionLinePanel productionLinePanel;
+    private final TeamIpExtensionsPanel teamIpExtensionsPanel;
     private final JLabel requiredLabel;
     private final JLabel completedLabel;
     private final JLabel progressLabel;
@@ -101,6 +122,8 @@ public final class ABSVisualisation {
     private final Timer animationTimer;
     private final JDialog[] detailDialogs;
     private final ModuleDetailPanel[] detailPanels;
+    private final JDialog[] teamIpDialogs;
+    private final TeamIpDetailPanel[] teamIpDetailPanels;
 
     private ABSVisualisation() {
         frame = new JFrame(
@@ -110,6 +133,12 @@ public final class ABSVisualisation {
         frame.setLayout(new BorderLayout(12, 10));
         detailDialogs = new JDialog[MACHINE_NAMES.length];
         detailPanels = new ModuleDetailPanel[MACHINE_NAMES.length];
+        teamIpDialogs = new JDialog[
+            ABSVisualisationTeamIpModel.EXTENSION_COUNT
+        ];
+        teamIpDetailPanels = new TeamIpDetailPanel[
+            ABSVisualisationTeamIpModel.EXTENSION_COUNT
+        ];
 
         JPanel header = new JPanel();
         header.setLayout(new BoxLayout(header, BoxLayout.Y_AXIS));
@@ -123,7 +152,7 @@ public final class ABSVisualisation {
         header.add(title);
 
         JLabel subtitle = new JLabel(
-            "Phase 1 detailed symbolic process demonstration",
+            "Real-state-anchored production flow and shared detail timeline",
             SwingConstants.CENTER
         );
         subtitle.setAlignmentX(Component.CENTER_ALIGNMENT);
@@ -146,7 +175,20 @@ public final class ABSVisualisation {
             BorderFactory.createEmptyBorder(5, 5, 5, 5)
         ));
         schematicPanel.add(productionLinePanel, BorderLayout.CENTER);
-        frame.add(schematicPanel, BorderLayout.CENTER);
+
+        teamIpExtensionsPanel = new TeamIpExtensionsPanel(
+            new TeamIpWindowOpener() {
+                @Override
+                public void openTeamIpDetail(int extensionIndex) {
+                    openTeamIpDetailWindow(extensionIndex);
+                }
+            }
+        );
+        JPanel hierarchyPanel = new JPanel(new BorderLayout(0, 8));
+        hierarchyPanel.setBorder(BorderFactory.createEmptyBorder(0, 8, 0, 8));
+        hierarchyPanel.add(schematicPanel, BorderLayout.CENTER);
+        hierarchyPanel.add(teamIpExtensionsPanel, BorderLayout.SOUTH);
+        frame.add(hierarchyPanel, BorderLayout.CENTER);
 
         JPanel footer = new JPanel(new BorderLayout(0, 6));
         footer.setBorder(BorderFactory.createEmptyBorder(0, 10, 10, 10));
@@ -189,8 +231,11 @@ public final class ABSVisualisation {
             new ActionListener() {
                 @Override
                 public void actionPerformed(ActionEvent event) {
-                    VISUAL_MODEL.tick();
+                    VISUAL_MODEL.tickElapsed(System.nanoTime());
+                    renderSnapshot = VISUAL_MODEL.getSnapshot();
+                    teamIpSnapshot = TEAM_IP_MODEL.getSnapshot();
                     productionLinePanel.repaint();
+                    teamIpExtensionsPanel.syncState();
                     refreshDetailPanels();
                     refreshVisualProgressLabel();
                 }
@@ -211,8 +256,8 @@ public final class ABSVisualisation {
             }
         });
 
-        frame.setPreferredSize(new Dimension(1260, 760));
-        frame.setMinimumSize(new Dimension(1080, 680));
+        frame.setPreferredSize(new Dimension(1280, 900));
+        frame.setMinimumSize(new Dimension(1080, 780));
         frame.pack();
         frame.setLocationByPlatform(true);
         frame.setResizable(true);
@@ -291,6 +336,59 @@ public final class ABSVisualisation {
         dialog.setVisible(true);
     }
 
+    private void openTeamIpDetailWindow(final int extensionIndex) {
+        if (!SwingUtilities.isEventDispatchThread()) {
+            SwingUtilities.invokeLater(new Runnable() {
+                @Override
+                public void run() {
+                    openTeamIpDetailWindow(extensionIndex);
+                }
+            });
+            return;
+        }
+        if (extensionIndex < 0 || extensionIndex >=
+            ABSVisualisationTeamIpModel.EXTENSION_COUNT) {
+            return;
+        }
+
+        JDialog existing = teamIpDialogs[extensionIndex];
+        if (existing != null && existing.isDisplayable()) {
+            existing.setVisible(true);
+            existing.toFront();
+            existing.requestFocus();
+            return;
+        }
+
+        final TeamIpDetailPanel detailPanel =
+            new TeamIpDetailPanel(extensionIndex);
+        ABSVisualisationTeamIpModel.ExtensionSnapshot extension =
+            teamIpSnapshot.getExtension(extensionIndex);
+        final JDialog dialog = new JDialog(
+            frame,
+            extension.getMember() + " " + extension.getTitle() +
+                " - Team IP Detail",
+            false
+        );
+        dialog.setDefaultCloseOperation(JDialog.DISPOSE_ON_CLOSE);
+        dialog.setContentPane(detailPanel);
+        dialog.setSize(new Dimension(900, 650));
+        dialog.setMinimumSize(new Dimension(760, 560));
+        dialog.setLocationRelativeTo(frame);
+        dialog.addWindowListener(new WindowAdapter() {
+            @Override
+            public void windowClosed(WindowEvent event) {
+                if (teamIpDialogs[extensionIndex] == dialog) {
+                    teamIpDialogs[extensionIndex] = null;
+                    teamIpDetailPanels[extensionIndex] = null;
+                }
+            }
+        });
+        teamIpDialogs[extensionIndex] = dialog;
+        teamIpDetailPanels[extensionIndex] = detailPanel;
+        detailPanel.syncState();
+        dialog.setVisible(true);
+    }
+
     private void closeAllDetailWindows() {
         for (int index = 0; index < detailDialogs.length; index++) {
             if (detailPanels[index] != null) {
@@ -303,12 +401,25 @@ public final class ABSVisualisation {
             detailPanels[index] = null;
             detailDialogs[index] = null;
         }
+        for (int index = 0; index < teamIpDialogs.length; index++) {
+            if (teamIpDialogs[index] != null &&
+                teamIpDialogs[index].isDisplayable()) {
+                teamIpDialogs[index].dispose();
+            }
+            teamIpDetailPanels[index] = null;
+            teamIpDialogs[index] = null;
+        }
     }
 
     private void refreshDetailPanels() {
         for (int index = 0; index < detailPanels.length; index++) {
             if (detailPanels[index] != null) {
                 detailPanels[index].syncRealState();
+            }
+        }
+        for (int index = 0; index < teamIpDetailPanels.length; index++) {
+            if (teamIpDetailPanels[index] != null) {
+                teamIpDetailPanels[index].syncState();
             }
         }
     }
@@ -359,6 +470,30 @@ public final class ABSVisualisation {
         printAndRefreshProgress();
     }
 
+    /** Accepts M1-only read-only evidence already validated by Coordinator. */
+    public static synchronized void updateFtEvidence(String evidence) {
+        if (!TEAM_IP_MODEL.acceptM3Evidence(evidence)) {
+            return;
+        }
+        teamIpSnapshot = TEAM_IP_MODEL.getSnapshot();
+        if (TRACE_ENABLED) {
+            System.out.println(
+                "ABS_VIZ_REAL timestamp=" + System.currentTimeMillis() +
+                " signal=VIZ_FT_EVIDENCE value=" + evidence
+            );
+        }
+        final ABSVisualisation ui = instance;
+        if (ui != null) {
+            SwingUtilities.invokeLater(new Runnable() {
+                @Override
+                public void run() {
+                    ui.teamIpExtensionsPanel.syncState();
+                    ui.refreshDetailPanels();
+                }
+            });
+        }
+    }
+
     public static String statusName(int status) {
         switch (status) {
             case 0:
@@ -386,7 +521,7 @@ public final class ABSVisualisation {
         legend.add(createLegendChip("DONE", 3));
         legend.add(createLegendChip("FAULT", 4));
         JLabel note = new JLabel(
-            "  REAL status anchors one shared IDEALISED batch model; DONE finalises motion."
+            "  REAL status anchors one shared IDEALISED model; BUSY holds before completion."
         );
         note.setForeground(new Color(75, 82, 92));
         legend.add(note);
@@ -450,15 +585,6 @@ public final class ABSVisualisation {
         }
     }
 
-    private static void traceVisualStage(int bottleId, String stage) {
-        if (TRACE_ENABLED) {
-            System.out.println(
-                "ABS_VIZ_VISUAL timestamp=" + System.currentTimeMillis() +
-                " bottle=" + bottleId + " stage=\"" + stage + "\""
-            );
-        }
-    }
-
     private static void refreshStatusOnSwing() {
         final ABSVisualisation ui = instance;
         if (ui == null) {
@@ -467,6 +593,7 @@ public final class ABSVisualisation {
         SwingUtilities.invokeLater(new Runnable() {
             @Override
             public void run() {
+                renderSnapshot = VISUAL_MODEL.getSnapshot();
                 ui.productionLinePanel.repaint();
                 ui.refreshDetailPanels();
             }
@@ -488,6 +615,7 @@ public final class ABSVisualisation {
         SwingUtilities.invokeLater(new Runnable() {
             @Override
             public void run() {
+                renderSnapshot = VISUAL_MODEL.getSnapshot();
                 ui.applyProgress(
                     required,
                     completed,
@@ -501,7 +629,10 @@ public final class ABSVisualisation {
 
     private void refreshAll() {
         synchronized (ABSVisualisation.class) {
+            renderSnapshot = VISUAL_MODEL.getSnapshot();
+            teamIpSnapshot = TEAM_IP_MODEL.getSnapshot();
             productionLinePanel.repaint();
+            teamIpExtensionsPanel.syncState();
             applyProgress(
                 requiredBottles,
                 completedBottles,
@@ -510,6 +641,12 @@ public final class ABSVisualisation {
             );
             refreshDetailPanels();
         }
+    }
+
+    private static ABSVisualisationFlowModel.ModuleSnapshot renderModule(
+        int index
+    ) {
+        return renderSnapshot.getModule(index);
     }
 
     private void applyProgress(
@@ -543,7 +680,7 @@ public final class ABSVisualisation {
         }
 
         int idealised = VISUAL_MODEL.getVisualCompleted();
-        String mode = VISUAL_MODEL.getModeName();
+        String mode = displayModeName(VISUAL_MODEL.getModeName());
         progressLabel.setText(
             summary + "  |  IDEALISED: " + idealised +
             (requiredReceived ? " / " + required : "") + " (" + mode + ")"
@@ -555,6 +692,13 @@ public final class ABSVisualisation {
         progressBar.setMaximum(maximum);
         progressBar.setValue(value);
         progressBar.setString(summary);
+    }
+
+    private static String displayModeName(String mode) {
+        if (!TRACE_ENABLED && "BOUNDED CATCH-UP".equals(mode)) {
+            return "Synchronising with production";
+        }
+        return mode;
     }
 
     private void refreshVisualProgressLabel() {
@@ -597,6 +741,1135 @@ public final class ABSVisualisation {
         void openDetail(int machineIndex);
     }
 
+    private interface TeamIpWindowOpener {
+        void openTeamIpDetail(int extensionIndex);
+    }
+
+    /** Second hierarchy level: visual architecture around the GP flow. */
+    static final class TeamIpExtensionsPanel extends JPanel {
+        private static final long serialVersionUID = 1L;
+        private final TeamIpCard[] cards = new TeamIpCard[
+            ABSVisualisationTeamIpModel.EXTENSION_COUNT
+        ];
+
+        TeamIpExtensionsPanel(final TeamIpWindowOpener opener) {
+            setLayout(new BorderLayout(0, 4));
+            setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createTitledBorder(
+                    "Observed / Represented Team IP Extensions"
+                ),
+                BorderFactory.createEmptyBorder(2, 7, 7, 7)
+            ));
+            add(new TeamIpHierarchyStrip(), BorderLayout.NORTH);
+
+            JPanel cardRow = new JPanel(new GridLayout(1, 3, 9, 0));
+            for (int index = 0; index < cards.length; index++) {
+                final int extensionIndex = index;
+                TeamIpCard card = new TeamIpCard(index);
+                card.addActionListener(new ActionListener() {
+                    @Override
+                    public void actionPerformed(ActionEvent event) {
+                        opener.openTeamIpDetail(extensionIndex);
+                    }
+                });
+                cards[index] = card;
+                cardRow.add(card);
+            }
+            cardRow.setPreferredSize(new Dimension(0, 100));
+            cardRow.setMinimumSize(new Dimension(0, 84));
+            add(cardRow, BorderLayout.CENTER);
+            syncState();
+        }
+
+        void syncState() {
+            ABSVisualisationTeamIpModel.Snapshot snapshot = teamIpSnapshot;
+            for (int index = 0; index < cards.length; index++) {
+                cards[index].setExtension(snapshot.getExtension(index));
+            }
+        }
+    }
+
+    /** Compact hierarchy legend; its arrows mean representation, not control. */
+    static final class TeamIpHierarchyStrip extends JPanel {
+        private static final long serialVersionUID = 1L;
+
+        TeamIpHierarchyStrip() {
+            setOpaque(false);
+            setPreferredSize(new Dimension(0, 62));
+            setMinimumSize(new Dimension(0, 58));
+        }
+
+        @Override
+        protected void paintComponent(Graphics graphics) {
+            super.paintComponent(graphics);
+            Graphics2D g2 = (Graphics2D)graphics.create();
+            TeamIpGraphics.prepare(g2);
+            int width = getWidth();
+            if (width < 240) {
+                g2.dispose();
+                return;
+            }
+            int centre = width / 2;
+
+            TeamIpGraphics.node(
+                g2,
+                centre - 100,
+                1,
+                200,
+                18,
+                new Color(239, 244, 248),
+                new Color(119, 137, 154),
+                "GP PRODUCTION FLOW",
+                null
+            );
+            g2.setColor(new Color(91, 111, 130));
+            TeamIpGraphics.arrow(g2, centre, 19, centre, 22);
+            TeamIpGraphics.node(
+                g2,
+                centre - 155,
+                23,
+                310,
+                32,
+                new Color(225, 240, 249),
+                new Color(40, 123, 168),
+                "M1 HIERARCHICAL VISUALISATION",
+                "REPRESENTS / OBSERVES - NEVER CONTROLS"
+            );
+
+            int[] branchX = {width / 6, width / 2, width * 5 / 6};
+            g2.setColor(new Color(119, 137, 154));
+            g2.drawLine(centre, 55, centre, 60);
+            g2.drawLine(branchX[0], 60, branchX[2], 60);
+            for (int x : branchX) {
+                g2.fillOval(x - 2, 58, 4, 4);
+            }
+            g2.dispose();
+        }
+    }
+
+    /** A clickable miniature architecture diagram, not a prose card. */
+    static final class TeamIpCard extends JButton {
+        private static final long serialVersionUID = 1L;
+        private final int extensionIndex;
+        private ABSVisualisationTeamIpModel.ExtensionSnapshot extension;
+
+        TeamIpCard(int index) {
+            extensionIndex = index;
+            setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+            setFocusPainted(false);
+            setContentAreaFilled(false);
+            setBorderPainted(false);
+            setOpaque(false);
+            setRolloverEnabled(true);
+            setPreferredSize(new Dimension(260, 100));
+        }
+
+        void setExtension(
+            ABSVisualisationTeamIpModel.ExtensionSnapshot value
+        ) {
+            extension = value;
+            String description = value.getMember() + " " +
+                value.getTitle() + " architecture - OPEN DETAIL";
+            getAccessibleContext().setAccessibleName(description);
+            setToolTipText(description);
+            repaint();
+        }
+
+        @Override
+        protected void paintComponent(Graphics graphics) {
+            Graphics2D g2 = (Graphics2D)graphics.create();
+            TeamIpGraphics.prepare(g2);
+            int width = getWidth();
+            int height = getHeight();
+            ABSVisualisationTeamIpModel.ExtensionSnapshot value = extension;
+            if (value == null || width <= 0 || height <= 0) {
+                g2.dispose();
+                return;
+            }
+
+            Color accent = TeamIpGraphics.accent(extensionIndex);
+            Color background = TeamIpGraphics.cardBackground(
+                extensionIndex,
+                value
+            );
+            if (getModel().isRollover()) {
+                background = TeamIpGraphics.mix(background, Color.WHITE, 0.35);
+            }
+            if (getModel().isPressed()) {
+                background = TeamIpGraphics.mix(background, accent, 0.14);
+            }
+            g2.setColor(background);
+            g2.fillRoundRect(1, 1, width - 3, height - 3, 14, 14);
+            g2.setStroke(new BasicStroke(
+                getModel().isRollover() ? 2.6f : 1.8f
+            ));
+            g2.setColor(accent);
+            g2.drawRoundRect(1, 1, width - 3, height - 3, 14, 14);
+
+            g2.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 12));
+            g2.setColor(new Color(35, 49, 63));
+            TeamIpGraphics.centered(
+                g2,
+                value.getMember() + "  " + value.getTitle(),
+                width / 2,
+                15
+            );
+            g2.setColor(new Color(208, 216, 224));
+            g2.drawLine(12, 21, width - 12, 21);
+
+            switch (extensionIndex) {
+                case ABSVisualisationTeamIpModel.M2_DIGITAL_TWIN:
+                    paintM2Mini(g2, width);
+                    break;
+                case ABSVisualisationTeamIpModel.M3_FAULT_TOLERANCE:
+                    paintM3Mini(g2, width);
+                    break;
+                default:
+                    paintM4Mini(g2, width);
+                    break;
+            }
+
+            paintFooter(g2, width, height, value, accent);
+            if (isFocusOwner()) {
+                g2.setColor(new Color(30, 102, 153));
+                g2.drawRoundRect(4, 4, width - 9, height - 9, 11, 11);
+            }
+            g2.dispose();
+        }
+
+        private void paintM2Mini(Graphics2D g2, int width) {
+            int boxWidth = Math.max(54, (width - 68) / 3);
+            int left = 10;
+            TeamIpGraphics.miniNode(
+                g2, left, 31, boxWidth, 25, "CONFIRMED EVENTS"
+            );
+            TeamIpGraphics.miniNode(
+                g2, left + boxWidth + 17, 25,
+                boxWidth, 16, "WORKPIECE TWIN"
+            );
+            TeamIpGraphics.miniNode(
+                g2, left + boxWidth + 17, 43,
+                boxWidth, 16, "RESOURCE TWIN"
+            );
+            TeamIpGraphics.miniNode(
+                g2, left + (boxWidth + 17) * 2, 31,
+                boxWidth, 25, "READ-ONLY VIEWER"
+            );
+            g2.setColor(new Color(91, 111, 130));
+            TeamIpGraphics.arrow(
+                g2, left + boxWidth, 43,
+                left + boxWidth + 14, 43
+            );
+            TeamIpGraphics.arrow(
+                g2, left + boxWidth * 2 + 17, 43,
+                left + boxWidth * 2 + 31, 43
+            );
+        }
+
+        private void paintM3Mini(Graphics2D g2, int width) {
+            int boxWidth = Math.max(62, (width - 54) / 3);
+            int y = 31;
+            int left = 10;
+            TeamIpGraphics.miniNode(
+                g2, left, y, boxWidth, 24, "MACHINE FAULT"
+            );
+            TeamIpGraphics.miniNode(
+                g2,
+                left + boxWidth + 17,
+                y,
+                boxWidth,
+                24,
+                "FAULT SUPERVISOR"
+            );
+            TeamIpGraphics.miniNode(
+                g2,
+                left + (boxWidth + 17) * 2,
+                y,
+                boxWidth,
+                24,
+                "M1 OBSERVES"
+            );
+            g2.setColor(new Color(130, 103, 91));
+            TeamIpGraphics.arrow(
+                g2, left + boxWidth, y + 12,
+                left + boxWidth + 14, y + 12
+            );
+            TeamIpGraphics.arrow(
+                g2, left + boxWidth * 2 + 17, y + 12,
+                left + boxWidth * 2 + 31, y + 12
+            );
+            g2.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 8));
+            g2.setColor(new Color(85, 96, 108));
+            TeamIpGraphics.centered(
+                g2,
+                "SAFE STOP  |  RECOVERY EVIDENCE",
+                width / 2,
+                63
+            );
+        }
+
+        private void paintM4Mini(Graphics2D g2, int width) {
+            int boxWidth = Math.max(54, (width - 68) / 3);
+            int left = 10;
+            TeamIpGraphics.miniNode(
+                g2, left, 31, boxWidth, 25, "RECOGNITION"
+            );
+            TeamIpGraphics.miniNode(
+                g2, left + boxWidth + 17, 31,
+                boxWidth, 25, "BOTTLE CONTEXT"
+            );
+            TeamIpGraphics.miniNode(
+                g2, left + (boxWidth + 17) * 2, 25,
+                boxWidth, 16, "S 200 / GEOM_S"
+            );
+            TeamIpGraphics.miniNode(
+                g2, left + (boxWidth + 17) * 2, 43,
+                boxWidth, 16, "L 500 / GEOM_L"
+            );
+            g2.setColor(new Color(91, 111, 130));
+            TeamIpGraphics.arrow(
+                g2, left + boxWidth, 43,
+                left + boxWidth + 14, 43
+            );
+            TeamIpGraphics.arrow(
+                g2, left + boxWidth * 2 + 17, 43,
+                left + boxWidth * 2 + 31, 43
+            );
+        }
+
+        private void paintFooter(
+            Graphics2D g2,
+            int width,
+            int height,
+            ABSVisualisationTeamIpModel.ExtensionSnapshot value,
+            Color accent
+        ) {
+            String status;
+            if (extensionIndex ==
+                ABSVisualisationTeamIpModel.M2_DIGITAL_TWIN) {
+                status = "LIVE TO M1: NOT EXPOSED";
+            }
+            else if (extensionIndex ==
+                ABSVisualisationTeamIpModel.M4_TWO_SIZE) {
+                status = "LIVE SIZE TO M1: NOT EXPOSED";
+            }
+            else {
+                status = "CURRENT: " + value.getLiveHeadline();
+            }
+            g2.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 8));
+            g2.setColor(TeamIpGraphics.statusColor(extensionIndex, value));
+            TeamIpGraphics.centered(g2, status, width / 2, height - 13);
+            g2.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 8));
+            g2.setColor(accent);
+            g2.drawString("OPEN DETAIL  >", width - 79, height - 3);
+        }
+    }
+
+    /** Read-only detail view with an IP-specific architecture canvas. */
+    static final class TeamIpDetailPanel extends JPanel {
+        private static final long serialVersionUID = 1L;
+        private final int extensionIndex;
+        private final JLabel title = new JLabel();
+        private final JLabel owner = new JLabel();
+        private final JLabel representation = new JLabel();
+        private final TeamIpArchitectureCanvas architectureCanvas;
+
+        TeamIpDetailPanel(int index) {
+            extensionIndex = index;
+            architectureCanvas = new TeamIpArchitectureCanvas(index);
+            setLayout(new BorderLayout(10, 8));
+            setBorder(BorderFactory.createEmptyBorder(12, 12, 12, 12));
+
+            JPanel heading = new JPanel();
+            heading.setLayout(new BoxLayout(heading, BoxLayout.Y_AXIS));
+            title.setAlignmentX(Component.CENTER_ALIGNMENT);
+            title.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 21));
+            owner.setAlignmentX(Component.CENTER_ALIGNMENT);
+            owner.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 11));
+            owner.setForeground(new Color(72, 83, 96));
+            heading.add(title);
+            heading.add(Box.createVerticalStrut(3));
+            heading.add(owner);
+            add(heading, BorderLayout.NORTH);
+
+            add(architectureCanvas, BorderLayout.CENTER);
+
+            representation.setHorizontalAlignment(SwingConstants.CENTER);
+            representation.setOpaque(true);
+            representation.setBackground(new Color(232, 240, 247));
+            representation.setForeground(new Color(43, 62, 80));
+            representation.setBorder(
+                BorderFactory.createEmptyBorder(8, 8, 8, 8)
+            );
+            add(representation, BorderLayout.SOUTH);
+            syncState();
+        }
+
+        void syncState() {
+            ABSVisualisationTeamIpModel.ExtensionSnapshot extension =
+                teamIpSnapshot.getExtension(extensionIndex);
+            title.setText(extension.getMember() + " IP - " +
+                extension.getTitle());
+            owner.setText(extension.getOwner() + "  |  " +
+                extension.getMode());
+            representation.setText(
+                "<html><b>HOW M1 REPRESENTS THIS IP</b>&nbsp;&nbsp; " +
+                extension.getM1Representation() +
+                "&nbsp;&nbsp; | &nbsp;&nbsp;<b>READ-ONLY</b></html>"
+            );
+            architectureCanvas.setExtension(extension);
+        }
+    }
+
+    /** Scalable architecture and state drawing shared by all detail windows. */
+    static final class TeamIpArchitectureCanvas extends JPanel {
+        private static final long serialVersionUID = 1L;
+        private static final int DESIGN_WIDTH = 840;
+        private static final int DESIGN_HEIGHT = 460;
+        private final int extensionIndex;
+        private ABSVisualisationTeamIpModel.ExtensionSnapshot extension;
+
+        TeamIpArchitectureCanvas(int index) {
+            extensionIndex = index;
+            setOpaque(true);
+            setBackground(Color.WHITE);
+            setPreferredSize(new Dimension(DESIGN_WIDTH, DESIGN_HEIGHT));
+            setMinimumSize(new Dimension(620, 360));
+        }
+
+        void setExtension(
+            ABSVisualisationTeamIpModel.ExtensionSnapshot value
+        ) {
+            extension = value;
+            repaint();
+        }
+
+        @Override
+        protected void paintComponent(Graphics graphics) {
+            super.paintComponent(graphics);
+            ABSVisualisationTeamIpModel.ExtensionSnapshot value = extension;
+            if (value == null) {
+                return;
+            }
+            Graphics2D g2 = (Graphics2D)graphics.create();
+            TeamIpGraphics.prepare(g2);
+            double scale = Math.min(
+                getWidth() / (double)DESIGN_WIDTH,
+                getHeight() / (double)DESIGN_HEIGHT
+            );
+            double offsetX = (getWidth() - DESIGN_WIDTH * scale) / 2.0;
+            double offsetY = (getHeight() - DESIGN_HEIGHT * scale) / 2.0;
+            g2.translate(offsetX, offsetY);
+            g2.scale(scale, scale);
+            g2.setColor(new Color(248, 250, 252));
+            g2.fillRoundRect(2, 2, DESIGN_WIDTH - 4, DESIGN_HEIGHT - 4,
+                18, 18);
+            g2.setColor(new Color(205, 214, 223));
+            g2.drawRoundRect(2, 2, DESIGN_WIDTH - 4, DESIGN_HEIGHT - 4,
+                18, 18);
+
+            switch (extensionIndex) {
+                case ABSVisualisationTeamIpModel.M2_DIGITAL_TWIN:
+                    paintM2(g2, value);
+                    break;
+                case ABSVisualisationTeamIpModel.M3_FAULT_TOLERANCE:
+                    paintM3(g2, value);
+                    break;
+                default:
+                    paintM4(g2, value);
+                    break;
+            }
+            g2.dispose();
+        }
+
+        private void paintM2(
+            Graphics2D g2,
+            ABSVisualisationTeamIpModel.ExtensionSnapshot value
+        ) {
+            Color accent = TeamIpGraphics.accent(extensionIndex);
+            TeamIpGraphics.sectionTitle(g2, "ARCHITECTURE / DATA FLOW", 285);
+            TeamIpGraphics.node(
+                g2, 170, 30, 230, 42,
+                new Color(239, 244, 248), accent,
+                "CONFIRMED PRODUCTION EVENTS", "validated updates only"
+            );
+            g2.setColor(new Color(91, 111, 130));
+            TeamIpGraphics.arrow(g2, 285, 72, 285, 100);
+            TeamIpGraphics.node(
+                g2, 165, 102, 240, 55,
+                new Color(225, 240, 249), accent,
+                "DigitalTwinCD", ":14002  |  immutable snapshot owner"
+            );
+
+            g2.setColor(new Color(91, 111, 130));
+            g2.drawLine(285, 157, 285, 177);
+            g2.drawLine(140, 177, 430, 177);
+            TeamIpGraphics.arrow(g2, 140, 177, 140, 198);
+            TeamIpGraphics.arrow(g2, 430, 177, 430, 198);
+            TeamIpGraphics.node(
+                g2, 25, 200, 230, 112,
+                new Color(242, 248, 252), accent, "", null
+            );
+            TeamIpGraphics.node(
+                g2, 315, 200, 230, 112,
+                new Color(242, 248, 252), accent, "", null
+            );
+            TeamIpGraphics.iconBottle(g2, 65, 235, 30, 54, accent);
+            TeamIpGraphics.iconMachine(g2, 352, 239, accent);
+            g2.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 13));
+            g2.setColor(new Color(42, 55, 68));
+            g2.drawString("WorkpieceTwin", 113, 235);
+            g2.drawString("ResourceTwin", 403, 235);
+            g2.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 10));
+            g2.setColor(new Color(74, 86, 98));
+            g2.drawString("bottle ID / profile", 113, 257);
+            g2.drawString("lifecycle / history", 113, 275);
+            g2.drawString("machine / status", 403, 257);
+            g2.drawString("operation / fault history", 403, 275);
+
+            g2.setColor(new Color(91, 111, 130));
+            g2.drawLine(140, 312, 140, 327);
+            g2.drawLine(430, 312, 430, 327);
+            g2.drawLine(140, 327, 430, 327);
+            TeamIpGraphics.arrow(g2, 285, 327, 285, 347);
+            TeamIpGraphics.node(
+                g2, 165, 349, 240, 55,
+                new Color(233, 244, 237), new Color(52, 137, 82),
+                "DigitalTwinViewerCD", ":14003  |  dedicated read-only viewer"
+            );
+
+            TeamIpGraphics.sidePanel(g2, 570, 20, 250, 420, accent);
+            TeamIpGraphics.panelHeading(g2, "INTEGRATION STATUS", 695, 47);
+            TeamIpGraphics.badge(
+                g2, 598, 61, 194, 28,
+                new Color(229, 238, 246), new Color(55, 93, 128),
+                "MODE: READ-ONLY"
+            );
+            TeamIpGraphics.badge(
+                g2, 598, 99, 194, 36,
+                new Color(246, 238, 217), new Color(147, 102, 26),
+                "M1 LIVE CONNECTION: NOT EXPOSED"
+            );
+            g2.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 11));
+            g2.setColor(new Color(75, 84, 93));
+            TeamIpGraphics.wrapped(
+                g2,
+                "Live Digital Twin snapshots are owned by M2 and are not " +
+                    "part of the current M1 visualisation telemetry.",
+                592,
+                158,
+                206,
+                15
+            );
+            TeamIpGraphics.panelHeading(g2, "WHAT THIS IP ADDS", 695, 235);
+            TeamIpGraphics.bullets(
+                g2,
+                new String[] {
+                    "persistent workpiece representation",
+                    "resource representation",
+                    "immutable snapshots",
+                    "duplicate / invalid update rejection"
+                },
+                593,
+                258,
+                205,
+                28
+            );
+            TeamIpGraphics.readOnlyShield(g2, 695, 402);
+        }
+
+        private void paintM3(
+            Graphics2D g2,
+            ABSVisualisationTeamIpModel.ExtensionSnapshot value
+        ) {
+            Color accent = TeamIpGraphics.accent(extensionIndex);
+            TeamIpGraphics.sectionTitle(g2, "FAULT COORDINATION FLOW", 270);
+            TeamIpGraphics.node(
+                g2, 145, 34, 250, 48,
+                new Color(250, 239, 236), accent,
+                "CONTROLLER / PLANT FAULTS", "real fault events"
+            );
+            g2.setColor(new Color(123, 92, 83));
+            TeamIpGraphics.arrow(g2, 270, 82, 270, 111);
+            TeamIpGraphics.node(
+                g2, 135, 113, 270, 58,
+                new Color(255, 235, 231), accent,
+                "FaultSupervisorCD", ":13003  |  correlation and recovery state"
+            );
+
+            g2.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 10));
+            g2.setColor(new Color(126, 86, 73));
+            TeamIpGraphics.centered(
+                g2, "SAFE-STOP COORDINATION", 145, 204
+            );
+            TeamIpGraphics.centered(
+                g2, "RECOVERY EVIDENCE", 395, 204
+            );
+            g2.setColor(new Color(123, 92, 83));
+            TeamIpGraphics.arrow(g2, 220, 171, 220, 220);
+            TeamIpGraphics.arrow(g2, 320, 171, 320, 220);
+            TeamIpGraphics.node(
+                g2, 130, 222, 280, 58,
+                new Color(239, 246, 250), new Color(49, 119, 158),
+                "M1 Coordinator", "FT evidence only  |  coordination hold"
+            );
+            g2.setColor(new Color(71, 106, 128));
+            TeamIpGraphics.arrow(g2, 270, 280, 270, 323);
+            TeamIpGraphics.node(
+                g2, 140, 325, 260, 58,
+                new Color(233, 244, 237), new Color(52, 137, 82),
+                "M1 Visualisation", "READ-ONLY OBSERVATION"
+            );
+            TeamIpGraphics.readOnlyShield(g2, 270, 420);
+
+            Color health = TeamIpGraphics.statusColor(extensionIndex, value);
+            TeamIpGraphics.sidePanel(g2, 530, 20, 290, 420, health);
+            TeamIpGraphics.panelHeading(g2, "LIVE M1-OBSERVABLE DATA", 675, 47);
+            TeamIpGraphics.badge(
+                g2,
+                555,
+                63,
+                240,
+                48,
+                TeamIpGraphics.pale(health),
+                health,
+                value.getLiveHeadline()
+            );
+            g2.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 11));
+            g2.setColor(new Color(48, 60, 72));
+            g2.drawString("SYSTEM HEALTH", 555, 133);
+            if (!value.isLiveEvidenceAvailable()) {
+                g2.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 12));
+                g2.setColor(new Color(92, 102, 112));
+                TeamIpGraphics.wrapped(
+                    g2,
+                    "No FT evidence observed. The panel will update from " +
+                        "real Coordinator-observed VIZ_FT_EVIDENCE.",
+                    555,
+                    158,
+                    238,
+                    17
+                );
+            }
+            else {
+                String[] rows = value.getLiveLines();
+                int y = 156;
+                for (String row : rows) {
+                    TeamIpGraphics.dataRow(g2, 555, y, 240, 42, row);
+                    y += 50;
+                }
+            }
+            TeamIpGraphics.badge(
+                g2, 555, 374, 240, 37,
+                new Color(232, 240, 247), new Color(55, 93, 128),
+                "READ-ONLY SHIELD  |  NO CONTROL OUTPUTS"
+            );
+        }
+
+        private void paintM4(
+            Graphics2D g2,
+            ABSVisualisationTeamIpModel.ExtensionSnapshot value
+        ) {
+            Color accent = TeamIpGraphics.accent(extensionIndex);
+            TeamIpGraphics.sectionTitle(g2, "TWO-SIZE PROCESSING ARCHITECTURE", 285);
+            TeamIpGraphics.node(
+                g2, 185, 25, 200, 38,
+                new Color(240, 237, 250), accent,
+                "Recognition", "canonical detection input"
+            );
+            g2.setColor(new Color(96, 83, 139));
+            TeamIpGraphics.arrow(g2, 285, 63, 285, 85);
+            TeamIpGraphics.node(
+                g2, 165, 87, 240, 48,
+                new Color(237, 234, 249), accent,
+                "BottleContextRegistry", "canonical bottle-size context"
+            );
+
+            g2.setColor(new Color(96, 83, 139));
+            g2.drawLine(285, 135, 285, 153);
+            g2.drawLine(145, 153, 425, 153);
+            TeamIpGraphics.arrow(g2, 145, 153, 145, 169);
+            TeamIpGraphics.arrow(g2, 425, 153, 425, 169);
+            TeamIpGraphics.profileNode(
+                g2, 35, 171, 220, 105, false,
+                "SMALL  S", "200 mL", "GEOM_S", "PACK_S"
+            );
+            TeamIpGraphics.profileNode(
+                g2, 315, 171, 220, 105, true,
+                "LARGE  L", "500 mL", "GEOM_L", "PACK_L"
+            );
+
+            g2.setColor(new Color(96, 83, 139));
+            TeamIpGraphics.arrow(g2, 145, 276, 250, 301);
+            TeamIpGraphics.arrow(g2, 425, 276, 320, 301);
+            TeamIpGraphics.node(
+                g2, 165, 303, 240, 40,
+                new Color(244, 241, 251), accent,
+                "Geometry-aware Filler A / B", null
+            );
+            TeamIpGraphics.arrow(g2, 285, 343, 285, 354);
+            TeamIpGraphics.node(
+                g2, 165, 356, 240, 40,
+                new Color(244, 241, 251), accent,
+                "Geometry-aware Capper", null
+            );
+            TeamIpGraphics.arrow(g2, 285, 396, 285, 407);
+            TeamIpGraphics.node(
+                g2, 165, 409, 240, 38,
+                new Color(233, 244, 237), new Color(52, 137, 82),
+                "Sort / Pack", "LANE_S / LANE_L"
+            );
+
+            TeamIpGraphics.sidePanel(g2, 570, 20, 250, 420, accent);
+            TeamIpGraphics.panelHeading(g2, "SUPPORTED PROFILES", 695, 47);
+            TeamIpGraphics.badge(
+                g2, 595, 65, 200, 42,
+                new Color(238, 234, 250), accent,
+                "S / 200 mL / GEOM_S / PACK_S"
+            );
+            TeamIpGraphics.badge(
+                g2, 595, 117, 200, 42,
+                new Color(238, 234, 250), accent,
+                "L / 500 mL / GEOM_L / PACK_L"
+            );
+            TeamIpGraphics.panelHeading(g2, "LIVE M1-OBSERVABLE DATA", 695, 194);
+            TeamIpGraphics.badge(
+                g2, 595, 211, 200, 48,
+                new Color(246, 238, 217), new Color(147, 102, 26),
+                "CURRENT LIVE SIZE: NOT EXPOSED TO M1"
+            );
+            g2.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 11));
+            g2.setColor(new Color(75, 84, 93));
+            TeamIpGraphics.wrapped(
+                g2,
+                "No symbolic bottle is labelled S or L without real " +
+                    "telemetry.",
+                596,
+                287,
+                198,
+                16
+            );
+            TeamIpGraphics.wrapped(
+                g2,
+                "RecognitionSimulator is environmental stimulus only; " +
+                    "it is not the M4 IP itself.",
+                596,
+                350,
+                198,
+                16
+            );
+            TeamIpGraphics.readOnlyShield(g2, 695, 414);
+        }
+    }
+
+    /** Shared drawing primitives for the Team-IP hierarchy. */
+    static final class TeamIpGraphics {
+        private TeamIpGraphics() {
+        }
+
+        static void prepare(Graphics2D g2) {
+            g2.setRenderingHint(
+                RenderingHints.KEY_ANTIALIASING,
+                RenderingHints.VALUE_ANTIALIAS_ON
+            );
+            g2.setRenderingHint(
+                RenderingHints.KEY_TEXT_ANTIALIASING,
+                RenderingHints.VALUE_TEXT_ANTIALIAS_ON
+            );
+        }
+
+        static Color accent(int index) {
+            if (index == ABSVisualisationTeamIpModel.M2_DIGITAL_TWIN) {
+                return new Color(54, 116, 173);
+            }
+            if (index == ABSVisualisationTeamIpModel.M3_FAULT_TOLERANCE) {
+                return new Color(185, 75, 56);
+            }
+            return new Color(99, 79, 164);
+        }
+
+        static Color cardBackground(
+            int index,
+            ABSVisualisationTeamIpModel.ExtensionSnapshot value
+        ) {
+            if (index != ABSVisualisationTeamIpModel.M3_FAULT_TOLERANCE ||
+                !value.isLiveEvidenceAvailable()) {
+                return new Color(246, 249, 252);
+            }
+            return pale(statusColor(index, value));
+        }
+
+        static Color statusColor(
+            int index,
+            ABSVisualisationTeamIpModel.ExtensionSnapshot value
+        ) {
+            if (index != ABSVisualisationTeamIpModel.M3_FAULT_TOLERANCE ||
+                !value.isLiveEvidenceAvailable()) {
+                return new Color(95, 108, 120);
+            }
+            String state = value.getLiveHeadline();
+            if ("NORMAL".equals(state)) {
+                return new Color(40, 139, 78);
+            }
+            if (state.indexOf("RECOVERY READY") >= 0) {
+                return new Color(47, 113, 162);
+            }
+            if (state.indexOf("FAULT ALERT") >= 0) {
+                return new Color(205, 103, 28);
+            }
+            if (state.indexOf("RECOVERY FAILED") >= 0) {
+                return new Color(160, 40, 48);
+            }
+            return new Color(190, 43, 43);
+        }
+
+        static Color pale(Color source) {
+            return mix(source, Color.WHITE, 0.84);
+        }
+
+        static Color mix(Color first, Color second, double secondWeight) {
+            double weight = Math.max(0.0, Math.min(1.0, secondWeight));
+            return new Color(
+                (int)Math.round(first.getRed() * (1.0 - weight) +
+                    second.getRed() * weight),
+                (int)Math.round(first.getGreen() * (1.0 - weight) +
+                    second.getGreen() * weight),
+                (int)Math.round(first.getBlue() * (1.0 - weight) +
+                    second.getBlue() * weight)
+            );
+        }
+
+        static void sectionTitle(Graphics2D g2, String text, int centreX) {
+            g2.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 12));
+            g2.setColor(new Color(53, 67, 81));
+            centered(g2, text, centreX, 18);
+        }
+
+        static void node(
+            Graphics2D g2,
+            int x,
+            int y,
+            int width,
+            int height,
+            Color fill,
+            Color border,
+            String title,
+            String subtitle
+        ) {
+            g2.setColor(fill);
+            g2.fillRoundRect(x, y, width, height, 12, 12);
+            g2.setColor(border);
+            g2.setStroke(new BasicStroke(1.8f));
+            g2.drawRoundRect(x, y, width, height, 12, 12);
+            g2.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 13));
+            g2.setColor(new Color(42, 55, 68));
+            centered(
+                g2,
+                title,
+                x + width / 2,
+                y + (subtitle == null ? height / 2 + 5 : height / 2)
+            );
+            if (subtitle != null) {
+                g2.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 10));
+                g2.setColor(new Color(74, 86, 98));
+                centered(g2, subtitle, x + width / 2, y + height / 2 + 16);
+            }
+        }
+
+        static void miniNode(
+            Graphics2D g2,
+            int x,
+            int y,
+            int width,
+            int height,
+            String text
+        ) {
+            g2.setColor(new Color(240, 245, 249));
+            g2.fillRoundRect(x, y, width, height, 6, 6);
+            g2.setColor(new Color(117, 134, 151));
+            g2.drawRoundRect(x, y, width, height, 6, 6);
+            g2.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 7));
+            g2.setColor(new Color(55, 67, 80));
+            centered(g2, text, x + width / 2, y + height / 2 + 3);
+        }
+
+        static void sidePanel(
+            Graphics2D g2,
+            int x,
+            int y,
+            int width,
+            int height,
+            Color accentColor
+        ) {
+            g2.setColor(new Color(252, 253, 254));
+            g2.fillRoundRect(x, y, width, height, 14, 14);
+            g2.setColor(mix(accentColor, Color.WHITE, 0.35));
+            g2.setStroke(new BasicStroke(1.6f));
+            g2.drawRoundRect(x, y, width, height, 14, 14);
+        }
+
+        static void panelHeading(
+            Graphics2D g2,
+            String text,
+            int centreX,
+            int baselineY
+        ) {
+            g2.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 11));
+            g2.setColor(new Color(48, 62, 76));
+            centered(g2, text, centreX, baselineY);
+        }
+
+        static void badge(
+            Graphics2D g2,
+            int x,
+            int y,
+            int width,
+            int height,
+            Color fill,
+            Color border,
+            String text
+        ) {
+            g2.setColor(fill);
+            g2.fillRoundRect(x, y, width, height, 10, 10);
+            g2.setColor(border);
+            g2.drawRoundRect(x, y, width, height, 10, 10);
+            g2.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 10));
+            g2.setColor(border);
+            wrappedCentered(g2, text, x, y, width, height, 12);
+        }
+
+        static void dataRow(
+            Graphics2D g2,
+            int x,
+            int y,
+            int width,
+            int height,
+            String text
+        ) {
+            g2.setColor(new Color(242, 246, 249));
+            g2.fillRoundRect(x, y, width, height, 8, 8);
+            g2.setColor(new Color(202, 212, 221));
+            g2.drawRoundRect(x, y, width, height, 8, 8);
+            g2.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 11));
+            g2.setColor(new Color(50, 64, 77));
+            wrapped(g2, text, x + 10, y + 16, width - 20, 14);
+        }
+
+        static void bullets(
+            Graphics2D g2,
+            String[] lines,
+            int x,
+            int y,
+            int width,
+            int spacing
+        ) {
+            g2.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 10));
+            g2.setColor(new Color(60, 72, 84));
+            int baseline = y;
+            for (String line : lines) {
+                g2.setColor(new Color(54, 116, 173));
+                g2.fillOval(x, baseline - 7, 5, 5);
+                g2.setColor(new Color(60, 72, 84));
+                wrapped(g2, line, x + 11, baseline, width - 11, 13);
+                baseline += spacing;
+            }
+        }
+
+        static void profileNode(
+            Graphics2D g2,
+            int x,
+            int y,
+            int width,
+            int height,
+            boolean tall,
+            String title,
+            String volume,
+            String geometry,
+            String pack
+        ) {
+            Color accentColor = new Color(99, 79, 164);
+            g2.setColor(new Color(244, 241, 251));
+            g2.fillRoundRect(x, y, width, height, 13, 13);
+            g2.setColor(accentColor);
+            g2.setStroke(new BasicStroke(1.7f));
+            g2.drawRoundRect(x, y, width, height, 13, 13);
+            int bottleHeight = tall ? 67 : 48;
+            int bottleY = y + height - bottleHeight - 12;
+            iconBottle(g2, x + 24, bottleY, 30, bottleHeight, accentColor);
+            g2.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 13));
+            g2.setColor(new Color(52, 43, 82));
+            g2.drawString(title, x + 76, y + 25);
+            g2.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 11));
+            g2.drawString(volume, x + 76, y + 45);
+            g2.drawString(geometry, x + 76, y + 63);
+            g2.drawString(pack, x + 76, y + 81);
+        }
+
+        static void iconBottle(
+            Graphics2D g2,
+            int x,
+            int y,
+            int width,
+            int height,
+            Color color
+        ) {
+            int neckWidth = Math.max(8, width / 3);
+            int neckX = x + (width - neckWidth) / 2;
+            int shoulderY = y + Math.max(7, height / 5);
+            g2.setColor(pale(color));
+            g2.fillRoundRect(x, shoulderY, width, height - shoulderY + y,
+                8, 8);
+            g2.setColor(color);
+            g2.drawRoundRect(x, shoulderY, width, height - shoulderY + y,
+                8, 8);
+            g2.drawRect(neckX, y + 3, neckWidth, shoulderY - y - 3);
+            g2.fillRoundRect(neckX - 2, y, neckWidth + 4, 5, 3, 3);
+        }
+
+        static void iconMachine(
+            Graphics2D g2,
+            int x,
+            int y,
+            Color color
+        ) {
+            g2.setColor(pale(color));
+            g2.fillRoundRect(x, y, 54, 42, 8, 8);
+            g2.setColor(color);
+            g2.drawRoundRect(x, y, 54, 42, 8, 8);
+            g2.drawRect(x + 10, y + 11, 14, 18);
+            g2.drawLine(x + 32, y + 12, x + 45, y + 12);
+            g2.drawLine(x + 32, y + 21, x + 45, y + 21);
+            g2.drawLine(x + 32, y + 30, x + 45, y + 30);
+        }
+
+        static void readOnlyShield(Graphics2D g2, int centreX, int centreY) {
+            Polygon shield = new Polygon();
+            shield.addPoint(centreX - 62, centreY - 14);
+            shield.addPoint(centreX - 46, centreY - 14);
+            shield.addPoint(centreX - 42, centreY - 2);
+            shield.addPoint(centreX - 54, centreY + 12);
+            shield.addPoint(centreX - 66, centreY - 2);
+            g2.setColor(new Color(225, 239, 247));
+            g2.fill(shield);
+            g2.setColor(new Color(46, 111, 151));
+            g2.draw(shield);
+            g2.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 10));
+            g2.drawString("READ-ONLY  |  NO ACTIONS", centreX - 35,
+                centreY + 3);
+        }
+
+        static void arrow(
+            Graphics2D g2,
+            double startX,
+            double startY,
+            double endX,
+            double endY
+        ) {
+            Stroke original = g2.getStroke();
+            g2.setStroke(new BasicStroke(1.4f));
+            g2.draw(new Line2D.Double(startX, startY, endX, endY));
+            double angle = Math.atan2(endY - startY, endX - startX);
+            double length = 6.0;
+            double spread = Math.PI / 6.0;
+            GeneralPath head = new GeneralPath();
+            head.moveTo(endX, endY);
+            head.lineTo(
+                endX - length * Math.cos(angle - spread),
+                endY - length * Math.sin(angle - spread)
+            );
+            head.lineTo(
+                endX - length * Math.cos(angle + spread),
+                endY - length * Math.sin(angle + spread)
+            );
+            head.closePath();
+            g2.fill(head);
+            g2.setStroke(original);
+        }
+
+        static void centered(
+            Graphics2D g2,
+            String text,
+            int centreX,
+            int baselineY
+        ) {
+            FontMetrics metrics = g2.getFontMetrics();
+            g2.drawString(text, centreX - metrics.stringWidth(text) / 2,
+                baselineY);
+        }
+
+        static int wrapped(
+            Graphics2D g2,
+            String text,
+            int x,
+            int baselineY,
+            int maximumWidth,
+            int lineHeight
+        ) {
+            FontMetrics metrics = g2.getFontMetrics();
+            String[] words = text.split(" ");
+            StringBuilder line = new StringBuilder();
+            int y = baselineY;
+            for (String word : words) {
+                String candidate = line.length() == 0 ? word :
+                    line.toString() + " " + word;
+                if (line.length() > 0 &&
+                    metrics.stringWidth(candidate) > maximumWidth) {
+                    g2.drawString(line.toString(), x, y);
+                    y += lineHeight;
+                    line.setLength(0);
+                    line.append(word);
+                }
+                else {
+                    line.setLength(0);
+                    line.append(candidate);
+                }
+            }
+            if (line.length() > 0) {
+                g2.drawString(line.toString(), x, y);
+            }
+            return y;
+        }
+
+        static void wrappedCentered(
+            Graphics2D g2,
+            String text,
+            int x,
+            int y,
+            int width,
+            int height,
+            int lineHeight
+        ) {
+            FontMetrics metrics = g2.getFontMetrics();
+            String[] words = text.split(" ");
+            java.util.List<String> lines =
+                new java.util.ArrayList<String>();
+            StringBuilder line = new StringBuilder();
+            for (String word : words) {
+                String candidate = line.length() == 0 ? word :
+                    line.toString() + " " + word;
+                if (line.length() > 0 &&
+                    metrics.stringWidth(candidate) > width - 14) {
+                    lines.add(line.toString());
+                    line.setLength(0);
+                    line.append(word);
+                }
+                else {
+                    line.setLength(0);
+                    line.append(candidate);
+                }
+            }
+            if (line.length() > 0) {
+                lines.add(line.toString());
+            }
+            int baseline = y + (height - lines.size() * lineHeight) / 2 +
+                metrics.getAscent();
+            for (String value : lines) {
+                centered(g2, value, x + width / 2, baseline);
+                baseline += lineHeight;
+            }
+        }
+    }
+
     /** Custom symbolic plant renderer; it never infers bottle locations. */
     static final class ProductionLinePanel extends JPanel {
         private static final long serialVersionUID = 1L;
@@ -612,9 +1885,6 @@ public final class ABSVisualisation {
             new Rectangle(740, 142, 112, 164),
             new Rectangle(992, 142, 146, 164)
         };
-        private static final Rectangle OUTPUT_CONVEYOR_HIT_REGION =
-            new Rectangle(870, 160, 104, 128);
-
         private final DetailWindowOpener detailWindowOpener;
         private int hoveredModule = -1;
 
@@ -663,9 +1933,6 @@ public final class ABSVisualisation {
 
         int moduleAtDesignPoint(int designX, int designY) {
             Point point = new Point(designX, designY);
-            if (OUTPUT_CONVEYOR_HIT_REGION.contains(point)) {
-                return CONVEYOR;
-            }
             for (int index = 0;
                 index < MODULE_HIT_REGIONS.length;
                 index++) {
@@ -674,6 +1941,23 @@ public final class ABSVisualisation {
                 }
             }
             return -1;
+        }
+
+        @Override
+        public String getToolTipText(MouseEvent event) {
+            Point designPoint = toDesignPoint(event.getPoint());
+            int index = moduleAtDesignPoint(designPoint.x, designPoint.y);
+            if (index < 0) {
+                return "Read-only real-state-anchored production overview";
+            }
+            ABSVisualisationFlowModel.ModuleSnapshot module =
+                renderModule(index);
+            String bottle = module.getCurrentBottleId() > 0 ?
+                "Symbolic Bottle B" + module.getCurrentBottleId() :
+                "No active symbolic bottle";
+            return "<html><b>" + MACHINE_NAMES[index] + "</b><br>" +
+                bottle + "<br>Visual: " + module.getPhase() +
+                "<br>Click for shared detail view</html>";
         }
 
         private void updateHover(Point componentPoint) {
@@ -779,6 +2063,7 @@ public final class ABSVisualisation {
                 27
             );
 
+            drawFlowRibbon(g2);
             drawFlowConnections(g2);
             drawLoader(g2, 20, 142, 116, 164, statuses, received);
             drawConveyor(
@@ -795,25 +2080,37 @@ public final class ABSVisualisation {
             );
             drawLidLoader(g2, 607, 142, 112, 164, statuses, received);
             drawCapper(g2, 740, 142, 112, 164, statuses, received);
-            drawConveyor(
-                g2, 870, 160, 104, 128, "Output Conveyor", statuses, received
-            );
+            drawPassiveDownstreamBoundary(g2, 870, 160, 104, 128);
             drawUnloader(g2, 992, 142, 146, 164, statuses, received);
 
             g2.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 12));
             g2.setColor(new Color(78, 86, 98));
             drawCenteredText(
                 g2,
-                "Bottle IDs/positions are IDEALISED shared visual records only; both belts share VIZ_CONVEYOR_STATUS.",
+                "Bottle IDs/positions are IDEALISED shared visual records only; the exit graphic is not a second Controller.",
                 DESIGN_WIDTH / 2,
                 400
+            );
+        }
+
+        private void drawFlowRibbon(Graphics2D g2) {
+            g2.setColor(new Color(233, 240, 247));
+            g2.fillRoundRect(28, 40, DESIGN_WIDTH - 56, 25, 12, 12);
+            g2.setColor(new Color(44, 78, 108));
+            g2.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 11));
+            drawCenteredText(
+                g2,
+                "INPUT  >  LOAD  >  TRANSPORT  >  ROTARY PROCESSING  >  " +
+                "FILL A  >  FILL B  >  LID  >  CAP  >  UNLOAD  >  COMPLETION",
+                DESIGN_WIDTH / 2,
+                57
             );
         }
 
         private void drawFlowConnections(Graphics2D g2) {
             Stroke originalStroke = g2.getStroke();
             g2.setStroke(new BasicStroke(2.1f));
-            g2.setColor(new Color(76, 93, 112));
+            g2.setColor(PASSIVE_FLOW_COLOR);
 
             drawArrow(g2, 136, 224, 153, 224);
             drawArrow(g2, 257, 224, 275, 224);
@@ -832,7 +2129,59 @@ public final class ABSVisualisation {
             drawArrow(g2, 719, 224, 740, 224);
             drawArrow(g2, 852, 224, 870, 224);
             drawArrow(g2, 974, 224, 992, 224);
+
+            drawActiveConnector(g2, LOADER, 136, 224, 153, 224);
+            drawActiveConnector(g2, CONVEYOR, 257, 224, 275, 224);
+            drawActiveConnector(g2, FILLER_A, 433, 218, 452, 141);
+            drawActiveConnector(g2, FILLER_B, 433, 224, 452, 305);
+            drawActiveConnector(g2, LID, 580, 141, 607, 224);
+            drawActiveConnector(g2, CAPPER, 719, 224, 740, 224);
+            drawActiveConnector(g2, UNLOADER, 852, 224, 992, 224);
             g2.setStroke(originalStroke);
+        }
+
+        private void drawActiveConnector(
+            Graphics2D g2,
+            int moduleIndex,
+            double startX,
+            double startY,
+            double endX,
+            double endY
+        ) {
+            ABSVisualisationFlowModel.ModuleSnapshot module =
+                renderModule(moduleIndex);
+            if (module.getCurrentBottleId() <= 0) {
+                return;
+            }
+            double progress = ease(module.getProgress() / 100.0);
+            double markerX = startX + (endX - startX) * progress;
+            double markerY = startY + (endY - startY) * progress;
+            Stroke original = g2.getStroke();
+            g2.setStroke(new BasicStroke(
+                4.2f,
+                BasicStroke.CAP_ROUND,
+                BasicStroke.JOIN_ROUND
+            ));
+            g2.setColor(new Color(
+                ACTIVE_FLOW_COLOR.getRed(),
+                ACTIVE_FLOW_COLOR.getGreen(),
+                ACTIVE_FLOW_COLOR.getBlue(),
+                145
+            ));
+            g2.draw(new Line2D.Double(
+                startX,
+                startY,
+                markerX,
+                markerY
+            ));
+            g2.setColor(ACTIVE_FLOW_COLOR);
+            g2.fill(new Ellipse2D.Double(
+                markerX - 3.5,
+                markerY - 3.5,
+                7.0,
+                7.0
+            ));
+            g2.setStroke(original);
         }
 
         private void drawLoader(
@@ -850,8 +2199,8 @@ public final class ABSVisualisation {
             );
             boolean busy = isBusy(LOADER, statuses, received);
             boolean done = isDone(LOADER, statuses, received);
-            DetailAnimationModel shared =
-                VISUAL_MODEL.getDetailModel(LOADER);
+            ABSVisualisationFlowModel.ModuleSnapshot shared =
+                renderModule(LOADER);
             double progress = shared.getProgress();
             int centreX = x + width / 2;
 
@@ -907,6 +2256,12 @@ public final class ABSVisualisation {
             }
             drawBottle(g2, bottleX, bottleY, 14, 28,
                 null, 0, false, false);
+            drawBottleIdentity(
+                g2,
+                bottleX + 7,
+                bottleY + 29,
+                shared.getCurrentBottleId()
+            );
             if (busy) {
                 g2.setColor(statusColor(BUSY_STATUS));
                 drawArrow(g2, centreX + 13, y + 111,
@@ -933,9 +2288,8 @@ public final class ABSVisualisation {
             );
             boolean busy = isBusy(CONVEYOR, statuses, received);
             boolean done = isDone(CONVEYOR, statuses, received);
-            DetailAnimationModel shared =
-                VISUAL_MODEL.getDetailModel(CONVEYOR);
-            boolean outputConveyor = title.startsWith("Output");
+            ABSVisualisationFlowModel.ModuleSnapshot shared =
+                renderModule(CONVEYOR);
             int beltX = x + 12;
             int beltY = y + 66;
             int beltWidth = width - 24;
@@ -979,19 +2333,22 @@ public final class ABSVisualisation {
             );
             int bottleX = beltX + 4 + travel;
             int bottleY = beltY - 28;
-            Color bottleLiquid = outputConveyor ?
-                new Color(92, 151, 204) : null;
-            int bottleLevel = outputConveyor ? 72 : 0;
             drawBottle(
                 g2,
                 bottleX,
                 bottleY,
                 15,
                 28,
-                bottleLiquid,
-                bottleLevel,
-                outputConveyor,
-                outputConveyor
+                null,
+                0,
+                false,
+                false
+            );
+            drawBottleIdentity(
+                g2,
+                bottleX + 7,
+                bottleY + 29,
+                shared.getCurrentBottleId()
             );
             if (done) {
                 drawDoneTick(g2, x + width - 15, y + 36);
@@ -1014,8 +2371,8 @@ public final class ABSVisualisation {
             Stroke originalStroke = g2.getStroke();
             boolean busy = isBusy(ROTARY, statuses, received);
             boolean done = isDone(ROTARY, statuses, received);
-            DetailAnimationModel shared =
-                VISUAL_MODEL.getDetailModel(ROTARY);
+            ABSVisualisationFlowModel.ModuleSnapshot shared =
+                renderModule(ROTARY);
             int centreX = x + width / 2;
             int centreY = y + 105;
             int radius = 52;
@@ -1033,10 +2390,11 @@ public final class ABSVisualisation {
             );
             g2.fillOval(centreX - 10, centreY - 10, 20, 20);
 
-            for (int station = 0; station < 5; station++) {
+            int stationCount = shared.getRotaryStationCount();
+            for (int station = 0; station < stationCount; station++) {
                 double phaseAngle = Math.toRadians(shared.getRotaryAngle());
                 double angle = -Math.PI / 2.0 + phaseAngle + station *
-                    (Math.PI * 2.0 / 5.0);
+                    (Math.PI * 2.0 / stationCount);
                 int stationX = centreX + (int)(Math.cos(angle) * 38);
                 int stationY = centreY + (int)(Math.sin(angle) * 38);
                 g2.setColor(new Color(248, 250, 252));
@@ -1055,7 +2413,23 @@ public final class ABSVisualisation {
                         false,
                         false
                     );
+                    drawBottleIdentity(
+                        g2,
+                        stationX,
+                        stationY + 13,
+                        shared.getRotaryStationBottleId(station)
+                    );
                 }
+                int labelX = centreX + (int)(Math.cos(angle) * 48);
+                int labelY = centreY + (int)(Math.sin(angle) * 48);
+                g2.setColor(new Color(55, 70, 84));
+                g2.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 7));
+                drawCenteredText(
+                    g2,
+                    "P" + (station + 1),
+                    labelX,
+                    labelY + 3
+                );
             }
 
             double indicatorAngle = Math.toRadians(
@@ -1083,7 +2457,8 @@ public final class ABSVisualisation {
                 centreX - 59, centreY + 15);
             g2.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 10));
             g2.setColor(new Color(79, 88, 99));
-            drawCenteredText(g2, "5 symbolic stations", centreX, y + 174);
+            drawCenteredText(g2, "6-position symbolic process map",
+                centreX, y + 174);
             drawCenteredText(
                 g2,
                 shared.getRotaryPhase(),
@@ -1114,8 +2489,8 @@ public final class ABSVisualisation {
             );
             boolean busy = isBusy(index, statuses, received);
             boolean done = isDone(index, statuses, received);
-            DetailAnimationModel shared =
-                VISUAL_MODEL.getDetailModel(index);
+            ABSVisualisationFlowModel.ModuleSnapshot shared =
+                renderModule(index);
             int tankX = x + 12;
             int tankY = y + 37;
             int tankWidth = 45;
@@ -1162,6 +2537,12 @@ public final class ABSVisualisation {
                 false,
                 false
             );
+            drawBottleIdentity(
+                g2,
+                nozzleX + 3,
+                y + 109,
+                shared.getCurrentBottleId()
+            );
 
             if (busy) {
                 int dropOffset = (int)Math.round(
@@ -1196,7 +2577,8 @@ public final class ABSVisualisation {
             );
             boolean busy = isBusy(LID, statuses, received);
             boolean done = isDone(LID, statuses, received);
-            DetailAnimationModel shared = VISUAL_MODEL.getDetailModel(LID);
+            ABSVisualisationFlowModel.ModuleSnapshot shared =
+                renderModule(LID);
             int motion = (int)Math.round(
                 Math.min(1.0, shared.getProgress() / 100.0) * 34.0
             );
@@ -1228,6 +2610,12 @@ public final class ABSVisualisation {
                 done,
                 false
             );
+            drawBottleIdentity(
+                g2,
+                x + 73,
+                y + 127,
+                shared.getCurrentBottleId()
+            );
             if (busy) {
                 g2.setColor(statusColor(BUSY_STATUS));
                 drawArrow(g2, x + 92, y + 60, x + 92, y + 86);
@@ -1253,8 +2641,8 @@ public final class ABSVisualisation {
             Stroke originalStroke = g2.getStroke();
             boolean busy = isBusy(CAPPER, statuses, received);
             boolean done = isDone(CAPPER, statuses, received);
-            DetailAnimationModel shared =
-                VISUAL_MODEL.getDetailModel(CAPPER);
+            ABSVisualisationFlowModel.ModuleSnapshot shared =
+                renderModule(CAPPER);
             double capProgress = shared.getProgress();
             int motion = capProgress < 30.0 ?
                 (int)Math.round(capProgress / 30.0 * 20.0) :
@@ -1284,6 +2672,12 @@ public final class ABSVisualisation {
                 (int)Math.round(DEMO_LIQUID_B_PERCENT),
                 true,
                 done
+            );
+            drawBottleIdentity(
+                g2,
+                centreX,
+                y + 128,
+                shared.getCurrentBottleId()
             );
 
             if (busy) {
@@ -1323,8 +2717,8 @@ public final class ABSVisualisation {
             Stroke originalStroke = g2.getStroke();
             boolean busy = isBusy(UNLOADER, statuses, received);
             boolean done = isDone(UNLOADER, statuses, received);
-            DetailAnimationModel shared =
-                VISUAL_MODEL.getDetailModel(UNLOADER);
+            ABSVisualisationFlowModel.ModuleSnapshot shared =
+                renderModule(UNLOADER);
 
             g2.setColor(new Color(80, 93, 107));
             g2.setStroke(new BasicStroke(3.0f));
@@ -1364,6 +2758,12 @@ public final class ABSVisualisation {
                 true,
                 true
             );
+            drawBottleIdentity(
+                g2,
+                bottleX + 9,
+                bottleY + 35,
+                shared.getCurrentBottleId()
+            );
             g2.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 10));
             g2.setColor(new Color(79, 88, 99));
             drawCenteredText(
@@ -1387,9 +2787,18 @@ public final class ABSVisualisation {
             int[] statuses,
             boolean[] received
         ) {
-            Color stateColor = received[index] ?
-                statusColor(statuses[index]) : statusColor(-1);
-            g2.setColor(paleStatusColor(statuses[index], received[index]));
+            ABSVisualisationFlowModel.ModuleSnapshot module =
+                renderModule(index);
+            boolean historicalDone = received[index] &&
+                statuses[index] == DONE_STATUS &&
+                module.getCurrentBottleId() <= 0;
+            Color stateColor = historicalDone ?
+                new Color(92, 112, 130) :
+                (received[index] ? statusColor(statuses[index]) :
+                    statusColor(-1));
+            g2.setColor(historicalDone ?
+                new Color(239, 243, 247) :
+                paleStatusColor(statuses[index], received[index]));
             g2.fill(new RoundRectangle2D.Double(
                 x, y, width, height, 14, 14
             ));
@@ -1421,8 +2830,22 @@ public final class ABSVisualisation {
             g2.setFont(new Font(Font.SANS_SERIF, Font.BOLD, fontSize));
             drawCenteredText(g2, title, x + width / 2, y + 21);
 
+            String visualPhase = module.getCurrentBottleId() > 0 ?
+                "VISUAL B" + module.getCurrentBottleId() + ": " +
+                    module.getPhase() :
+                "VISUAL: " + module.getPhase();
+            g2.setColor(new Color(76, 86, 98));
+            g2.setFont(MODULE_PHASE_FONT);
+            drawClippedCenteredText(
+                g2,
+                visualPhase,
+                x + 6,
+                y + height - 29,
+                width - 12
+            );
+
             drawStatusBadge(
-                g2, x + 8, y + height - 28, width - 16, 20,
+                g2, x + 8, y + height - 23, width - 16, 16,
                 index, statuses, received
             );
         }
@@ -1437,15 +2860,22 @@ public final class ABSVisualisation {
             int[] statuses,
             boolean[] received
         ) {
-            String text = received[index] ?
-                statusName(statuses[index]) : "WAITING";
-            Color color = received[index] ?
-                statusColor(statuses[index]) : statusColor(-1);
+            ABSVisualisationFlowModel.ModuleSnapshot module =
+                renderModule(index);
+            boolean historicalDone = received[index] &&
+                statuses[index] == DONE_STATUS &&
+                module.getCurrentBottleId() <= 0;
+            String text = historicalDone ? "LAST CYCLE COMPLETE" :
+                "REAL " + (received[index] ?
+                    statusName(statuses[index]) : "WAITING");
+            Color color = historicalDone ? new Color(92, 112, 130) :
+                (received[index] ? statusColor(statuses[index]) :
+                    statusColor(-1));
             g2.setColor(color);
             g2.fillRoundRect(x, y, width, height, 8, 8);
             g2.setColor(Color.WHITE);
             g2.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 10));
-            drawCenteredText(g2, text, x + width / 2, y + 14);
+            drawCenteredText(g2, text, x + width / 2, y + 12);
         }
 
         private static boolean isBusy(
@@ -1461,7 +2891,8 @@ public final class ABSVisualisation {
             int[] statuses,
             boolean[] received
         ) {
-            return received[index] && statuses[index] == 3;
+            return received[index] && statuses[index] == DONE_STATUS &&
+                renderModule(index).getCurrentBottleId() > 0;
         }
 
         private static void drawBottle(
@@ -1515,6 +2946,68 @@ public final class ABSVisualisation {
                         neckX + neckWidth + 1, y + 5);
                 }
             }
+        }
+
+        private void drawPassiveDownstreamBoundary(
+            Graphics2D g2,
+            int x,
+            int y,
+            int width,
+            int height
+        ) {
+            g2.setColor(new Color(244, 247, 250));
+            g2.fillRoundRect(x, y, width, height, 14, 14);
+            Stroke original = g2.getStroke();
+            g2.setStroke(new BasicStroke(
+                1.5f,
+                BasicStroke.CAP_ROUND,
+                BasicStroke.JOIN_ROUND,
+                1.0f,
+                new float[] {5.0f, 5.0f},
+                0.0f
+            ));
+            g2.setColor(new Color(148, 162, 176));
+            g2.drawRoundRect(x, y, width, height, 14, 14);
+            g2.setStroke(original);
+            g2.setColor(new Color(67, 80, 94));
+            g2.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 10));
+            drawCenteredText(g2, "DOWNSTREAM", x + width / 2, y + 24);
+            g2.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 9));
+            drawCenteredText(g2, "PROCESS /", x + width / 2, y + 47);
+            drawCenteredText(g2, "COMPLETION", x + width / 2, y + 60);
+            drawCenteredText(g2, "BOUNDARY", x + width / 2, y + 73);
+            g2.setColor(PASSIVE_FLOW_COLOR);
+            g2.setStroke(new BasicStroke(2.0f));
+            for (int markerX = x + 15; markerX < x + width - 18;
+                markerX += 22) {
+                drawArrow(g2, markerX, y + 94, markerX + 13, y + 94);
+            }
+            g2.setStroke(original);
+            g2.setColor(new Color(91, 105, 119));
+            g2.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 8));
+            drawCenteredText(g2, "NO LIVE STATUS", x + width / 2,
+                y + height - 13);
+        }
+
+        private static void drawBottleIdentity(
+            Graphics2D g2,
+            int centreX,
+            int topY,
+            int bottleId
+        ) {
+            if (bottleId <= 0) {
+                return;
+            }
+            String text = "B" + bottleId;
+            Font originalFont = g2.getFont();
+            g2.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 8));
+            FontMetrics metrics = g2.getFontMetrics();
+            int width = Math.max(18, metrics.stringWidth(text) + 6);
+            g2.setColor(new Color(24, 104, 168));
+            g2.fillRoundRect(centreX - width / 2, topY, width, 12, 7, 7);
+            g2.setColor(Color.WHITE);
+            drawCenteredText(g2, text, centreX, topY + 9);
+            g2.setFont(originalFont);
         }
 
         private static void drawLayeredBottle(
@@ -1648,1296 +3141,33 @@ public final class ABSVisualisation {
             int textX = centreX - metrics.stringWidth(text) / 2;
             g2.drawString(text, textX, baselineY);
         }
-    }
 
-    enum VisualLifecycle {
-        IDLE,
-        RUNNING,
-        FINALISING,
-        COMPLETE,
-        FAULTED
-    }
-
-    /** A visualisation-only record; it is not a real bottle or Digital Twin. */
-    static final class VirtualBottle {
-        private final int displayId;
-        private String idealisedStage;
-        private double idealisedProgress;
-
-        VirtualBottle(int id) {
-            displayId = id;
-            idealisedStage = "LOADER QUEUE";
-            idealisedProgress = 0.0;
-        }
-    }
-
-    /**
-     * One shared, read-only reconciliation model for every overview/detail view.
-     * Real Controller states and real batch counts only anchor this model. No
-     * value produced here is sent to Coordinator or to a Controller.
-     */
-    static final class VisualisationSyncModel {
-        private static final int ROTARY_STATIONS = 5;
-        private static final int NO_BOTTLE = -1;
-        private static final int MAX_CATCH_UP_STEPS = 6;
-
-        private final DetailAnimationModel[] moduleViews =
-            new DetailAnimationModel[MACHINE_NAMES.length];
-        private final int[] moduleBottle =
-            new int[MACHINE_NAMES.length];
-        private final int[] rotaryBottle = new int[ROTARY_STATIONS];
-        private final int[] realStatus = new int[MACHINE_NAMES.length];
-        private final boolean[] hasRealStatus =
-            new boolean[MACHINE_NAMES.length];
-        private final int[] observedCycles =
-            new int[MACHINE_NAMES.length];
-        private final int[] completedCycles =
-            new int[MACHINE_NAMES.length];
-        private final int[] consumedCycles =
-            new int[MACHINE_NAMES.length];
-        private final int[] activeCycle =
-            new int[MACHINE_NAMES.length];
-        private final int[] batchCycleBaseline =
-            new int[MACHINE_NAMES.length];
-        private final boolean[] cycleOpen =
-            new boolean[MACHINE_NAMES.length];
-        private final int[] inferredCyclesAwaitingConfirmation =
-            new int[MACHINE_NAMES.length];
-
-        private VirtualBottle[] bottles = new VirtualBottle[0];
-        private String[] tracedStages = new String[0];
-        private int required;
-        private int realCompleted;
-        private int visualCompleted;
-        private int nextBottle;
-        private boolean hasRequired;
-        private boolean hasCompleted;
-        private boolean batchActive;
-        private boolean catchUp;
-        private String mode = "IDLE";
-
-        private String rotaryPhase = "ENTRY";
-        private int rotaryEntryBottle = NO_BOTTLE;
-        private int rotaryExitBottle = NO_BOTTLE;
-        private double rotaryEntryProgress;
-        private double rotaryAngle;
-        private double rotaryExitProgress;
-        private int rotarySettlingTicks;
-        private int rotaryEntered;
-        private int rotaryExited;
-        private int rotaryActiveCycle;
-
-        VisualisationSyncModel() {
-            for (int index = 0; index < moduleViews.length; index++) {
-                moduleViews[index] = new DetailAnimationModel(index);
-                moduleBottle[index] = NO_BOTTLE;
-                realStatus[index] = -1;
-            }
-            for (int station = 0; station < rotaryBottle.length; station++) {
-                rotaryBottle[station] = NO_BOTTLE;
-            }
-            publishRotaryView("WAITING FOR BATCH");
+        private static double ease(double value) {
+            double bounded = Math.max(0.0, Math.min(1.0, value));
+            return bounded * bounded * (3.0 - 2.0 * bounded);
         }
 
-        synchronized void acceptRequired(int value) {
-            int safeRequired = Math.max(0, value);
-            if (!hasRequired || safeRequired != required) {
-                resetBatch(safeRequired);
-            }
-            hasRequired = true;
-        }
-
-        synchronized void acceptCompleted(int value) {
-            int safeCompleted = Math.max(0, value);
-            boolean startsNewCycle = hasCompleted &&
-                safeCompleted < realCompleted && hasRequired;
-            if (startsNewCycle) {
-                resetBatch(required);
-                hasRequired = true;
-            }
-            hasCompleted = true;
-            realCompleted = hasRequired ?
-                Math.min(safeCompleted, required) : safeCompleted;
-            if (hasRequired && required > 0) {
-                batchActive = true;
-                inferCompletedThrough(UNLOADER, realCompleted);
-            }
-        }
-
-        synchronized void acceptStatus(int index, int status) {
-            if (index < 0 || index >= moduleViews.length) {
-                return;
-            }
-            int previousStatus = realStatus[index];
-            boolean previouslyReceived = hasRealStatus[index];
-            realStatus[index] = status;
-            hasRealStatus[index] = true;
-            if (status == BUSY_STATUS) {
-                if (!cycleOpen[index]) {
-                    observedCycles[index]++;
-                    cycleOpen[index] = true;
-                }
-            }
-            else if (status == DONE_STATUS) {
-                // DONE without a sampled BUSY is still one trustworthy cycle.
-                if (!cycleOpen[index]) {
-                    if (inferredCyclesAwaitingConfirmation[index] > 0) {
-                        inferredCyclesAwaitingConfirmation[index]--;
-                    }
-                    else {
-                        observedCycles[index]++;
-                    }
-                }
-                completedCycles[index] = observedCycles[index];
-                cycleOpen[index] = false;
-            }
-            else if ((status == READY_STATUS || status == 0) &&
-                cycleOpen[index]) {
-                // Conveyor and some other Controllers can return BUSY -> READY
-                // without leaving a poll-visible DONE interval.
-                completedCycles[index] = observedCycles[index];
-                cycleOpen[index] = false;
-            }
-            else if (status == FAULT_STATUS) {
-                cycleOpen[index] = false;
-            }
-            moduleViews[index].setSharedRealStatus(status);
-            if (hasRequired && batchActive &&
-                observedCycles[index] > batchCycleBaseline[index]) {
-                int batchOrdinal = observedCycles[index] -
-                    batchCycleBaseline[index];
-                if (index == ROTARY) {
-                    // Rotary emits several index cycles for one bottle.
-                    batchOrdinal = 1;
-                }
-                inferCompletedThrough(index - 1, batchOrdinal);
-            }
-            if (TRACE_ENABLED && previouslyReceived &&
-                previousStatus != status) {
-                System.out.println(
-                    "ABS_VIZ_ANCHOR timestamp=" +
-                    System.currentTimeMillis() + " module=" +
-                    signalName(index) + " cycles=" +
-                    observedCycles[index] + " completed=" +
-                    completedCycles[index]
-                );
-            }
-        }
-
-        synchronized void tick() {
-            if (!hasRequired || required <= 0) {
-                mode = "IDLE";
-                return;
-            }
-            if (hasFault()) {
-                mode = "FAULTED";
-                catchUp = false;
-                return;
-            }
-            if (!batchActive && visualCompleted >= required) {
-                mode = "COMPLETE";
-                return;
-            }
-
-            int gap = Math.max(0, realCompleted - visualCompleted);
-            catchUp = gap > 0;
-            int steps = catchUp ?
-                Math.min(MAX_CATCH_UP_STEPS, 2 + gap) : 1;
-            mode = catchUp ? "CATCH_UP" : "RUNNING";
-            for (int step = 0; step < steps; step++) {
-                advanceOneStep();
-                traceStageChanges();
-            }
-
-            boolean drained = visualCompleted >= required && !hasWork();
-            if (drained) {
-                batchActive = false;
-                catchUp = false;
-                mode = "COMPLETE";
-                publishRotaryView("COMPLETE - STABLE EMPTY TABLE");
-                for (int index = 0; index < moduleViews.length; index++) {
-                    moduleViews[index].markSharedBatchComplete();
-                }
-            }
-            else {
-                updateLifecycleForCurrentWork();
-            }
-        }
-
-        synchronized DetailAnimationModel getDetailModel(int index) {
-            return moduleViews[index];
-        }
-
-        synchronized boolean isModuleMoving(int index) {
-            return index >= 0 && index < moduleViews.length &&
-                moduleViews[index].isRunning();
-        }
-
-        synchronized int getVisualCompleted() {
-            return visualCompleted;
-        }
-
-        synchronized int getRealCompleted() {
-            return realCompleted;
-        }
-
-        synchronized int getRequired() {
-            return required;
-        }
-
-        synchronized String getModeName() {
-            return mode;
-        }
-
-        synchronized int getVirtualBottleCount() {
-            return bottles.length;
-        }
-
-        synchronized int getRotaryOccupiedCount() {
-            int count = 0;
-            for (int station = 0; station < rotaryBottle.length; station++) {
-                if (rotaryBottle[station] != NO_BOTTLE) {
-                    count++;
-                }
-            }
-            return count;
-        }
-
-        synchronized String getBottleStage(int displayId) {
-            int index = displayId - 1;
-            return index >= 0 && index < bottles.length ?
-                bottles[index].idealisedStage : "UNKNOWN";
-        }
-
-        synchronized int getObservedCycleCount(int index) {
-            return observedCycles[index];
-        }
-
-        synchronized int getConsumedCycleCount(int index) {
-            return consumedCycles[index];
-        }
-
-        private void resetBatch(int newRequired) {
-            required = newRequired;
-            realCompleted = 0;
-            visualCompleted = 0;
-            nextBottle = 0;
-            hasCompleted = false;
-            batchActive = newRequired > 0;
-            catchUp = false;
-            mode = newRequired > 0 ? "RUNNING" : "IDLE";
-            bottles = new VirtualBottle[newRequired];
-            tracedStages = new String[newRequired];
-            for (int bottle = 0; bottle < bottles.length; bottle++) {
-                bottles[bottle] = new VirtualBottle(bottle + 1);
-            }
-            for (int index = 0; index < moduleBottle.length; index++) {
-                moduleBottle[index] = NO_BOTTLE;
-                moduleViews[index].resetSharedBatch();
-                if (hasRealStatus[index]) {
-                    moduleViews[index].setSharedRealStatus(realStatus[index]);
-                }
-            }
-            for (int station = 0; station < rotaryBottle.length; station++) {
-                rotaryBottle[station] = NO_BOTTLE;
-            }
-            rotaryPhase = "ENTRY";
-            rotaryEntryBottle = NO_BOTTLE;
-            rotaryExitBottle = NO_BOTTLE;
-            rotaryEntryProgress = 0.0;
-            rotaryAngle = 0.0;
-            rotaryExitProgress = 0.0;
-            rotarySettlingTicks = 0;
-            rotaryEntered = 0;
-            rotaryExited = 0;
-            rotaryActiveCycle = 0;
-            for (int index = 0; index < moduleViews.length; index++) {
-                // Ignore stale Controller cycles from the preceding batch.
-                consumedCycles[index] = observedCycles[index];
-                activeCycle[index] = 0;
-                batchCycleBaseline[index] = observedCycles[index];
-                inferredCyclesAwaitingConfirmation[index] = 0;
-            }
-            publishRotaryView(newRequired > 0 ?
-                "ENTRY - WAITING FOR BOTTLE #1" : "WAITING FOR BATCH");
-            traceStageChanges();
-        }
-
-        private boolean hasFault() {
-            for (int index = 0; index < realStatus.length; index++) {
-                if (hasRealStatus[index] && realStatus[index] == 4) {
-                    return true;
-                }
-            }
-            return false;
-        }
-
-        private boolean hasStagePermission(int stage) {
-            return stage >= 0 && stage < moduleViews.length &&
-                consumedCycles[stage] < observedCycles[stage];
-        }
-
-        private int reserveStageCycle(int stage) {
-            if (!hasStagePermission(stage)) {
-                return 0;
-            }
-            consumedCycles[stage]++;
-            activeCycle[stage] = consumedCycles[stage];
-            return activeCycle[stage];
-        }
-
-        private boolean activeStageCompleted(int stage) {
-            return activeCycle[stage] > 0 &&
-                completedCycles[stage] >= activeCycle[stage];
-        }
-
-        private boolean activeStageBusy(int stage) {
-            return activeCycle[stage] > 0 && cycleOpen[stage] &&
-                hasRealStatus[stage] && realStatus[stage] == BUSY_STATUS;
-        }
-
-        private void beginStage(int stage, int bottle) {
-            if (reserveStageCycle(stage) == 0) {
-                return;
-            }
-            moduleBottle[stage] = bottle;
-            bottles[bottle].idealisedStage = MACHINE_NAMES[stage];
-            bottles[bottle].idealisedProgress = 0.0;
-            moduleViews[stage].beginSharedBottle(bottle + 1);
-        }
-
-        private void advanceAnchoredGeometry(int stage, int bottle) {
-            DetailAnimationModel view = moduleViews[stage];
-            if (activeStageCompleted(stage)) {
-                view.completeSharedBottleFromRealStatus();
-            }
-            else if (activeStageBusy(stage)) {
-                view.resumeSharedBottle();
-                view.advanceSharedBottle();
-            }
-            else {
-                view.pauseForRealStatus();
-            }
-            bottles[bottle].idealisedProgress = view.getProgress();
-        }
-
-        private void inferCompletionFromDownstream(
-            int stage,
-            int downstreamStage
+        private static void drawClippedCenteredText(
+            Graphics2D g2,
+            String text,
+            int x,
+            int baselineY,
+            int maximumWidth
         ) {
-            if (moduleBottle[stage] != NO_BOTTLE &&
-                hasStagePermission(downstreamStage) &&
-                !activeStageCompleted(stage)) {
-                completedCycles[stage] = Math.max(
-                    completedCycles[stage], activeCycle[stage]
-                );
+            FontMetrics metrics = g2.getFontMetrics();
+            String visible = text;
+            while (visible.length() > 4 &&
+                metrics.stringWidth(visible + "...") > maximumWidth) {
+                visible = visible.substring(0, visible.length() - 1);
             }
-        }
-
-        private void inferCompletedThrough(int lastStage, int batchCount) {
-            if (batchCount <= 0) {
-                return;
+            if (!visible.equals(text)) {
+                visible += "...";
             }
-            int boundedLast = Math.min(UNLOADER, lastStage);
-            for (int stage = LOADER; stage <= boundedLast; stage++) {
-                if (stage == ROTARY) {
-                    // A downstream module proves Rotary exit, but not how many
-                    // of the five idealised table indexes were poll-visible.
-                    continue;
-                }
-                int target = batchCycleBaseline[stage] + batchCount;
-                if (target > observedCycles[stage]) {
-                    inferredCyclesAwaitingConfirmation[stage] +=
-                        target - observedCycles[stage];
-                }
-                observedCycles[stage] = Math.max(
-                    observedCycles[stage], target
-                );
-                completedCycles[stage] = Math.max(
-                    completedCycles[stage], target
-                );
-            }
-        }
-
-        private void traceStageChanges() {
-            if (!TRACE_ENABLED) {
-                return;
-            }
-            for (int bottle = 0; bottle < bottles.length; bottle++) {
-                String stage = bottles[bottle].idealisedStage;
-                if (tracedStages[bottle] == null ||
-                    !tracedStages[bottle].equals(stage)) {
-                    tracedStages[bottle] = stage;
-                    traceVisualStage(bottle + 1, stage);
-                }
-            }
-        }
-
-        private void advanceOneStep() {
-            advanceUnloader();
-            advanceLinearStage(CAPPER, UNLOADER);
-            advanceLinearStage(LID, CAPPER);
-            advanceLinearStage(FILLER_B, LID);
-            advanceLinearStage(FILLER_A, FILLER_B);
-            advanceRotary();
-            advanceConveyor();
-            advanceLoader();
-            admitNextBottle();
-        }
-
-        private void admitNextBottle() {
-            if (moduleBottle[LOADER] != NO_BOTTLE ||
-                nextBottle >= bottles.length ||
-                !hasStagePermission(LOADER)) {
-                return;
-            }
-            int bottle = nextBottle++;
-            beginStage(LOADER, bottle);
-        }
-
-        private void advanceLoader() {
-            advanceLinearStage(LOADER, CONVEYOR);
-        }
-
-        private void advanceConveyor() {
-            int bottle = moduleBottle[CONVEYOR];
-            if (bottle == NO_BOTTLE) {
-                return;
-            }
-            DetailAnimationModel view = moduleViews[CONVEYOR];
-            inferCompletionFromDownstream(CONVEYOR, ROTARY);
-            advanceAnchoredGeometry(CONVEYOR, bottle);
-            if (view.getProgress() >= 100.0) {
-                bottles[bottle].idealisedStage = "ROTARY ENTRY QUEUE";
-                view.setSharedWaitingPhase(
-                    "TRANSFER COMPLETE - WAITING FOR ROTARY ENTRY"
-                );
-            }
-        }
-
-        private void advanceLinearStage(int stage, int nextStage) {
-            int bottle = moduleBottle[stage];
-            if (bottle == NO_BOTTLE) {
-                return;
-            }
-            DetailAnimationModel view = moduleViews[stage];
-            inferCompletionFromDownstream(stage, nextStage);
-            advanceAnchoredGeometry(stage, bottle);
-            if (view.getProgress() >= 100.0 &&
-                moduleBottle[nextStage] == NO_BOTTLE &&
-                hasStagePermission(nextStage)) {
-                moduleBottle[stage] = NO_BOTTLE;
-                view.finishSharedTransfer(bottle + 1);
-                beginStage(nextStage, bottle);
-            }
-        }
-
-        private void advanceUnloader() {
-            int bottle = moduleBottle[UNLOADER];
-            if (bottle == NO_BOTTLE) {
-                return;
-            }
-            DetailAnimationModel view = moduleViews[UNLOADER];
-            if (realCompleted > visualCompleted) {
-                completedCycles[UNLOADER] = Math.max(
-                    completedCycles[UNLOADER], activeCycle[UNLOADER]
-                );
-            }
-            advanceAnchoredGeometry(UNLOADER, bottle);
-            if (view.getProgress() < 100.0) {
-                return;
-            }
-            if (visualCompleted >= realCompleted) {
-                view.setSharedWaitingPhase(
-                    "WAITING FOR REAL VIZ_COMPLETED_BOTTLES ANCHOR"
-                );
-                return;
-            }
-            moduleBottle[UNLOADER] = NO_BOTTLE;
-            visualCompleted++;
-            bottles[bottle].idealisedStage = "VISUALLY COMPLETE";
-            bottles[bottle].idealisedProgress = 100.0;
-            view.finishSharedTransfer(bottle + 1);
-        }
-
-        private void advanceRotary() {
-            if ("EXITING".equals(rotaryPhase)) {
-                advanceRotaryExit();
-                return;
-            }
-
-            if (rotaryActiveCycle == 0 &&
-                moduleBottle[FILLER_A] == NO_BOTTLE &&
-                hasStagePermission(FILLER_A) &&
-                prepareRotaryExitFromFillerAnchor()) {
-                advanceRotaryExit();
-                return;
-            }
-
-            if (rotaryActiveCycle == 0) {
-                if (!hasStagePermission(ROTARY)) {
-                    publishRotaryView(
-                        "ENTRY - WAITING FOR REAL VIZ_ROTARY_STATUS"
-                    );
-                    return;
-                }
-                int conveyorBottle = moduleBottle[CONVEYOR];
-                if (conveyorBottle != NO_BOTTLE &&
-                    moduleViews[CONVEYOR].getProgress() >= 100.0 &&
-                    rotaryBottle[0] == NO_BOTTLE) {
-                    rotaryActiveCycle = reserveStageCycle(ROTARY);
-                    rotaryEntryBottle = conveyorBottle;
-                    rotaryEntryProgress = 0.0;
-                    rotaryPhase = "ENTRY";
-                    bottles[conveyorBottle].idealisedStage = "ROTARY ENTRY";
-                }
-                else if (hasRotaryBottle() &&
-                    rotaryBottle[ROTARY_STATIONS - 1] == NO_BOTTLE) {
-                    rotaryActiveCycle = reserveStageCycle(ROTARY);
-                    rotaryAngle = 0.0;
-                    rotaryPhase = "ROTATING";
-                }
-                else {
-                    publishRotaryView(
-                        "ENTRY - REAL ROTARY CYCLE WAITING FOR VISUAL BOTTLE"
-                    );
-                    return;
-                }
-            }
-
-            if ("ENTRY".equals(rotaryPhase)) {
-                advanceRotaryEntry();
-            }
-            else if ("ROTATING".equals(rotaryPhase)) {
-                advanceRotaryIndex();
-            }
-            else if ("SETTLING".equals(rotaryPhase)) {
-                advanceRotarySettling();
-            }
-        }
-
-        private void advanceRotaryEntry() {
-            if (rotaryEntryBottle == NO_BOTTLE || rotaryActiveCycle == 0) {
-                rotaryActiveCycle = 0;
-                rotaryPhase = "ENTRY";
-                publishRotaryView("ENTRY - WAITING FOR ANCHORED BOTTLE");
-                return;
-            }
-            if (rotaryCycleCompleted()) {
-                rotaryEntryProgress = 1.0;
-            }
-            else if (rotaryCycleBusy()) {
-                rotaryEntryProgress = Math.min(
-                    1.0,
-                    rotaryEntryProgress + 0.04
-                );
-            }
-            publishRotaryView(
-                "ENTRY - BOTTLE #" + (rotaryEntryBottle + 1) +
-                " MOVING INTO STATION 1"
+            int textX = x + Math.max(
+                0,
+                (maximumWidth - metrics.stringWidth(visible)) / 2
             );
-            if (rotaryEntryProgress >= 1.0 && rotaryCycleCompleted()) {
-                rotaryBottle[0] = rotaryEntryBottle;
-                moduleBottle[CONVEYOR] = NO_BOTTLE;
-                moduleViews[CONVEYOR].finishSharedTransfer(
-                    rotaryEntryBottle + 1
-                );
-                bottles[rotaryEntryBottle].idealisedStage =
-                    "ROTARY STATION 1";
-                bottles[rotaryEntryBottle].idealisedProgress = 0.0;
-                rotaryEntered++;
-                rotaryEntryBottle = NO_BOTTLE;
-                rotaryEntryProgress = 0.0;
-                beginRotarySettling();
-            }
-            else if (rotaryEntryProgress >= 1.0) {
-                publishRotaryView(
-                    "ENTRY - ANIMATION COMPLETE; WAITING FOR REAL DONE"
-                );
-            }
-        }
-
-        private void advanceRotaryIndex() {
-            if (rotaryActiveCycle == 0) {
-                rotaryPhase = "ENTRY";
-                return;
-            }
-            if (rotaryCycleCompleted()) {
-                rotaryAngle = 72.0;
-            }
-            else if (rotaryCycleBusy()) {
-                rotaryAngle = Math.min(72.0, rotaryAngle + 4.0);
-            }
-            publishRotaryView("ROTATING - INDEXING ONE STATION");
-            if (rotaryAngle >= 72.0 && rotaryCycleCompleted()) {
-                for (int station = ROTARY_STATIONS - 1;
-                    station > 0;
-                    station--) {
-                    rotaryBottle[station] = rotaryBottle[station - 1];
-                }
-                rotaryBottle[0] = NO_BOTTLE;
-                updateRotaryBottleRecords();
-                rotaryAngle = 0.0;
-                beginRotarySettling();
-            }
-            else if (rotaryAngle >= 72.0) {
-                publishRotaryView(
-                    "ROTATING - ANIMATION COMPLETE; WAITING FOR REAL DONE"
-                );
-            }
-        }
-
-        private void advanceRotarySettling() {
-            if (rotarySettlingTicks < 10) {
-                rotarySettlingTicks++;
-                publishRotaryView("SETTLING - INDEX POSITION LOCKING");
-                return;
-            }
-            rotaryActiveCycle = 0;
-            activeCycle[ROTARY] = 0;
-            rotaryPhase = "ENTRY";
-            publishRotaryView("ENTRY - WAITING FOR NEXT REAL ROTARY CYCLE");
-        }
-
-        private void advanceRotaryExit() {
-            if (rotaryExitBottle == NO_BOTTLE) {
-                rotaryPhase = "ENTRY";
-                return;
-            }
-            if (activeStageCompleted(FILLER_A)) {
-                rotaryExitProgress = 1.0;
-            }
-            else if (activeStageBusy(FILLER_A)) {
-                rotaryExitProgress = Math.min(
-                    1.0,
-                    rotaryExitProgress + 0.04
-                );
-            }
-            publishRotaryView(
-                "EXITING - BOTTLE #" + (rotaryExitBottle + 1) +
-                " MOVING TO FILLER A"
-            );
-            if (rotaryExitProgress >= 1.0) {
-                int bottle = rotaryExitBottle;
-                rotaryBottle[ROTARY_STATIONS - 1] = NO_BOTTLE;
-                rotaryExitBottle = NO_BOTTLE;
-                rotaryExitProgress = 0.0;
-                rotaryExited++;
-                moduleBottle[FILLER_A] = bottle;
-                bottles[bottle].idealisedStage = "Filler A";
-                bottles[bottle].idealisedProgress = 0.0;
-                moduleViews[FILLER_A].beginSharedBottle(bottle + 1);
-                rotaryPhase = "ENTRY";
-                publishRotaryView(
-                    rotaryPhase + " - EXIT TRANSFER COMPLETE"
-                );
-            }
-        }
-
-        private boolean rotaryCycleCompleted() {
-            return rotaryActiveCycle > 0 &&
-                completedCycles[ROTARY] >= rotaryActiveCycle;
-        }
-
-        private boolean rotaryCycleBusy() {
-            return rotaryActiveCycle > 0 && cycleOpen[ROTARY] &&
-                hasRealStatus[ROTARY] &&
-                realStatus[ROTARY] == BUSY_STATUS;
-        }
-
-        private void beginRotarySettling() {
-            rotarySettlingTicks = 0;
-            rotaryPhase = "SETTLING";
-            publishRotaryView("SETTLING - REAL INDEX COMPLETE");
-        }
-
-        private boolean prepareRotaryExitFromFillerAnchor() {
-            int sourceStation = NO_BOTTLE;
-            for (int station = ROTARY_STATIONS - 1;
-                station >= 0;
-                station--) {
-                if (rotaryBottle[station] != NO_BOTTLE) {
-                    sourceStation = station;
-                    break;
-                }
-            }
-            if (sourceStation != NO_BOTTLE) {
-                rotaryExitBottle = rotaryBottle[sourceStation];
-                rotaryBottle[sourceStation] = NO_BOTTLE;
-            }
-            else {
-                int conveyorBottle = moduleBottle[CONVEYOR];
-                if (conveyorBottle == NO_BOTTLE ||
-                    moduleViews[CONVEYOR].getProgress() < 100.0) {
-                    return false;
-                }
-                rotaryExitBottle = conveyorBottle;
-                moduleBottle[CONVEYOR] = NO_BOTTLE;
-                moduleViews[CONVEYOR].finishSharedTransfer(
-                    conveyorBottle + 1
-                );
-            }
-            if (reserveStageCycle(FILLER_A) == 0) {
-                return false;
-            }
-            rotaryExitProgress = 0.0;
-            rotaryPhase = "EXITING";
-            bottles[rotaryExitBottle].idealisedStage = "ROTARY EXITING";
-            publishRotaryView(
-                "EXITING - REAL FILLER A CYCLE ANCHORED BOTTLE #" +
-                (rotaryExitBottle + 1)
-            );
-            return true;
-        }
-
-        private void updateRotaryBottleRecords() {
-            for (int station = 0; station < rotaryBottle.length; station++) {
-                int bottle = rotaryBottle[station];
-                if (bottle != NO_BOTTLE) {
-                    bottles[bottle].idealisedStage =
-                        "ROTARY STATION " + (station + 1);
-                    bottles[bottle].idealisedProgress = 0.0;
-                }
-            }
-        }
-
-        private boolean hasRotaryBottle() {
-            for (int station = 0; station < rotaryBottle.length; station++) {
-                if (rotaryBottle[station] != NO_BOTTLE) {
-                    return true;
-                }
-            }
-            return false;
-        }
-
-        private boolean hasWork() {
-            if (nextBottle < bottles.length || rotaryEntryBottle != NO_BOTTLE ||
-                rotaryExitBottle != NO_BOTTLE || hasRotaryBottle()) {
-                return true;
-            }
-            for (int index = 0; index < moduleBottle.length; index++) {
-                if (moduleBottle[index] != NO_BOTTLE) {
-                    return true;
-                }
-            }
-            return false;
-        }
-
-        private void updateLifecycleForCurrentWork() {
-            for (int index = 0; index < moduleViews.length; index++) {
-                boolean currentWork = index == ROTARY ?
-                    (rotaryEntryBottle != NO_BOTTLE ||
-                        rotaryExitBottle != NO_BOTTLE || hasRotaryBottle()) :
-                    moduleBottle[index] != NO_BOTTLE;
-                moduleViews[index].reconcileSharedLifecycle(
-                    currentWork,
-                    visualCompleted >= required && !hasWork()
-                );
-            }
-        }
-
-        private void publishRotaryView(String phaseText) {
-            moduleViews[ROTARY].setSharedRotaryState(
-                rotaryBottle,
-                rotaryEntryBottle,
-                rotaryExitBottle,
-                rotaryPhase,
-                rotaryEntryProgress,
-                rotaryAngle,
-                rotaryExitProgress,
-                rotarySettlingTicks,
-                rotaryEntered,
-                rotaryExited,
-                phaseText
-            );
-        }
-    }
-
-    /**
-     * Shared animation state for a module detail view.
-     *
-     * The real frozen interface supplies only the Controller status. Every
-     * numeric field below is therefore an IDEALISED visualisation variable.
-     * Future Phase 2 telemetry can replace these fields without changing the
-     * overview, dialog lifecycle or read-only Coordinator boundary.
-     */
-    static final class DetailAnimationModel {
-        private static final int ROTARY_STATION_COUNT = 5;
-
-        private final int machineIndex;
-        private final double demoFillTarget;
-        private final boolean[] rotaryStationOccupied =
-            new boolean[ROTARY_STATION_COUNT];
-
-        private boolean running;
-        private double progress;
-        private double conveyorBottlePosition;
-        private double rollerAngle;
-        private double rotaryAngle;
-        private double rotaryEntryProgress;
-        private double rotaryExitProgress;
-        private int rotarySettlingTicks;
-        private int rotaryBottlesEntered;
-        private int rotaryBottlesExited;
-        private String rotaryPhase;
-        private double liquidALevel;
-        private double liquidBLevel;
-        private double tighteningAngle;
-        private String phase;
-        private VisualLifecycle lifecycle;
-        private int currentBottleId;
-        private int sharedRealStatus = -1;
-
-        DetailAnimationModel(int index) {
-            machineIndex = index;
-            demoFillTarget = index == FILLER_A ? DEMO_LIQUID_A_PERCENT :
-                (index == FILLER_B ? DEMO_LIQUID_B_PERCENT : 0.0);
-            resetGeometry();
-            phase = "WAITING FOR REAL STATUS";
-            lifecycle = VisualLifecycle.IDLE;
-            currentBottleId = 0;
-        }
-
-        void resetSharedBatch() {
-            resetGeometry();
-            running = false;
-            currentBottleId = 0;
-            lifecycle = VisualLifecycle.IDLE;
-            phase = "NEW BATCH - SHARED MODEL RESET";
-        }
-
-        void setSharedRealStatus(int status) {
-            sharedRealStatus = status;
-            if (status == 4) {
-                running = false;
-                lifecycle = VisualLifecycle.FAULTED;
-                phase = "FAULT - IDEALISED MOTION STOPPED IMMEDIATELY";
-            }
-            else if (status == 3) {
-                lifecycle = VisualLifecycle.FINALISING;
-                if (!running) {
-                    phase = "DONE - FINALISING SHARED BATCH MODEL";
-                }
-            }
-            else if (status == BUSY_STATUS) {
-                lifecycle = VisualLifecycle.RUNNING;
-            }
-            else if (!running) {
-                lifecycle = VisualLifecycle.IDLE;
-            }
-        }
-
-        void beginSharedBottle(int bottleId) {
-            resetGeometry();
-            currentBottleId = bottleId;
-            running = true;
-            lifecycle = sharedRealStatus == 3 ?
-                VisualLifecycle.FINALISING : VisualLifecycle.RUNNING;
-            switch (machineIndex) {
-                case LOADER:
-                    phase = "BOTTLE #" + bottleId + " - GATE OPENING";
-                    break;
-                case CONVEYOR:
-                    phase = "BOTTLE #" + bottleId + " - TRANSFERRING";
-                    break;
-                case FILLER_A:
-                    phase = "BOTTLE #" + bottleId + " - FILLING A";
-                    break;
-                case FILLER_B:
-                    phase = "BOTTLE #" + bottleId + " - ADDING B";
-                    break;
-                case LID:
-                    phase = "BOTTLE #" + bottleId + " - SEPARATING LID";
-                    break;
-                case CAPPER:
-                    phase = "BOTTLE #" + bottleId + " - HEAD DESCENDING";
-                    break;
-                case UNLOADER:
-                    phase = "BOTTLE #" + bottleId + " - DISCHARGING";
-                    break;
-                default:
-                    phase = "BOTTLE #" + bottleId + " - SHARED PROCESS";
-                    break;
-            }
-        }
-
-        void advanceSharedBottle() {
-            if (!running || lifecycle == VisualLifecycle.FAULTED) {
-                return;
-            }
-            switch (machineIndex) {
-                case LOADER:
-                    progress = Math.min(100.0, progress + 2.0);
-                    phase = "BOTTLE #" + currentBottleId + " - " +
-                        loaderPhase(progress);
-                    break;
-                case CONVEYOR:
-                    progress = Math.min(100.0, progress + 1.7);
-                    conveyorBottlePosition = progress / 100.0;
-                    rollerAngle = (rollerAngle + 7.0) % 360.0;
-                    phase = "BOTTLE #" + currentBottleId +
-                        " - TRANSFERRING ON SHARED BELT";
-                    break;
-                case FILLER_A:
-                    liquidALevel = Math.min(
-                        DEMO_LIQUID_A_PERCENT,
-                        liquidALevel + 1.5
-                    );
-                    progress = liquidALevel /
-                        DEMO_LIQUID_A_PERCENT * 100.0;
-                    phase = "BOTTLE #" + currentBottleId +
-                        " - FILLING LIQUID A";
-                    break;
-                case FILLER_B:
-                    liquidBLevel = Math.min(
-                        DEMO_LIQUID_B_PERCENT,
-                        liquidBLevel + 1.25
-                    );
-                    progress = liquidBLevel /
-                        DEMO_LIQUID_B_PERCENT * 100.0;
-                    phase = "BOTTLE #" + currentBottleId +
-                        " - ADDING LIQUID B";
-                    break;
-                case LID:
-                    progress = Math.min(100.0, progress + 2.0);
-                    phase = "BOTTLE #" + currentBottleId + " - " +
-                        lidPhase(progress);
-                    break;
-                case CAPPER:
-                    progress = Math.min(100.0, progress + 2.0);
-                    if (progress >= 30.0 && progress <= 72.0) {
-                        tighteningAngle = (tighteningAngle + 9.0) % 360.0;
-                    }
-                    phase = "BOTTLE #" + currentBottleId + " - " +
-                        capperPhase(progress);
-                    break;
-                case UNLOADER:
-                    progress = Math.min(100.0, progress + 2.0);
-                    phase = "BOTTLE #" + currentBottleId +
-                        (progress < 100.0 ? " - DISCHARGING" :
-                            " - AT COLLECTION POSITION");
-                    break;
-                default:
-                    break;
-            }
-            if (progress >= 100.0) {
-                running = false;
-            }
-        }
-
-        void resumeSharedBottle() {
-            if (currentBottleId <= 0 ||
-                lifecycle == VisualLifecycle.FAULTED ||
-                progress >= 100.0) {
-                return;
-            }
-            running = true;
-            lifecycle = VisualLifecycle.RUNNING;
-        }
-
-        void pauseForRealStatus() {
-            if (currentBottleId <= 0 || progress >= 100.0 ||
-                lifecycle == VisualLifecycle.FAULTED) {
-                return;
-            }
-            running = false;
-            lifecycle = VisualLifecycle.IDLE;
-            phase = "PAUSED - WAITING FOR REAL CONTROLLER STATUS";
-        }
-
-        void completeSharedBottleFromRealStatus() {
-            if (currentBottleId <= 0 ||
-                lifecycle == VisualLifecycle.FAULTED) {
-                return;
-            }
-            progress = 100.0;
-            running = false;
-            lifecycle = VisualLifecycle.FINALISING;
-            switch (machineIndex) {
-                case CONVEYOR:
-                    conveyorBottlePosition = 1.0;
-                    break;
-                case FILLER_A:
-                    liquidALevel = DEMO_LIQUID_A_PERCENT;
-                    break;
-                case FILLER_B:
-                    liquidALevel = DEMO_LIQUID_A_PERCENT;
-                    liquidBLevel = DEMO_LIQUID_B_PERCENT;
-                    break;
-                default:
-                    break;
-            }
-            phase = "BOTTLE #" + currentBottleId +
-                " - REAL CYCLE COMPLETE";
-        }
-
-        void finishSharedTransfer(int bottleId) {
-            running = false;
-            progress = 100.0;
-            currentBottleId = bottleId;
-            phase = "BOTTLE #" + bottleId + " - TRANSFER COMPLETE";
-        }
-
-        void setSharedWaitingPhase(String text) {
-            running = false;
-            phase = text;
-        }
-
-        void reconcileSharedLifecycle(boolean hasWork, boolean batchComplete) {
-            if (lifecycle == VisualLifecycle.FAULTED) {
-                return;
-            }
-            if (batchComplete) {
-                markSharedBatchComplete();
-            }
-            else if (sharedRealStatus == 3) {
-                lifecycle = VisualLifecycle.FINALISING;
-            }
-            else if (hasWork || sharedRealStatus == BUSY_STATUS) {
-                lifecycle = VisualLifecycle.RUNNING;
-            }
-            else {
-                lifecycle = VisualLifecycle.IDLE;
-            }
-        }
-
-        void markSharedBatchComplete() {
-            if (lifecycle == VisualLifecycle.FAULTED) {
-                return;
-            }
-            running = false;
-            lifecycle = VisualLifecycle.COMPLETE;
-            if (machineIndex == ROTARY) {
-                phase = "COMPLETE - STABLE EMPTY TABLE";
-            }
-            else {
-                phase = "COMPLETE - SHARED BATCH RECONCILED";
-            }
-        }
-
-        void setSharedRotaryState(
-            int[] stationBottle,
-            int entryBottle,
-            int exitBottle,
-            String sharedPhase,
-            double entryProgress,
-            double angle,
-            double exitProgress,
-            int settlingTicks,
-            int entered,
-            int exited,
-            String phaseText
-        ) {
-            for (int station = 0;
-                station < rotaryStationOccupied.length;
-                station++) {
-                rotaryStationOccupied[station] =
-                    stationBottle[station] >= 0;
-            }
-            rotaryPhase = sharedPhase;
-            rotaryEntryProgress = entryProgress;
-            rotaryAngle = angle;
-            rotaryExitProgress = exitProgress;
-            rotarySettlingTicks = settlingTicks;
-            rotaryBottlesEntered = entered;
-            rotaryBottlesExited = exited;
-            currentBottleId = entryBottle >= 0 ? entryBottle + 1 :
-                (exitBottle >= 0 ? exitBottle + 1 : currentBottleId);
-            if ("ENTRY".equals(sharedPhase)) {
-                progress = entryProgress * 100.0;
-                running = entryBottle >= 0;
-            }
-            else if ("ROTATING".equals(sharedPhase)) {
-                progress = angle / 72.0 * 100.0;
-                running = true;
-            }
-            else if ("SETTLING".equals(sharedPhase)) {
-                progress = Math.min(100.0, settlingTicks * 10.0);
-                running = settlingTicks < 10;
-            }
-            else if ("EXITING".equals(sharedPhase)) {
-                progress = exitProgress * 100.0;
-                running = exitBottle >= 0;
-            }
-            else {
-                running = false;
-            }
-            if (sharedRealStatus == 4) {
-                running = false;
-                lifecycle = VisualLifecycle.FAULTED;
-                phase = "FAULT - IDEALISED MOTION STOPPED IMMEDIATELY";
-            }
-            else {
-                lifecycle = sharedRealStatus == 3 ?
-                    VisualLifecycle.FINALISING :
-                    (running ? VisualLifecycle.RUNNING : lifecycle);
-                phase = phaseText;
-            }
-        }
-
-        double getProgress() {
-            return progress;
-        }
-
-        double getConveyorBottlePosition() {
-            return conveyorBottlePosition;
-        }
-
-        double getRollerAngle() {
-            return rollerAngle;
-        }
-
-        double getRotaryAngle() {
-            return rotaryAngle;
-        }
-
-        double getFillLevel() {
-            return machineIndex == FILLER_B ?
-                liquidBLevel : liquidALevel;
-        }
-
-        double getLiquidALevel() {
-            return liquidALevel;
-        }
-
-        double getLiquidBLevel() {
-            return liquidBLevel;
-        }
-
-        double getTotalFillLevel() {
-            return liquidALevel + liquidBLevel;
-        }
-
-        double getDemoFillTarget() {
-            return demoFillTarget;
-        }
-
-        double getTighteningAngle() {
-            return tighteningAngle;
-        }
-
-        String getPhase() {
-            return phase;
-        }
-
-        VisualLifecycle getLifecycle() {
-            return lifecycle;
-        }
-
-        int getCurrentBottleId() {
-            return currentBottleId;
-        }
-
-        boolean isRunning() {
-            return running;
-        }
-
-        int getRotaryStationCount() {
-            return ROTARY_STATION_COUNT;
-        }
-
-        boolean isRotaryStationOccupied(int station) {
-            return station >= 0 && station < ROTARY_STATION_COUNT &&
-                rotaryStationOccupied[station];
-        }
-
-        int getRotaryOccupiedCount() {
-            int count = 0;
-            for (int station = 0;
-                station < ROTARY_STATION_COUNT;
-                station++) {
-                if (rotaryStationOccupied[station]) {
-                    count++;
-                }
-            }
-            return count;
-        }
-
-        double getRotaryEntryProgress() {
-            return rotaryEntryProgress;
-        }
-
-        double getRotaryExitProgress() {
-            return rotaryExitProgress;
-        }
-
-        int getRotaryBottlesEntered() {
-            return rotaryBottlesEntered;
-        }
-
-        int getRotaryBottlesExited() {
-            return rotaryBottlesExited;
-        }
-
-        String getRotaryPhase() {
-            return rotaryPhase;
-        }
-
-        private void resetGeometry() {
-            progress = 0.0;
-            conveyorBottlePosition = 0.0;
-            rollerAngle = 0.0;
-            rotaryAngle = 0.0;
-            rotaryEntryProgress = 0.0;
-            rotaryExitProgress = 0.0;
-            rotarySettlingTicks = 0;
-            rotaryBottlesEntered = 0;
-            rotaryBottlesExited = 0;
-            rotaryPhase = "WAITING";
-            for (int station = 0;
-                station < ROTARY_STATION_COUNT;
-                station++) {
-                rotaryStationOccupied[station] = false;
-            }
-            liquidALevel = machineIndex == FILLER_B ?
-                DEMO_LIQUID_A_PERCENT : 0.0;
-            liquidBLevel = 0.0;
-            tighteningAngle = 0.0;
-        }
-
-        private static String loaderPhase(double value) {
-            if (value < 20.0) {
-                return "GATE OPENING";
-            }
-            if (value < 55.0) {
-                return "RELEASING BOTTLE";
-            }
-            if (value < 85.0) {
-                return "TRANSFER TO OUTPUT";
-            }
-            if (value < 100.0) {
-                return "GATE CLOSING";
-            }
-            return "COMPLETE - AWAITING REAL STATUS";
-        }
-
-        private static String lidPhase(double value) {
-            if (value < 28.0) {
-                return "SEPARATING LID";
-            }
-            if (value < 66.0) {
-                return "FEEDING LID";
-            }
-            if (value < 100.0) {
-                return "PLACING LID";
-            }
-            return "LID PLACED - AWAITING REAL STATUS";
-        }
-
-        private static String capperPhase(double value) {
-            if (value < 30.0) {
-                return "HEAD DESCENDING";
-            }
-            if (value < 42.0) {
-                return "CONTACT";
-            }
-            if (value < 72.0) {
-                return "TIGHTENING / ROTATING";
-            }
-            if (value < 100.0) {
-                return "HEAD ASCENDING";
-            }
-            return "CAP SECURED - AWAITING REAL STATUS";
+            g2.drawString(visible, textX, baselineY);
         }
     }
 
@@ -2948,7 +3178,7 @@ public final class ABSVisualisation {
         private static final int DETAIL_HEIGHT = 430;
 
         private final int machineIndex;
-        private final DetailAnimationModel detailModel;
+        private ABSVisualisationFlowModel.ModuleSnapshot detailModel;
         private final DetailCanvas detailCanvas;
         private final JLabel realStatusValue;
         private final JLabel realBatchValue;
@@ -2962,7 +3192,7 @@ public final class ABSVisualisation {
 
         ModuleDetailPanel(int index) {
             machineIndex = index;
-            detailModel = VISUAL_MODEL.getDetailModel(index);
+            detailModel = renderModule(index);
             setLayout(new BorderLayout(10, 10));
             setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
 
@@ -3092,6 +3322,7 @@ public final class ABSVisualisation {
                 received = HAS_STATUS[machineIndex];
                 status = STATUSES[machineIndex];
             }
+            detailModel = renderModule(machineIndex);
             int effectiveStatus = received ? status : -1;
             if (received != lastStatusReceived ||
                 effectiveStatus != lastRealStatus) {
@@ -3106,25 +3337,32 @@ public final class ABSVisualisation {
             return lastRealStatus;
         }
 
-        DetailAnimationModel getDetailModel() {
+        ABSVisualisationFlowModel.ModuleSnapshot getDetailModel() {
             return detailModel;
         }
 
         private void updateInformation() {
-            String realStatusText = lastStatusReceived ?
-                statusName(lastRealStatus) : "WAITING";
-            realStatusValue.setText("Status: " + realStatusText);
-            realStatusValue.setBackground(lastStatusReceived ?
-                statusColor(lastRealStatus) : statusColor(-1));
+            boolean historicalDone = lastStatusReceived &&
+                lastRealStatus == DONE_STATUS &&
+                detailModel.getCurrentBottleId() <= 0;
+            String realStatusText = historicalDone ?
+                "DONE (last cycle complete)" :
+                (lastStatusReceived ? statusName(lastRealStatus) :
+                    "WAITING");
+            realStatusValue.setText("Raw state: " + realStatusText);
+            realStatusValue.setBackground(historicalDone ?
+                new Color(92, 112, 130) :
+                (lastStatusReceived ? statusColor(lastRealStatus) :
+                    statusColor(-1)));
             phaseValue.setText(
                 wrapInformationText(
                     "Lifecycle: <b>" + detailModel.getLifecycle() +
                     "</b><br>Phase: <b>" + detailModel.getPhase() +
-                    "</b><br>Shared visual bottle: <b>" +
+                    "</b><br>Current symbolic bottle: <b>" +
                     (detailModel.getCurrentBottleId() > 0 ?
-                        "#" + detailModel.getCurrentBottleId() : "--") +
+                        "B" + detailModel.getCurrentBottleId() : "--") +
                     "</b><br>Reconciliation: <b>" +
-                    VISUAL_MODEL.getModeName() + "</b>"
+                    displayModeName(VISUAL_MODEL.getModeName()) + "</b>"
                 )
             );
 
@@ -3138,7 +3376,13 @@ public final class ABSVisualisation {
                     );
                     secondaryMetricValue.setText(
                         wrapInformationText(
-                            "Gate and bottle motion: symbolic local cycle"
+                            "Queue remaining: " +
+                            renderSnapshot.getQueuedCount() +
+                            "<br>Release position: " +
+                            (detailModel.getCurrentBottleId() > 0 ?
+                                "B" + detailModel.getCurrentBottleId() +
+                                    " of " + renderSnapshot.getRequired() :
+                                "waiting for real Loader cycle")
                         )
                     );
                     break;
@@ -3166,7 +3410,8 @@ public final class ABSVisualisation {
                         wrapInformationText(
                             "Current index movement: " +
                             oneDecimal(detailModel.getRotaryAngle()) +
-                            " / 72.0 deg<br>Occupied stations: " +
+                            " deg (60 deg per real cycle)<br>" +
+                            "Occupied symbolic positions: " +
                             detailModel.getRotaryOccupiedCount() + " / " +
                             detailModel.getRotaryStationCount()
                         )
@@ -3184,16 +3429,15 @@ public final class ABSVisualisation {
                 case FILLER_A:
                     primaryMetricValue.setText(
                         wrapInformationText(
-                            "Liquid A: " +
+                            "Symbolic A phase display: " +
                             oneDecimal(detailModel.getLiquidALevel()) +
-                            "%<br>Liquid B: 0.0%"
+                            "%<br>Symbolic B phase display: 0.0%"
                         )
                     );
                     secondaryMetricValue.setText(
                         wrapInformationText(
-                            "IDEALISED target A: " +
-                            oneDecimal(DEMO_LIQUID_A_PERCENT) +
-                            "%<br>Total fill: " +
+                            "No recipe telemetry is available to IP." +
+                            "<br>Total symbolic level: " +
                             oneDecimal(detailModel.getTotalFillLevel()) +
                             "%<br>Valve: " +
                             (detailModel.isRunning() ?
@@ -3205,17 +3449,16 @@ public final class ABSVisualisation {
                 case FILLER_B:
                     primaryMetricValue.setText(
                         wrapInformationText(
-                            "Liquid A retained: " +
+                            "Symbolic A layer retained: " +
                             oneDecimal(detailModel.getLiquidALevel()) +
-                            "%<br>Liquid B added: " +
+                            "%<br>Symbolic B layer added: " +
                             oneDecimal(detailModel.getLiquidBLevel()) + "%"
                         )
                     );
                     secondaryMetricValue.setText(
                         wrapInformationText(
-                            "IDEALISED target B: " +
-                            oneDecimal(DEMO_LIQUID_B_PERCENT) +
-                            "%<br>Total fill: " +
+                            "No recipe telemetry is available to IP." +
+                            "<br>Total symbolic level: " +
                             oneDecimal(detailModel.getTotalFillLevel()) +
                             "%<br>Valve: " +
                             (detailModel.isRunning() ?
@@ -3261,7 +3504,9 @@ public final class ABSVisualisation {
                     );
                     secondaryMetricValue.setText(
                         wrapInformationText(
-                            "Shared visual bottle identity only; not real telemetry"
+                            detailModel.getPhase() +
+                            "<br>Completion is counted only after real " +
+                            "VIZ_COMPLETED_BOTTLES increases."
                         )
                     );
                     updateRealBatchInformation();
@@ -3298,16 +3543,17 @@ public final class ABSVisualisation {
         }
 
         private String rotaryOccupancyText() {
-            StringBuilder text = new StringBuilder("Stations: ");
+            StringBuilder text = new StringBuilder("Symbolic positions: ");
             for (int station = 0;
                 station < detailModel.getRotaryStationCount();
                 station++) {
                 if (station > 0) {
                     text.append("  ");
                 }
-                text.append(station + 1).append('=')
-                    .append(detailModel.isRotaryStationOccupied(station) ?
-                        "BOTTLE" : "empty");
+                int bottleId =
+                    detailModel.getRotaryStationBottleId(station);
+                text.append('P').append(station + 1).append('=')
+                    .append(bottleId > 0 ? "B" + bottleId : "empty");
             }
             return text.toString();
         }
@@ -3354,7 +3600,7 @@ public final class ABSVisualisation {
             return whole + "." + fraction;
         }
 
-        /** Large mechanism renderer driven only by DetailAnimationModel. */
+        /** Large mechanism renderer driven only by one immutable snapshot. */
         private final class DetailCanvas extends JPanel {
             private static final long serialVersionUID = 1L;
 
@@ -3601,8 +3847,8 @@ public final class ABSVisualisation {
                 g2.drawString("MOVING BELT + ROLLERS", 158, 326);
                 g2.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 12));
                 g2.drawString(
-                    "Input and output overview graphics share one REAL status.",
-                    78,
+                    "One REAL entry Conveyor; downstream boundary is passive.",
+                    68,
                     365
                 );
             }
@@ -3706,6 +3952,12 @@ public final class ABSVisualisation {
                             false,
                             false
                         );
+                        ProductionLinePanel.drawBottleIdentity(
+                            g2,
+                            holder.x,
+                            holder.y + 25,
+                            detailModel.getRotaryStationBottleId(station)
+                        );
                     }
 
                     Point label = rotaryPoint(
@@ -3716,15 +3968,17 @@ public final class ABSVisualisation {
                         0.0
                     );
                     g2.setColor(Color.WHITE);
-                    g2.fillOval(label.x - 12, label.y - 12, 24, 24);
+                    g2.fillRoundRect(label.x - 23, label.y - 11, 46, 22,
+                        10, 10);
                     g2.setColor(new Color(45, 60, 75));
-                    g2.drawOval(label.x - 12, label.y - 12, 24, 24);
-                    g2.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 12));
+                    g2.drawRoundRect(label.x - 23, label.y - 11, 46, 22,
+                        10, 10);
+                    g2.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 9));
                     ProductionLinePanel.drawCenteredText(
                         g2,
-                        String.valueOf(station + 1),
+                        ROTARY_POSITION_LABELS[station],
                         label.x,
-                        label.y + 5
+                        label.y + 3
                     );
                 }
 
@@ -3744,6 +3998,12 @@ public final class ABSVisualisation {
                         0,
                         false,
                         false
+                    );
+                    ProductionLinePanel.drawBottleIdentity(
+                        g2,
+                        bottleX,
+                        entryStation.y + 24,
+                        detailModel.getCurrentBottleId()
                     );
                 }
 
@@ -3765,6 +4025,12 @@ public final class ABSVisualisation {
                         false,
                         false
                     );
+                    ProductionLinePanel.drawBottleIdentity(
+                        g2,
+                        bottleX,
+                        exitStation.y + 24,
+                        detailModel.getCurrentBottleId()
+                    );
                 }
 
                 g2.setColor(detailModel.isRunning() ?
@@ -3785,7 +4051,7 @@ public final class ABSVisualisation {
                 g2.drawString("EXIT", 25, exitStation.y - 27);
                 ProductionLinePanel.drawCenteredText(
                     g2,
-                    "FIVE IDEALISED STATIONS - EMPTY BOTTLES ONLY",
+                    "SIX-POSITION M3 PROCESS MAP - SYMBOLIC OCCUPANCY ONLY",
                     centreX,
                     382
                 );
@@ -3799,7 +4065,9 @@ public final class ABSVisualisation {
                 double movementAngle
             ) {
                 double angle = Math.toRadians(
-                    150.0 - station * 72.0 - movementAngle
+                    180.0 - station *
+                        (360.0 / detailModel.getRotaryStationCount()) -
+                        movementAngle
                 );
                 return new Point(
                     centreX + (int)Math.round(Math.cos(angle) * radius),
@@ -4091,10 +4359,11 @@ public final class ABSVisualisation {
             }
 
             private void drawStateOverlay(Graphics2D g2) {
-                if (lastRealStatus == 3) {
+                if (lastRealStatus == DONE_STATUS &&
+                    detailModel.getCurrentBottleId() > 0) {
                     ProductionLinePanel.drawDoneTick(g2, 466, 48);
                 }
-                if (lastRealStatus == 4) {
+                if (lastRealStatus == FAULT_STATUS) {
                     Stroke original = g2.getStroke();
                     g2.setColor(new Color(190, 43, 43));
                     g2.setStroke(new BasicStroke(5.0f));
