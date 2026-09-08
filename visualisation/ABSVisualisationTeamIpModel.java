@@ -18,10 +18,12 @@ final class ABSVisualisationTeamIpModel {
         private final String owner;
         private final String mode;
         private final String summary;
+        private final String[] architectureNodes;
         private final String[] capabilityLines;
         private final boolean liveEvidenceAvailable;
         private final String liveHeadline;
         private final String[] liveLines;
+        private final String m1Representation;
 
         ExtensionSnapshot(
             String memberName,
@@ -29,20 +31,24 @@ final class ABSVisualisationTeamIpModel {
             String ownerText,
             String extensionMode,
             String summaryText,
+            String[] nodes,
             String[] capabilities,
             boolean hasLiveEvidence,
             String evidenceHeadline,
-            String[] evidenceLines
+            String[] evidenceLines,
+            String representation
         ) {
             member = memberName;
             title = extensionTitle;
             owner = ownerText;
             mode = extensionMode;
             summary = summaryText;
+            architectureNodes = nodes.clone();
             capabilityLines = capabilities.clone();
             liveEvidenceAvailable = hasLiveEvidence;
             liveHeadline = evidenceHeadline;
             liveLines = evidenceLines.clone();
+            m1Representation = representation;
         }
 
         String getMember() {
@@ -65,6 +71,10 @@ final class ABSVisualisationTeamIpModel {
             return summary;
         }
 
+        String[] getArchitectureNodes() {
+            return architectureNodes.clone();
+        }
+
         String[] getCapabilityLines() {
             return capabilityLines.clone();
         }
@@ -79,6 +89,10 @@ final class ABSVisualisationTeamIpModel {
 
         String[] getLiveLines() {
             return liveLines.clone();
+        }
+
+        String getM1Representation() {
+            return m1Representation;
         }
     }
 
@@ -103,11 +117,11 @@ final class ABSVisualisationTeamIpModel {
 
     private long version;
     private boolean m3LiveEvidence;
-    private String m3State = "NORMAL";
-    private String m3Source = "M3 FaultSupervisor";
-    private String m3Event = "No FT event received";
-    private String m3SafeStop = "Not requested";
-    private String m3Recovery = "Not active";
+    private String m3State = "NO FT EVIDENCE OBSERVED";
+    private String m3Source = "--";
+    private String m3Event = "--";
+    private String m3SafeStop = "--";
+    private String m3Recovery = "--";
     private Snapshot published;
 
     ABSVisualisationTeamIpModel() {
@@ -157,8 +171,16 @@ final class ABSVisualisationTeamIpModel {
             "READ-ONLY",
             "Immutable workpiece and resource state representation",
             new String[] {
+                "CONFIRMED PRODUCTION EVENTS",
+                "DigitalTwinCD :14002",
+                "WorkpieceTwin",
+                "ResourceTwin",
+                "DigitalTwinViewerCD :14003"
+            },
+            new String[] {
                 "Workpiece Twin: identity, profile and lifecycle snapshot",
                 "Resource Twin: status, operation and fault history",
+                "Immutable snapshots reject duplicate or invalid updates",
                 "Dedicated read-only viewer available on DigitalTwinViewerCD"
             },
             false,
@@ -166,7 +188,9 @@ final class ABSVisualisationTeamIpModel {
             new String[] {
                 "No current bottle or resource location is inferred.",
                 "This card represents the implemented M2 capability."
-            }
+            },
+            "Capability representation only | " +
+                "No live Twin snapshot consumed"
         );
         values[M3_FAULT_TOLERANCE] = new ExtensionSnapshot(
             "M3",
@@ -175,18 +199,25 @@ final class ABSVisualisationTeamIpModel {
             "READ-ONLY OBSERVATION",
             "Fault detection, safe-stop coordination and recovery evidence",
             new String[] {
+                "Controller / Plant Faults",
+                "FaultSupervisorCD :13003",
+                "M1 Coordinator",
+                "M1 Visualisation"
+            },
+            new String[] {
                 "Fault alert and correlated event evidence",
                 "Safe-stop request with M1 coordination hold",
                 "Recovery ready/failed state; no automatic M1 resume"
             },
             m3LiveEvidence,
-            m3LiveEvidence ? m3State : "WAITING FOR M1-OBSERVABLE FT EVIDENCE",
+            m3LiveEvidence ? m3State : "NO FT EVIDENCE OBSERVED",
             new String[] {
                 "Source: " + m3Source,
                 "Event: " + m3Event,
                 "Safe stop: " + m3SafeStop,
                 "Recovery: " + m3Recovery
-            }
+            },
+            "Live Coordinator-observed FT evidence | No control outputs"
         );
         values[M4_TWO_SIZE] = new ExtensionSnapshot(
             "M4",
@@ -194,6 +225,15 @@ final class ABSVisualisationTeamIpModel {
             "BottleContextRegistry / Filler / Capper / SortPack",
             "SUPPORTED CAPABILITY",
             "Canonical size context drives geometry-aware processing",
+            new String[] {
+                "Recognition",
+                "BottleContextRegistry",
+                "SMALL S",
+                "LARGE L",
+                "Geometry-aware Filler A / B",
+                "Geometry-aware Capper",
+                "Sort / Pack"
+            },
             new String[] {
                 "SMALL: S / 200 mL / GEOM_S / PACK_S",
                 "LARGE: L / 500 mL / GEOM_L / PACK_L",
@@ -204,7 +244,9 @@ final class ABSVisualisationTeamIpModel {
             new String[] {
                 "No symbolic bottle is guessed to be S or L.",
                 "RecognitionSimulator is environment stimulus, not the IP."
-            }
+            },
+            "Capability/profile representation only | " +
+                "No live size telemetry consumed"
         );
         published = new Snapshot(version, values);
     }

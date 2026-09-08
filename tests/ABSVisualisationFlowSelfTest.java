@@ -22,17 +22,21 @@ public final class ABSVisualisationFlowSelfTest {
         caseJSixPositionRotaryIdentity();
         caseKDelayedCompletionHoldsAtExit();
         caseLLongIdleAndElapsedTimerDoNotDrift();
-        teamIpCaseADigitalTwinIsReadOnlyRepresentation();
-        teamIpCaseBFaultEvidenceEntersHoldView();
-        teamIpCaseCRecoveryIsDisplayOnly();
-        teamIpCaseDTwoSizeProfilesAreExact();
-        teamIpCaseENoLiveSizeIsGuessed();
-        teamIpCaseFDetailsShareOneSnapshot();
-        teamIpCaseGOverviewContinuesWithTeamDetail();
-        teamIpCaseHFaultStillFreezesAnimation();
+        teamIpVisualCaseAM2ArchitectureSnapshot();
+        teamIpVisualCaseBM2DoesNotInventLiveTwin();
+        teamIpVisualCaseCM3NormalEvidence();
+        teamIpVisualCaseDM3FaultHoldEvidence();
+        teamIpVisualCaseEM3RecoveryReadyEvidence();
+        teamIpVisualCaseFM4ProfilesAreExact();
+        teamIpVisualCaseGM4DoesNotGuessCurrentSize();
+        teamIpVisualCaseHDetailReopenDoesNotRestartFlow();
+        teamIpVisualCaseIOverviewContinuesWithDetailOpen();
+        teamIpVisualCaseJNoControlActions();
+        teamIpFaultStillFreezesAnimation();
         System.out.println(
             "ABSVisualisationFlowSelfTest PASS (" + assertions +
-            " assertions; flow cases A-L; TEAM_IP cases A-H)"
+            " assertions; flow cases A-L; TEAM_IP_VISUAL cases A-J; " +
+            "fault freeze regression)"
         );
     }
 
@@ -390,36 +394,78 @@ public final class ABSVisualisationFlowSelfTest {
         assertTrue("L elapsed timer invariants", stalledEdt.invariantsHold());
     }
 
-    private static void teamIpCaseADigitalTwinIsReadOnlyRepresentation() {
-        ABSVisualisationFlowModel flow = new ABSVisualisationFlowModel();
-        flow.acceptRequired(1);
-        flow.acceptStatus(ABSVisualisationFlowModel.LOADER,
-            ABSVisualisationFlowModel.BUSY_STATUS);
-        tick(flow, 10);
-        double before = moduleProgress(flow, ABSVisualisationFlowModel.LOADER);
-
+    private static void teamIpVisualCaseAM2ArchitectureSnapshot() {
         ABSVisualisationTeamIpModel team =
             new ABSVisualisationTeamIpModel();
         ABSVisualisationTeamIpModel.ExtensionSnapshot m2 =
             team.getSnapshot().getExtension(
                 ABSVisualisationTeamIpModel.M2_DIGITAL_TWIN);
-        assertEquals("TEAM_IP A identifies M2", "M2", m2.getMember());
-        assertEquals("TEAM_IP A identifies read-only mode", "READ-ONLY",
+        assertEquals("TEAM_IP_VISUAL_A identifies M2", "M2",
+            m2.getMember());
+        assertEquals("TEAM_IP_VISUAL_A identifies read-only mode",
+            "READ-ONLY",
             m2.getMode());
-        assertContains("TEAM_IP A owns DigitalTwinCD", m2.getOwner(),
+        assertContains("TEAM_IP_VISUAL_A owns DigitalTwinCD", m2.getOwner(),
             "DigitalTwinCD :14002");
-        assertContains("TEAM_IP A owns viewer", m2.getOwner(),
+        assertContains("TEAM_IP_VISUAL_A owns viewer", m2.getOwner(),
             "DigitalTwinViewerCD :14003");
-        assertTrue("TEAM_IP A has no invented live snapshot",
-            !m2.isLiveEvidenceAvailable());
-        assertNear("TEAM_IP A does not alter production", before,
-            moduleProgress(flow, ABSVisualisationFlowModel.LOADER), 0.0);
+        String[] nodes = m2.getArchitectureNodes();
+        assertEquals("TEAM_IP_VISUAL_A node count", 5, nodes.length);
+        assertEquals("TEAM_IP_VISUAL_A event source",
+            "CONFIRMED PRODUCTION EVENTS", nodes[0]);
+        assertEquals("TEAM_IP_VISUAL_A twin CD",
+            "DigitalTwinCD :14002", nodes[1]);
+        assertEquals("TEAM_IP_VISUAL_A workpiece twin",
+            "WorkpieceTwin", nodes[2]);
+        assertEquals("TEAM_IP_VISUAL_A resource twin",
+            "ResourceTwin", nodes[3]);
+        assertEquals("TEAM_IP_VISUAL_A viewer",
+            "DigitalTwinViewerCD :14003", nodes[4]);
     }
 
-    private static void teamIpCaseBFaultEvidenceEntersHoldView() {
+    private static void teamIpVisualCaseBM2DoesNotInventLiveTwin() {
+        ABSVisualisationTeamIpModel.ExtensionSnapshot m2 =
+            new ABSVisualisationTeamIpModel().getSnapshot().getExtension(
+                ABSVisualisationTeamIpModel.M2_DIGITAL_TWIN);
+        assertTrue("TEAM_IP_VISUAL_B has no invented live twin",
+            !m2.isLiveEvidenceAvailable());
+        assertEquals("TEAM_IP_VISUAL_B reports unavailable live snapshot",
+            "LIVE SNAPSHOT NOT EXPOSED TO M1", m2.getLiveHeadline());
+        assertContains("TEAM_IP_VISUAL_B does not infer a bottle",
+            m2.getLiveLines()[0], "No current bottle");
+        assertContains("TEAM_IP_VISUAL_B capability-only representation",
+            m2.getM1Representation(), "Capability representation only");
+    }
+
+    private static void teamIpVisualCaseCM3NormalEvidence() {
         ABSVisualisationTeamIpModel team =
             new ABSVisualisationTeamIpModel();
-        assertTrue("TEAM_IP B accepts Coordinator FT evidence",
+        ABSVisualisationTeamIpModel.ExtensionSnapshot before =
+            team.getSnapshot().getExtension(
+                ABSVisualisationTeamIpModel.M3_FAULT_TOLERANCE);
+        assertTrue("TEAM_IP_VISUAL_C does not fabricate NORMAL before data",
+            !before.isLiveEvidenceAvailable());
+        assertEquals("TEAM_IP_VISUAL_C initially reports no evidence",
+            "NO FT EVIDENCE OBSERVED", before.getLiveHeadline());
+        assertTrue("TEAM_IP_VISUAL_C accepts NORMAL evidence",
+            team.acceptM3Evidence(
+                "V1|NORMAL|NONE|none|NO_REQUEST|NOT_REQUIRED"
+            ));
+        ABSVisualisationTeamIpModel.ExtensionSnapshot m3 =
+            team.getSnapshot().getExtension(
+                ABSVisualisationTeamIpModel.M3_FAULT_TOLERANCE);
+        assertTrue("TEAM_IP_VISUAL_C marks NORMAL evidence live",
+            m3.isLiveEvidenceAvailable());
+        assertEquals("TEAM_IP_VISUAL_C renders NORMAL", "NORMAL",
+            m3.getLiveHeadline());
+        assertContains("TEAM_IP_VISUAL_C renders no active event",
+            m3.getLiveLines()[1], "No active event");
+    }
+
+    private static void teamIpVisualCaseDM3FaultHoldEvidence() {
+        ABSVisualisationTeamIpModel team =
+            new ABSVisualisationTeamIpModel();
+        assertTrue("TEAM_IP_VISUAL_D accepts Coordinator FT evidence",
             team.acceptM3Evidence(
                 "V1|FAULT_HOLD|TRANSFER|EV_7|" +
                 "REQUESTED_HOLD_ACTIVE|AWAITING_EVIDENCE"
@@ -427,27 +473,22 @@ public final class ABSVisualisationFlowSelfTest {
         ABSVisualisationTeamIpModel.ExtensionSnapshot m3 =
             team.getSnapshot().getExtension(
                 ABSVisualisationTeamIpModel.M3_FAULT_TOLERANCE);
-        assertTrue("TEAM_IP B marks evidence live",
+        assertTrue("TEAM_IP_VISUAL_D marks evidence live",
             m3.isLiveEvidenceAvailable());
-        assertEquals("TEAM_IP B enters fault hold", "FAULT HOLD",
+        assertEquals("TEAM_IP_VISUAL_D enters fault hold", "FAULT HOLD",
             m3.getLiveHeadline());
-        assertContains("TEAM_IP B retains source", m3.getLiveLines()[0],
-            "TRANSFER");
-        assertContains("TEAM_IP B retains event", m3.getLiveLines()[1],
-            "EV 7");
+        assertContains("TEAM_IP_VISUAL_D retains source",
+            m3.getLiveLines()[0], "TRANSFER");
+        assertContains("TEAM_IP_VISUAL_D retains event",
+            m3.getLiveLines()[1], "EV 7");
+        assertContains("TEAM_IP_VISUAL_D retains safe-stop state",
+            m3.getLiveLines()[2], "REQUESTED HOLD ACTIVE");
     }
 
-    private static void teamIpCaseCRecoveryIsDisplayOnly() {
-        ABSVisualisationFlowModel flow = new ABSVisualisationFlowModel();
-        flow.acceptRequired(1);
-        flow.acceptStatus(ABSVisualisationFlowModel.LOADER,
-            ABSVisualisationFlowModel.BUSY_STATUS);
-        tick(flow, 8);
-        double before = moduleProgress(flow, ABSVisualisationFlowModel.LOADER);
-
+    private static void teamIpVisualCaseEM3RecoveryReadyEvidence() {
         ABSVisualisationTeamIpModel team =
             new ABSVisualisationTeamIpModel();
-        assertTrue("TEAM_IP C accepts recovery view",
+        assertTrue("TEAM_IP_VISUAL_E accepts recovery view",
             team.acceptM3Evidence(
                 "V1|RECOVERY_READY_HOLD|TRANSFER|EV_7|" +
                 "REQUESTED_HOLD_ACTIVE|READY_AWAITING_M1"
@@ -455,77 +496,137 @@ public final class ABSVisualisationFlowSelfTest {
         ABSVisualisationTeamIpModel.ExtensionSnapshot m3 =
             team.getSnapshot().getExtension(
                 ABSVisualisationTeamIpModel.M3_FAULT_TOLERANCE);
-        assertEquals("TEAM_IP C retains hold while recovery ready",
+        assertEquals("TEAM_IP_VISUAL_E retains hold while recovery ready",
             "RECOVERY READY / HOLD RETAINED", m3.getLiveHeadline());
-        assertNear("TEAM_IP C cannot issue production control", before,
-            moduleProgress(flow, ABSVisualisationFlowModel.LOADER), 0.0);
-        for (java.lang.reflect.Method method :
-            ABSVisualisationTeamIpModel.class.getDeclaredMethods()) {
-            String name = method.getName().toLowerCase();
-            assertTrue("TEAM_IP C exposes no command method " + name,
-                name.indexOf("resume") < 0 &&
-                name.indexOf("reset") < 0 &&
-                name.indexOf("actuat") < 0);
-        }
+        assertContains("TEAM_IP_VISUAL_E renders recovery state",
+            m3.getLiveLines()[3], "READY AWAITING M1");
+        assertContains("TEAM_IP_VISUAL_E is display-only",
+            m3.getM1Representation(), "No control outputs");
     }
 
-    private static void teamIpCaseDTwoSizeProfilesAreExact() {
+    private static void teamIpVisualCaseFM4ProfilesAreExact() {
         ABSVisualisationTeamIpModel.ExtensionSnapshot m4 =
             new ABSVisualisationTeamIpModel().getSnapshot().getExtension(
                 ABSVisualisationTeamIpModel.M4_TWO_SIZE);
         String[] capabilities = m4.getCapabilityLines();
-        assertContains("TEAM_IP D exact small profile", capabilities[0],
+        assertContains("TEAM_IP_VISUAL_F exact small profile",
+            capabilities[0],
             "S / 200 mL / GEOM_S / PACK_S");
-        assertContains("TEAM_IP D exact large profile", capabilities[1],
+        assertContains("TEAM_IP_VISUAL_F exact large profile",
+            capabilities[1],
             "L / 500 mL / GEOM_L / PACK_L");
-        assertContains("TEAM_IP D context processing chain", capabilities[2],
+        assertContains("TEAM_IP_VISUAL_F context processing chain",
+            capabilities[2],
             "Recognition -> context -> fill/cap geometry -> sort/pack");
+        String[] nodes = m4.getArchitectureNodes();
+        assertEquals("TEAM_IP_VISUAL_F architecture node count", 7,
+            nodes.length);
+        assertEquals("TEAM_IP_VISUAL_F small branch", "SMALL S", nodes[2]);
+        assertEquals("TEAM_IP_VISUAL_F large branch", "LARGE L", nodes[3]);
     }
 
-    private static void teamIpCaseENoLiveSizeIsGuessed() {
+    private static void teamIpVisualCaseGM4DoesNotGuessCurrentSize() {
         ABSVisualisationTeamIpModel.ExtensionSnapshot m4 =
             new ABSVisualisationTeamIpModel().getSnapshot().getExtension(
                 ABSVisualisationTeamIpModel.M4_TWO_SIZE);
-        assertTrue("TEAM_IP E has no live M4 size evidence",
+        assertTrue("TEAM_IP_VISUAL_G has no live M4 size evidence",
             !m4.isLiveEvidenceAvailable());
-        assertEquals("TEAM_IP E explicitly reports unavailable live size",
+        assertEquals(
+            "TEAM_IP_VISUAL_G explicitly reports unavailable live size",
             "CURRENT LIVE SIZE NOT EXPOSED TO M1",
             m4.getLiveHeadline());
-        assertContains("TEAM_IP E says no size is guessed",
+        assertContains("TEAM_IP_VISUAL_G says no size is guessed",
             m4.getLiveLines()[0], "No symbolic bottle is guessed");
+        assertContains("TEAM_IP_VISUAL_G capability-only representation",
+            m4.getM1Representation(), "Capability/profile representation");
     }
 
-    private static void teamIpCaseFDetailsShareOneSnapshot() {
-        ABSVisualisationTeamIpModel team =
-            new ABSVisualisationTeamIpModel();
-        ABSVisualisationTeamIpModel.Snapshot overview = team.getSnapshot();
-        ABSVisualisationTeamIpModel.Snapshot detailOpen = team.getSnapshot();
-        ABSVisualisationTeamIpModel.Snapshot detailReopen = team.getSnapshot();
-        assertTrue("TEAM_IP F overview/detail share snapshot",
-            overview == detailOpen);
-        assertTrue("TEAM_IP F reopen does not restart model",
-            overview == detailReopen);
-        assertEquals("TEAM_IP F version remains stable",
-            overview.getVersion(), detailReopen.getVersion());
+    private static void teamIpVisualCaseHDetailReopenDoesNotRestartFlow() {
+        ABSVisualisationFlowModel flow = new ABSVisualisationFlowModel();
+        flow.acceptRequired(1);
+        flow.acceptStatus(ABSVisualisationFlowModel.LOADER,
+            ABSVisualisationFlowModel.BUSY_STATUS);
+        tick(flow, 10);
+        long beforeVersion = flow.getSnapshot().getVersion();
+        double beforeProgress = moduleProgress(
+            flow, ABSVisualisationFlowModel.LOADER);
+
+        for (int index = 0;
+            index < ABSVisualisationTeamIpModel.EXTENSION_COUNT;
+            index++) {
+            ABSVisualisation.TeamIpDetailPanel first =
+                new ABSVisualisation.TeamIpDetailPanel(index);
+            first.setSize(840, 560);
+            first.doLayout();
+            ABSVisualisation.TeamIpDetailPanel reopened =
+                new ABSVisualisation.TeamIpDetailPanel(index);
+            reopened.setSize(840, 560);
+            reopened.doLayout();
+        }
+        assertEquals("TEAM_IP_VISUAL_H detail lifecycle keeps flow version",
+            beforeVersion, flow.getSnapshot().getVersion());
+        assertNear("TEAM_IP_VISUAL_H detail lifecycle keeps flow progress",
+            beforeProgress,
+            moduleProgress(flow, ABSVisualisationFlowModel.LOADER), 0.0);
     }
 
-    private static void teamIpCaseGOverviewContinuesWithTeamDetail() {
+    private static void teamIpVisualCaseIOverviewContinuesWithDetailOpen() {
         ABSVisualisationFlowModel flow = new ABSVisualisationFlowModel();
         flow.acceptRequired(1);
         flow.acceptStatus(ABSVisualisationFlowModel.LOADER,
             ABSVisualisationFlowModel.BUSY_STATUS);
         tick(flow, 5);
         double before = moduleProgress(flow, ABSVisualisationFlowModel.LOADER);
-        ABSVisualisationTeamIpModel team =
-            new ABSVisualisationTeamIpModel();
-        team.getSnapshot().getExtension(
-            ABSVisualisationTeamIpModel.M2_DIGITAL_TWIN);
+        ABSVisualisation.TeamIpDetailPanel detail =
+            new ABSVisualisation.TeamIpDetailPanel(
+                ABSVisualisationTeamIpModel.M3_FAULT_TOLERANCE);
+        detail.setSize(840, 560);
+        detail.doLayout();
         tick(flow, 5);
-        assertTrue("TEAM_IP G production overview continues",
+        assertTrue("TEAM_IP_VISUAL_I production overview continues",
             moduleProgress(flow, ABSVisualisationFlowModel.LOADER) > before);
     }
 
-    private static void teamIpCaseHFaultStillFreezesAnimation() {
+    private static void teamIpVisualCaseJNoControlActions() {
+        for (int index = 0;
+            index < ABSVisualisationTeamIpModel.EXTENSION_COUNT;
+            index++) {
+            ABSVisualisation.TeamIpDetailPanel detail =
+                new ABSVisualisation.TeamIpDetailPanel(index);
+            assertEquals(
+                "TEAM_IP_VISUAL_J detail contains no control buttons " +
+                    index,
+                0,
+                countButtons(detail)
+            );
+        }
+        for (java.lang.reflect.Method method :
+            ABSVisualisationTeamIpModel.class.getDeclaredMethods()) {
+            String name = method.getName().toLowerCase();
+            assertTrue("TEAM_IP_VISUAL_J exposes no control method " + name,
+                name.indexOf("resume") < 0 &&
+                name.indexOf("reset") < 0 &&
+                name.indexOf("ack") < 0 &&
+                name.indexOf("command") < 0 &&
+                name.indexOf("actuat") < 0 &&
+                name.indexOf("control") < 0);
+        }
+    }
+
+    private static int countButtons(java.awt.Container container) {
+        int count = 0;
+        for (java.awt.Component component : container.getComponents()) {
+            if (component instanceof javax.swing.JButton) {
+                count++;
+            }
+            if (component instanceof java.awt.Container) {
+                count += countButtons((java.awt.Container)component);
+            }
+        }
+        return count;
+    }
+
+    private static void teamIpFaultStillFreezesAnimation() {
         ABSVisualisationFlowModel flow = new ABSVisualisationFlowModel();
         flow.acceptRequired(1);
         flow.acceptStatus(ABSVisualisationFlowModel.LOADER,
@@ -542,7 +643,8 @@ public final class ABSVisualisationFlowSelfTest {
             "REQUESTED_HOLD_ACTIVE|AWAITING_EVIDENCE"
         );
         tick(flow, 120);
-        assertNear("TEAM_IP H FAULT freezes production animation", frozen,
+        assertNear("TEAM_IP fault regression freezes production animation",
+            frozen,
             moduleProgress(flow, ABSVisualisationFlowModel.LOADER), 0.0);
 
         team.acceptM3Evidence(
@@ -550,7 +652,8 @@ public final class ABSVisualisationFlowSelfTest {
             "REQUESTED_HOLD_ACTIVE|READY_AWAITING_M1"
         );
         tick(flow, 30);
-        assertNear("TEAM_IP H UI recovery cannot resume production", frozen,
+        assertNear("TEAM_IP fault regression UI cannot resume production",
+            frozen,
             moduleProgress(flow, ABSVisualisationFlowModel.LOADER), 0.0);
     }
 

@@ -371,8 +371,8 @@ public final class ABSVisualisation {
         );
         dialog.setDefaultCloseOperation(JDialog.DISPOSE_ON_CLOSE);
         dialog.setContentPane(detailPanel);
-        dialog.setSize(new Dimension(760, 560));
-        dialog.setMinimumSize(new Dimension(660, 500));
+        dialog.setSize(new Dimension(900, 650));
+        dialog.setMinimumSize(new Dimension(760, 560));
         dialog.setLocationRelativeTo(frame);
         dialog.addWindowListener(new WindowAdapter() {
             @Override
@@ -745,52 +745,27 @@ public final class ABSVisualisation {
         void openTeamIpDetail(int extensionIndex);
     }
 
-    /** Second hierarchy level: team extensions around the GP flow. */
+    /** Second hierarchy level: visual architecture around the GP flow. */
     static final class TeamIpExtensionsPanel extends JPanel {
         private static final long serialVersionUID = 1L;
-        private final JButton[] cards = new JButton[
+        private final TeamIpCard[] cards = new TeamIpCard[
             ABSVisualisationTeamIpModel.EXTENSION_COUNT
         ];
 
         TeamIpExtensionsPanel(final TeamIpWindowOpener opener) {
-            setLayout(new BorderLayout(0, 6));
+            setLayout(new BorderLayout(0, 4));
             setBorder(BorderFactory.createCompoundBorder(
                 BorderFactory.createTitledBorder(
-                    "Team IP Extensions - represented by M1"
+                    "Observed / Represented Team IP Extensions"
                 ),
-                BorderFactory.createEmptyBorder(4, 8, 8, 8)
+                BorderFactory.createEmptyBorder(2, 7, 7, 7)
             ));
-            JLabel relationship = new JLabel(
-                "M2 Digital Twin  |  M3 Fault Tolerance  |  " +
-                "M4 Two-Size Context   ->   " +
-                "M1 read-only hierarchical visualisation",
-                SwingConstants.CENTER
-            );
-            relationship.setFont(new Font(
-                Font.SANS_SERIF,
-                Font.PLAIN,
-                11
-            ));
-            relationship.setForeground(new Color(65, 77, 91));
-            add(relationship, BorderLayout.NORTH);
+            add(new TeamIpHierarchyStrip(), BorderLayout.NORTH);
 
-            JPanel cardRow = new JPanel(new GridLayout(1, 3, 10, 0));
+            JPanel cardRow = new JPanel(new GridLayout(1, 3, 9, 0));
             for (int index = 0; index < cards.length; index++) {
                 final int extensionIndex = index;
-                JButton card = new JButton();
-                card.setCursor(Cursor.getPredefinedCursor(
-                    Cursor.HAND_CURSOR
-                ));
-                card.setFocusPainted(false);
-                card.setOpaque(true);
-                card.setBorder(BorderFactory.createCompoundBorder(
-                    BorderFactory.createLineBorder(
-                        teamIpAccent(index),
-                        2,
-                        true
-                    ),
-                    BorderFactory.createEmptyBorder(5, 8, 5, 8)
-                ));
+                TeamIpCard card = new TeamIpCard(index);
                 card.addActionListener(new ActionListener() {
                     @Override
                     public void actionPerformed(ActionEvent event) {
@@ -800,7 +775,8 @@ public final class ABSVisualisation {
                 cards[index] = card;
                 cardRow.add(card);
             }
-            cardRow.setPreferredSize(new Dimension(0, 106));
+            cardRow.setPreferredSize(new Dimension(0, 100));
+            cardRow.setMinimumSize(new Dimension(0, 84));
             add(cardRow, BorderLayout.CENTER);
             syncState();
         }
@@ -808,94 +784,324 @@ public final class ABSVisualisation {
         void syncState() {
             ABSVisualisationTeamIpModel.Snapshot snapshot = teamIpSnapshot;
             for (int index = 0; index < cards.length; index++) {
-                ABSVisualisationTeamIpModel.ExtensionSnapshot extension =
-                    snapshot.getExtension(index);
-                cards[index].setText(cardText(extension));
-                cards[index].setBackground(cardBackground(index, extension));
-                cards[index].setToolTipText(
-                    "Open " + extension.getMember() + " " +
-                    extension.getTitle() + " integration detail"
-                );
-            }
-        }
-
-        private static String cardText(
-            ABSVisualisationTeamIpModel.ExtensionSnapshot extension
-        ) {
-            return "<html><div style='text-align:center'>" +
-                "<b>" + extension.getMember() + " " +
-                extension.getTitle() + "</b><br>" +
-                extension.getSummary() + "<br>" +
-                "<font color='#3d5268'>" + extension.getMode() +
-                "</font><br><b>" + extension.getLiveHeadline() +
-                "</b></div></html>";
-        }
-
-        private static Color cardBackground(
-            int index,
-            ABSVisualisationTeamIpModel.ExtensionSnapshot extension
-        ) {
-            if (index == ABSVisualisationTeamIpModel.M3_FAULT_TOLERANCE &&
-                extension.getLiveHeadline().indexOf("FAULT") >= 0) {
-                return new Color(255, 232, 232);
-            }
-            if (index == ABSVisualisationTeamIpModel.M3_FAULT_TOLERANCE &&
-                extension.getLiveHeadline().indexOf("RECOVERY") >= 0) {
-                return new Color(255, 246, 218);
-            }
-            return new Color(245, 249, 252);
-        }
-
-        private static Color teamIpAccent(int index) {
-            switch (index) {
-                case ABSVisualisationTeamIpModel.M2_DIGITAL_TWIN:
-                    return new Color(54, 116, 173);
-                case ABSVisualisationTeamIpModel.M3_FAULT_TOLERANCE:
-                    return new Color(185, 75, 56);
-                default:
-                    return new Color(99, 79, 164);
+                cards[index].setExtension(snapshot.getExtension(index));
             }
         }
     }
 
-    /** Read-only detail view; it shares the current team-IP snapshot. */
+    /** Compact hierarchy legend; its arrows mean representation, not control. */
+    static final class TeamIpHierarchyStrip extends JPanel {
+        private static final long serialVersionUID = 1L;
+
+        TeamIpHierarchyStrip() {
+            setOpaque(false);
+            setPreferredSize(new Dimension(0, 62));
+            setMinimumSize(new Dimension(0, 58));
+        }
+
+        @Override
+        protected void paintComponent(Graphics graphics) {
+            super.paintComponent(graphics);
+            Graphics2D g2 = (Graphics2D)graphics.create();
+            TeamIpGraphics.prepare(g2);
+            int width = getWidth();
+            if (width < 240) {
+                g2.dispose();
+                return;
+            }
+            int centre = width / 2;
+
+            TeamIpGraphics.node(
+                g2,
+                centre - 100,
+                1,
+                200,
+                18,
+                new Color(239, 244, 248),
+                new Color(119, 137, 154),
+                "GP PRODUCTION FLOW",
+                null
+            );
+            g2.setColor(new Color(91, 111, 130));
+            TeamIpGraphics.arrow(g2, centre, 19, centre, 22);
+            TeamIpGraphics.node(
+                g2,
+                centre - 155,
+                23,
+                310,
+                32,
+                new Color(225, 240, 249),
+                new Color(40, 123, 168),
+                "M1 HIERARCHICAL VISUALISATION",
+                "REPRESENTS / OBSERVES - NEVER CONTROLS"
+            );
+
+            int[] branchX = {width / 6, width / 2, width * 5 / 6};
+            g2.setColor(new Color(119, 137, 154));
+            g2.drawLine(centre, 55, centre, 60);
+            g2.drawLine(branchX[0], 60, branchX[2], 60);
+            for (int x : branchX) {
+                g2.fillOval(x - 2, 58, 4, 4);
+            }
+            g2.dispose();
+        }
+    }
+
+    /** A clickable miniature architecture diagram, not a prose card. */
+    static final class TeamIpCard extends JButton {
+        private static final long serialVersionUID = 1L;
+        private final int extensionIndex;
+        private ABSVisualisationTeamIpModel.ExtensionSnapshot extension;
+
+        TeamIpCard(int index) {
+            extensionIndex = index;
+            setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+            setFocusPainted(false);
+            setContentAreaFilled(false);
+            setBorderPainted(false);
+            setOpaque(false);
+            setRolloverEnabled(true);
+            setPreferredSize(new Dimension(260, 100));
+        }
+
+        void setExtension(
+            ABSVisualisationTeamIpModel.ExtensionSnapshot value
+        ) {
+            extension = value;
+            String description = value.getMember() + " " +
+                value.getTitle() + " architecture - OPEN DETAIL";
+            getAccessibleContext().setAccessibleName(description);
+            setToolTipText(description);
+            repaint();
+        }
+
+        @Override
+        protected void paintComponent(Graphics graphics) {
+            Graphics2D g2 = (Graphics2D)graphics.create();
+            TeamIpGraphics.prepare(g2);
+            int width = getWidth();
+            int height = getHeight();
+            ABSVisualisationTeamIpModel.ExtensionSnapshot value = extension;
+            if (value == null || width <= 0 || height <= 0) {
+                g2.dispose();
+                return;
+            }
+
+            Color accent = TeamIpGraphics.accent(extensionIndex);
+            Color background = TeamIpGraphics.cardBackground(
+                extensionIndex,
+                value
+            );
+            if (getModel().isRollover()) {
+                background = TeamIpGraphics.mix(background, Color.WHITE, 0.35);
+            }
+            if (getModel().isPressed()) {
+                background = TeamIpGraphics.mix(background, accent, 0.14);
+            }
+            g2.setColor(background);
+            g2.fillRoundRect(1, 1, width - 3, height - 3, 14, 14);
+            g2.setStroke(new BasicStroke(
+                getModel().isRollover() ? 2.6f : 1.8f
+            ));
+            g2.setColor(accent);
+            g2.drawRoundRect(1, 1, width - 3, height - 3, 14, 14);
+
+            g2.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 12));
+            g2.setColor(new Color(35, 49, 63));
+            TeamIpGraphics.centered(
+                g2,
+                value.getMember() + "  " + value.getTitle(),
+                width / 2,
+                15
+            );
+            g2.setColor(new Color(208, 216, 224));
+            g2.drawLine(12, 21, width - 12, 21);
+
+            switch (extensionIndex) {
+                case ABSVisualisationTeamIpModel.M2_DIGITAL_TWIN:
+                    paintM2Mini(g2, width);
+                    break;
+                case ABSVisualisationTeamIpModel.M3_FAULT_TOLERANCE:
+                    paintM3Mini(g2, width);
+                    break;
+                default:
+                    paintM4Mini(g2, width);
+                    break;
+            }
+
+            paintFooter(g2, width, height, value, accent);
+            if (isFocusOwner()) {
+                g2.setColor(new Color(30, 102, 153));
+                g2.drawRoundRect(4, 4, width - 9, height - 9, 11, 11);
+            }
+            g2.dispose();
+        }
+
+        private void paintM2Mini(Graphics2D g2, int width) {
+            int boxWidth = Math.max(54, (width - 68) / 3);
+            int left = 10;
+            TeamIpGraphics.miniNode(
+                g2, left, 31, boxWidth, 25, "CONFIRMED EVENTS"
+            );
+            TeamIpGraphics.miniNode(
+                g2, left + boxWidth + 17, 25,
+                boxWidth, 16, "WORKPIECE TWIN"
+            );
+            TeamIpGraphics.miniNode(
+                g2, left + boxWidth + 17, 43,
+                boxWidth, 16, "RESOURCE TWIN"
+            );
+            TeamIpGraphics.miniNode(
+                g2, left + (boxWidth + 17) * 2, 31,
+                boxWidth, 25, "READ-ONLY VIEWER"
+            );
+            g2.setColor(new Color(91, 111, 130));
+            TeamIpGraphics.arrow(
+                g2, left + boxWidth, 43,
+                left + boxWidth + 14, 43
+            );
+            TeamIpGraphics.arrow(
+                g2, left + boxWidth * 2 + 17, 43,
+                left + boxWidth * 2 + 31, 43
+            );
+        }
+
+        private void paintM3Mini(Graphics2D g2, int width) {
+            int boxWidth = Math.max(62, (width - 54) / 3);
+            int y = 31;
+            int left = 10;
+            TeamIpGraphics.miniNode(
+                g2, left, y, boxWidth, 24, "MACHINE FAULT"
+            );
+            TeamIpGraphics.miniNode(
+                g2,
+                left + boxWidth + 17,
+                y,
+                boxWidth,
+                24,
+                "FAULT SUPERVISOR"
+            );
+            TeamIpGraphics.miniNode(
+                g2,
+                left + (boxWidth + 17) * 2,
+                y,
+                boxWidth,
+                24,
+                "M1 OBSERVES"
+            );
+            g2.setColor(new Color(130, 103, 91));
+            TeamIpGraphics.arrow(
+                g2, left + boxWidth, y + 12,
+                left + boxWidth + 14, y + 12
+            );
+            TeamIpGraphics.arrow(
+                g2, left + boxWidth * 2 + 17, y + 12,
+                left + boxWidth * 2 + 31, y + 12
+            );
+            g2.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 8));
+            g2.setColor(new Color(85, 96, 108));
+            TeamIpGraphics.centered(
+                g2,
+                "SAFE STOP  |  RECOVERY EVIDENCE",
+                width / 2,
+                63
+            );
+        }
+
+        private void paintM4Mini(Graphics2D g2, int width) {
+            int boxWidth = Math.max(54, (width - 68) / 3);
+            int left = 10;
+            TeamIpGraphics.miniNode(
+                g2, left, 31, boxWidth, 25, "RECOGNITION"
+            );
+            TeamIpGraphics.miniNode(
+                g2, left + boxWidth + 17, 31,
+                boxWidth, 25, "BOTTLE CONTEXT"
+            );
+            TeamIpGraphics.miniNode(
+                g2, left + (boxWidth + 17) * 2, 25,
+                boxWidth, 16, "S 200 / GEOM_S"
+            );
+            TeamIpGraphics.miniNode(
+                g2, left + (boxWidth + 17) * 2, 43,
+                boxWidth, 16, "L 500 / GEOM_L"
+            );
+            g2.setColor(new Color(91, 111, 130));
+            TeamIpGraphics.arrow(
+                g2, left + boxWidth, 43,
+                left + boxWidth + 14, 43
+            );
+            TeamIpGraphics.arrow(
+                g2, left + boxWidth * 2 + 17, 43,
+                left + boxWidth * 2 + 31, 43
+            );
+        }
+
+        private void paintFooter(
+            Graphics2D g2,
+            int width,
+            int height,
+            ABSVisualisationTeamIpModel.ExtensionSnapshot value,
+            Color accent
+        ) {
+            String status;
+            if (extensionIndex ==
+                ABSVisualisationTeamIpModel.M2_DIGITAL_TWIN) {
+                status = "LIVE TO M1: NOT EXPOSED";
+            }
+            else if (extensionIndex ==
+                ABSVisualisationTeamIpModel.M4_TWO_SIZE) {
+                status = "LIVE SIZE TO M1: NOT EXPOSED";
+            }
+            else {
+                status = "CURRENT: " + value.getLiveHeadline();
+            }
+            g2.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 8));
+            g2.setColor(TeamIpGraphics.statusColor(extensionIndex, value));
+            TeamIpGraphics.centered(g2, status, width / 2, height - 13);
+            g2.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 8));
+            g2.setColor(accent);
+            g2.drawString("OPEN DETAIL  >", width - 79, height - 3);
+        }
+    }
+
+    /** Read-only detail view with an IP-specific architecture canvas. */
     static final class TeamIpDetailPanel extends JPanel {
         private static final long serialVersionUID = 1L;
         private final int extensionIndex;
         private final JLabel title = new JLabel();
         private final JLabel owner = new JLabel();
-        private final JLabel capability = new JLabel();
-        private final JLabel evidence = new JLabel();
-        private final JLabel boundary = new JLabel();
+        private final JLabel representation = new JLabel();
+        private final TeamIpArchitectureCanvas architectureCanvas;
 
         TeamIpDetailPanel(int index) {
             extensionIndex = index;
-            setLayout(new BorderLayout(12, 12));
-            setBorder(BorderFactory.createEmptyBorder(18, 18, 18, 18));
+            architectureCanvas = new TeamIpArchitectureCanvas(index);
+            setLayout(new BorderLayout(10, 8));
+            setBorder(BorderFactory.createEmptyBorder(12, 12, 12, 12));
 
             JPanel heading = new JPanel();
             heading.setLayout(new BoxLayout(heading, BoxLayout.Y_AXIS));
             title.setAlignmentX(Component.CENTER_ALIGNMENT);
-            title.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 22));
+            title.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 21));
             owner.setAlignmentX(Component.CENTER_ALIGNMENT);
-            owner.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 12));
+            owner.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 11));
             owner.setForeground(new Color(72, 83, 96));
             heading.add(title);
-            heading.add(Box.createVerticalStrut(5));
+            heading.add(Box.createVerticalStrut(3));
             heading.add(owner);
             add(heading, BorderLayout.NORTH);
 
-            JPanel sections = new JPanel(new GridLayout(1, 2, 12, 0));
-            sections.add(sectionPanel("IMPLEMENTED CAPABILITY", capability));
-            sections.add(sectionPanel("AVAILABLE LIVE EVIDENCE", evidence));
-            add(sections, BorderLayout.CENTER);
+            add(architectureCanvas, BorderLayout.CENTER);
 
-            boundary.setHorizontalAlignment(SwingConstants.CENTER);
-            boundary.setOpaque(true);
-            boundary.setBackground(new Color(235, 241, 247));
-            boundary.setForeground(new Color(48, 66, 84));
-            boundary.setBorder(BorderFactory.createEmptyBorder(10, 8, 10, 8));
-            add(boundary, BorderLayout.SOUTH);
+            representation.setHorizontalAlignment(SwingConstants.CENTER);
+            representation.setOpaque(true);
+            representation.setBackground(new Color(232, 240, 247));
+            representation.setForeground(new Color(43, 62, 80));
+            representation.setBorder(
+                BorderFactory.createEmptyBorder(8, 8, 8, 8)
+            );
+            add(representation, BorderLayout.SOUTH);
             syncState();
         }
 
@@ -906,47 +1112,761 @@ public final class ABSVisualisation {
                 extension.getTitle());
             owner.setText(extension.getOwner() + "  |  " +
                 extension.getMode());
-            capability.setText(linesHtml(
-                extension.getSummary(),
-                extension.getCapabilityLines()
-            ));
-            evidence.setText(linesHtml(
-                extension.getLiveHeadline(),
-                extension.getLiveLines()
-            ));
-            boundary.setText(
-                "<html><b>M1 boundary:</b> representation and observation " +
-                "only - no actuator, reset, safe-stop or resume command" +
-                "</html>"
+            representation.setText(
+                "<html><b>HOW M1 REPRESENTS THIS IP</b>&nbsp;&nbsp; " +
+                extension.getM1Representation() +
+                "&nbsp;&nbsp; | &nbsp;&nbsp;<b>READ-ONLY</b></html>"
             );
+            architectureCanvas.setExtension(extension);
+        }
+    }
+
+    /** Scalable architecture and state drawing shared by all detail windows. */
+    static final class TeamIpArchitectureCanvas extends JPanel {
+        private static final long serialVersionUID = 1L;
+        private static final int DESIGN_WIDTH = 840;
+        private static final int DESIGN_HEIGHT = 460;
+        private final int extensionIndex;
+        private ABSVisualisationTeamIpModel.ExtensionSnapshot extension;
+
+        TeamIpArchitectureCanvas(int index) {
+            extensionIndex = index;
+            setOpaque(true);
+            setBackground(Color.WHITE);
+            setPreferredSize(new Dimension(DESIGN_WIDTH, DESIGN_HEIGHT));
+            setMinimumSize(new Dimension(620, 360));
         }
 
-        private static JPanel sectionPanel(String heading, JLabel content) {
-            JPanel panel = new JPanel(new BorderLayout(0, 8));
-            panel.setBorder(BorderFactory.createCompoundBorder(
-                BorderFactory.createLineBorder(new Color(194, 205, 216)),
-                BorderFactory.createEmptyBorder(14, 14, 14, 14)
-            ));
-            JLabel label = new JLabel(heading, SwingConstants.CENTER);
-            label.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 14));
-            label.setForeground(new Color(46, 67, 88));
-            panel.add(label, BorderLayout.NORTH);
-            content.setVerticalAlignment(SwingConstants.TOP);
-            content.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 13));
-            panel.add(content, BorderLayout.CENTER);
-            return panel;
+        void setExtension(
+            ABSVisualisationTeamIpModel.ExtensionSnapshot value
+        ) {
+            extension = value;
+            repaint();
         }
 
-        private static String linesHtml(String headline, String[] lines) {
-            StringBuilder text = new StringBuilder(
-                "<html><div style='width:260px'><b>"
-            );
-            text.append(headline).append("</b><br><br>");
-            for (String line : lines) {
-                text.append("&#8226; ").append(line).append("<br><br>");
+        @Override
+        protected void paintComponent(Graphics graphics) {
+            super.paintComponent(graphics);
+            ABSVisualisationTeamIpModel.ExtensionSnapshot value = extension;
+            if (value == null) {
+                return;
             }
-            text.append("</div></html>");
-            return text.toString();
+            Graphics2D g2 = (Graphics2D)graphics.create();
+            TeamIpGraphics.prepare(g2);
+            double scale = Math.min(
+                getWidth() / (double)DESIGN_WIDTH,
+                getHeight() / (double)DESIGN_HEIGHT
+            );
+            double offsetX = (getWidth() - DESIGN_WIDTH * scale) / 2.0;
+            double offsetY = (getHeight() - DESIGN_HEIGHT * scale) / 2.0;
+            g2.translate(offsetX, offsetY);
+            g2.scale(scale, scale);
+            g2.setColor(new Color(248, 250, 252));
+            g2.fillRoundRect(2, 2, DESIGN_WIDTH - 4, DESIGN_HEIGHT - 4,
+                18, 18);
+            g2.setColor(new Color(205, 214, 223));
+            g2.drawRoundRect(2, 2, DESIGN_WIDTH - 4, DESIGN_HEIGHT - 4,
+                18, 18);
+
+            switch (extensionIndex) {
+                case ABSVisualisationTeamIpModel.M2_DIGITAL_TWIN:
+                    paintM2(g2, value);
+                    break;
+                case ABSVisualisationTeamIpModel.M3_FAULT_TOLERANCE:
+                    paintM3(g2, value);
+                    break;
+                default:
+                    paintM4(g2, value);
+                    break;
+            }
+            g2.dispose();
+        }
+
+        private void paintM2(
+            Graphics2D g2,
+            ABSVisualisationTeamIpModel.ExtensionSnapshot value
+        ) {
+            Color accent = TeamIpGraphics.accent(extensionIndex);
+            TeamIpGraphics.sectionTitle(g2, "ARCHITECTURE / DATA FLOW", 285);
+            TeamIpGraphics.node(
+                g2, 170, 30, 230, 42,
+                new Color(239, 244, 248), accent,
+                "CONFIRMED PRODUCTION EVENTS", "validated updates only"
+            );
+            g2.setColor(new Color(91, 111, 130));
+            TeamIpGraphics.arrow(g2, 285, 72, 285, 100);
+            TeamIpGraphics.node(
+                g2, 165, 102, 240, 55,
+                new Color(225, 240, 249), accent,
+                "DigitalTwinCD", ":14002  |  immutable snapshot owner"
+            );
+
+            g2.setColor(new Color(91, 111, 130));
+            g2.drawLine(285, 157, 285, 177);
+            g2.drawLine(140, 177, 430, 177);
+            TeamIpGraphics.arrow(g2, 140, 177, 140, 198);
+            TeamIpGraphics.arrow(g2, 430, 177, 430, 198);
+            TeamIpGraphics.node(
+                g2, 25, 200, 230, 112,
+                new Color(242, 248, 252), accent, "", null
+            );
+            TeamIpGraphics.node(
+                g2, 315, 200, 230, 112,
+                new Color(242, 248, 252), accent, "", null
+            );
+            TeamIpGraphics.iconBottle(g2, 65, 235, 30, 54, accent);
+            TeamIpGraphics.iconMachine(g2, 352, 239, accent);
+            g2.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 13));
+            g2.setColor(new Color(42, 55, 68));
+            g2.drawString("WorkpieceTwin", 113, 235);
+            g2.drawString("ResourceTwin", 403, 235);
+            g2.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 10));
+            g2.setColor(new Color(74, 86, 98));
+            g2.drawString("bottle ID / profile", 113, 257);
+            g2.drawString("lifecycle / history", 113, 275);
+            g2.drawString("machine / status", 403, 257);
+            g2.drawString("operation / fault history", 403, 275);
+
+            g2.setColor(new Color(91, 111, 130));
+            g2.drawLine(140, 312, 140, 327);
+            g2.drawLine(430, 312, 430, 327);
+            g2.drawLine(140, 327, 430, 327);
+            TeamIpGraphics.arrow(g2, 285, 327, 285, 347);
+            TeamIpGraphics.node(
+                g2, 165, 349, 240, 55,
+                new Color(233, 244, 237), new Color(52, 137, 82),
+                "DigitalTwinViewerCD", ":14003  |  dedicated read-only viewer"
+            );
+
+            TeamIpGraphics.sidePanel(g2, 570, 20, 250, 420, accent);
+            TeamIpGraphics.panelHeading(g2, "INTEGRATION STATUS", 695, 47);
+            TeamIpGraphics.badge(
+                g2, 598, 61, 194, 28,
+                new Color(229, 238, 246), new Color(55, 93, 128),
+                "MODE: READ-ONLY"
+            );
+            TeamIpGraphics.badge(
+                g2, 598, 99, 194, 36,
+                new Color(246, 238, 217), new Color(147, 102, 26),
+                "M1 LIVE CONNECTION: NOT EXPOSED"
+            );
+            g2.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 11));
+            g2.setColor(new Color(75, 84, 93));
+            TeamIpGraphics.wrapped(
+                g2,
+                "Live Digital Twin snapshots are owned by M2 and are not " +
+                    "part of the current M1 visualisation telemetry.",
+                592,
+                158,
+                206,
+                15
+            );
+            TeamIpGraphics.panelHeading(g2, "WHAT THIS IP ADDS", 695, 235);
+            TeamIpGraphics.bullets(
+                g2,
+                new String[] {
+                    "persistent workpiece representation",
+                    "resource representation",
+                    "immutable snapshots",
+                    "duplicate / invalid update rejection"
+                },
+                593,
+                258,
+                205,
+                28
+            );
+            TeamIpGraphics.readOnlyShield(g2, 695, 402);
+        }
+
+        private void paintM3(
+            Graphics2D g2,
+            ABSVisualisationTeamIpModel.ExtensionSnapshot value
+        ) {
+            Color accent = TeamIpGraphics.accent(extensionIndex);
+            TeamIpGraphics.sectionTitle(g2, "FAULT COORDINATION FLOW", 270);
+            TeamIpGraphics.node(
+                g2, 145, 34, 250, 48,
+                new Color(250, 239, 236), accent,
+                "CONTROLLER / PLANT FAULTS", "real fault events"
+            );
+            g2.setColor(new Color(123, 92, 83));
+            TeamIpGraphics.arrow(g2, 270, 82, 270, 111);
+            TeamIpGraphics.node(
+                g2, 135, 113, 270, 58,
+                new Color(255, 235, 231), accent,
+                "FaultSupervisorCD", ":13003  |  correlation and recovery state"
+            );
+
+            g2.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 10));
+            g2.setColor(new Color(126, 86, 73));
+            TeamIpGraphics.centered(
+                g2, "SAFE-STOP COORDINATION", 145, 204
+            );
+            TeamIpGraphics.centered(
+                g2, "RECOVERY EVIDENCE", 395, 204
+            );
+            g2.setColor(new Color(123, 92, 83));
+            TeamIpGraphics.arrow(g2, 220, 171, 220, 220);
+            TeamIpGraphics.arrow(g2, 320, 171, 320, 220);
+            TeamIpGraphics.node(
+                g2, 130, 222, 280, 58,
+                new Color(239, 246, 250), new Color(49, 119, 158),
+                "M1 Coordinator", "FT evidence only  |  coordination hold"
+            );
+            g2.setColor(new Color(71, 106, 128));
+            TeamIpGraphics.arrow(g2, 270, 280, 270, 323);
+            TeamIpGraphics.node(
+                g2, 140, 325, 260, 58,
+                new Color(233, 244, 237), new Color(52, 137, 82),
+                "M1 Visualisation", "READ-ONLY OBSERVATION"
+            );
+            TeamIpGraphics.readOnlyShield(g2, 270, 420);
+
+            Color health = TeamIpGraphics.statusColor(extensionIndex, value);
+            TeamIpGraphics.sidePanel(g2, 530, 20, 290, 420, health);
+            TeamIpGraphics.panelHeading(g2, "LIVE M1-OBSERVABLE DATA", 675, 47);
+            TeamIpGraphics.badge(
+                g2,
+                555,
+                63,
+                240,
+                48,
+                TeamIpGraphics.pale(health),
+                health,
+                value.getLiveHeadline()
+            );
+            g2.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 11));
+            g2.setColor(new Color(48, 60, 72));
+            g2.drawString("SYSTEM HEALTH", 555, 133);
+            if (!value.isLiveEvidenceAvailable()) {
+                g2.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 12));
+                g2.setColor(new Color(92, 102, 112));
+                TeamIpGraphics.wrapped(
+                    g2,
+                    "No FT evidence observed. The panel will update from " +
+                        "real Coordinator-observed VIZ_FT_EVIDENCE.",
+                    555,
+                    158,
+                    238,
+                    17
+                );
+            }
+            else {
+                String[] rows = value.getLiveLines();
+                int y = 156;
+                for (String row : rows) {
+                    TeamIpGraphics.dataRow(g2, 555, y, 240, 42, row);
+                    y += 50;
+                }
+            }
+            TeamIpGraphics.badge(
+                g2, 555, 374, 240, 37,
+                new Color(232, 240, 247), new Color(55, 93, 128),
+                "READ-ONLY SHIELD  |  NO CONTROL OUTPUTS"
+            );
+        }
+
+        private void paintM4(
+            Graphics2D g2,
+            ABSVisualisationTeamIpModel.ExtensionSnapshot value
+        ) {
+            Color accent = TeamIpGraphics.accent(extensionIndex);
+            TeamIpGraphics.sectionTitle(g2, "TWO-SIZE PROCESSING ARCHITECTURE", 285);
+            TeamIpGraphics.node(
+                g2, 185, 25, 200, 38,
+                new Color(240, 237, 250), accent,
+                "Recognition", "canonical detection input"
+            );
+            g2.setColor(new Color(96, 83, 139));
+            TeamIpGraphics.arrow(g2, 285, 63, 285, 85);
+            TeamIpGraphics.node(
+                g2, 165, 87, 240, 48,
+                new Color(237, 234, 249), accent,
+                "BottleContextRegistry", "canonical bottle-size context"
+            );
+
+            g2.setColor(new Color(96, 83, 139));
+            g2.drawLine(285, 135, 285, 153);
+            g2.drawLine(145, 153, 425, 153);
+            TeamIpGraphics.arrow(g2, 145, 153, 145, 169);
+            TeamIpGraphics.arrow(g2, 425, 153, 425, 169);
+            TeamIpGraphics.profileNode(
+                g2, 35, 171, 220, 105, false,
+                "SMALL  S", "200 mL", "GEOM_S", "PACK_S"
+            );
+            TeamIpGraphics.profileNode(
+                g2, 315, 171, 220, 105, true,
+                "LARGE  L", "500 mL", "GEOM_L", "PACK_L"
+            );
+
+            g2.setColor(new Color(96, 83, 139));
+            TeamIpGraphics.arrow(g2, 145, 276, 250, 301);
+            TeamIpGraphics.arrow(g2, 425, 276, 320, 301);
+            TeamIpGraphics.node(
+                g2, 165, 303, 240, 40,
+                new Color(244, 241, 251), accent,
+                "Geometry-aware Filler A / B", null
+            );
+            TeamIpGraphics.arrow(g2, 285, 343, 285, 354);
+            TeamIpGraphics.node(
+                g2, 165, 356, 240, 40,
+                new Color(244, 241, 251), accent,
+                "Geometry-aware Capper", null
+            );
+            TeamIpGraphics.arrow(g2, 285, 396, 285, 407);
+            TeamIpGraphics.node(
+                g2, 165, 409, 240, 38,
+                new Color(233, 244, 237), new Color(52, 137, 82),
+                "Sort / Pack", "LANE_S / LANE_L"
+            );
+
+            TeamIpGraphics.sidePanel(g2, 570, 20, 250, 420, accent);
+            TeamIpGraphics.panelHeading(g2, "SUPPORTED PROFILES", 695, 47);
+            TeamIpGraphics.badge(
+                g2, 595, 65, 200, 42,
+                new Color(238, 234, 250), accent,
+                "S / 200 mL / GEOM_S / PACK_S"
+            );
+            TeamIpGraphics.badge(
+                g2, 595, 117, 200, 42,
+                new Color(238, 234, 250), accent,
+                "L / 500 mL / GEOM_L / PACK_L"
+            );
+            TeamIpGraphics.panelHeading(g2, "LIVE M1-OBSERVABLE DATA", 695, 194);
+            TeamIpGraphics.badge(
+                g2, 595, 211, 200, 48,
+                new Color(246, 238, 217), new Color(147, 102, 26),
+                "CURRENT LIVE SIZE: NOT EXPOSED TO M1"
+            );
+            g2.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 11));
+            g2.setColor(new Color(75, 84, 93));
+            TeamIpGraphics.wrapped(
+                g2,
+                "No symbolic bottle is labelled S or L without real " +
+                    "telemetry.",
+                596,
+                287,
+                198,
+                16
+            );
+            TeamIpGraphics.wrapped(
+                g2,
+                "RecognitionSimulator is environmental stimulus only; " +
+                    "it is not the M4 IP itself.",
+                596,
+                350,
+                198,
+                16
+            );
+            TeamIpGraphics.readOnlyShield(g2, 695, 414);
+        }
+    }
+
+    /** Shared drawing primitives for the Team-IP hierarchy. */
+    static final class TeamIpGraphics {
+        private TeamIpGraphics() {
+        }
+
+        static void prepare(Graphics2D g2) {
+            g2.setRenderingHint(
+                RenderingHints.KEY_ANTIALIASING,
+                RenderingHints.VALUE_ANTIALIAS_ON
+            );
+            g2.setRenderingHint(
+                RenderingHints.KEY_TEXT_ANTIALIASING,
+                RenderingHints.VALUE_TEXT_ANTIALIAS_ON
+            );
+        }
+
+        static Color accent(int index) {
+            if (index == ABSVisualisationTeamIpModel.M2_DIGITAL_TWIN) {
+                return new Color(54, 116, 173);
+            }
+            if (index == ABSVisualisationTeamIpModel.M3_FAULT_TOLERANCE) {
+                return new Color(185, 75, 56);
+            }
+            return new Color(99, 79, 164);
+        }
+
+        static Color cardBackground(
+            int index,
+            ABSVisualisationTeamIpModel.ExtensionSnapshot value
+        ) {
+            if (index != ABSVisualisationTeamIpModel.M3_FAULT_TOLERANCE ||
+                !value.isLiveEvidenceAvailable()) {
+                return new Color(246, 249, 252);
+            }
+            return pale(statusColor(index, value));
+        }
+
+        static Color statusColor(
+            int index,
+            ABSVisualisationTeamIpModel.ExtensionSnapshot value
+        ) {
+            if (index != ABSVisualisationTeamIpModel.M3_FAULT_TOLERANCE ||
+                !value.isLiveEvidenceAvailable()) {
+                return new Color(95, 108, 120);
+            }
+            String state = value.getLiveHeadline();
+            if ("NORMAL".equals(state)) {
+                return new Color(40, 139, 78);
+            }
+            if (state.indexOf("RECOVERY READY") >= 0) {
+                return new Color(47, 113, 162);
+            }
+            if (state.indexOf("FAULT ALERT") >= 0) {
+                return new Color(205, 103, 28);
+            }
+            if (state.indexOf("RECOVERY FAILED") >= 0) {
+                return new Color(160, 40, 48);
+            }
+            return new Color(190, 43, 43);
+        }
+
+        static Color pale(Color source) {
+            return mix(source, Color.WHITE, 0.84);
+        }
+
+        static Color mix(Color first, Color second, double secondWeight) {
+            double weight = Math.max(0.0, Math.min(1.0, secondWeight));
+            return new Color(
+                (int)Math.round(first.getRed() * (1.0 - weight) +
+                    second.getRed() * weight),
+                (int)Math.round(first.getGreen() * (1.0 - weight) +
+                    second.getGreen() * weight),
+                (int)Math.round(first.getBlue() * (1.0 - weight) +
+                    second.getBlue() * weight)
+            );
+        }
+
+        static void sectionTitle(Graphics2D g2, String text, int centreX) {
+            g2.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 12));
+            g2.setColor(new Color(53, 67, 81));
+            centered(g2, text, centreX, 18);
+        }
+
+        static void node(
+            Graphics2D g2,
+            int x,
+            int y,
+            int width,
+            int height,
+            Color fill,
+            Color border,
+            String title,
+            String subtitle
+        ) {
+            g2.setColor(fill);
+            g2.fillRoundRect(x, y, width, height, 12, 12);
+            g2.setColor(border);
+            g2.setStroke(new BasicStroke(1.8f));
+            g2.drawRoundRect(x, y, width, height, 12, 12);
+            g2.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 13));
+            g2.setColor(new Color(42, 55, 68));
+            centered(
+                g2,
+                title,
+                x + width / 2,
+                y + (subtitle == null ? height / 2 + 5 : height / 2)
+            );
+            if (subtitle != null) {
+                g2.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 10));
+                g2.setColor(new Color(74, 86, 98));
+                centered(g2, subtitle, x + width / 2, y + height / 2 + 16);
+            }
+        }
+
+        static void miniNode(
+            Graphics2D g2,
+            int x,
+            int y,
+            int width,
+            int height,
+            String text
+        ) {
+            g2.setColor(new Color(240, 245, 249));
+            g2.fillRoundRect(x, y, width, height, 6, 6);
+            g2.setColor(new Color(117, 134, 151));
+            g2.drawRoundRect(x, y, width, height, 6, 6);
+            g2.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 7));
+            g2.setColor(new Color(55, 67, 80));
+            centered(g2, text, x + width / 2, y + height / 2 + 3);
+        }
+
+        static void sidePanel(
+            Graphics2D g2,
+            int x,
+            int y,
+            int width,
+            int height,
+            Color accentColor
+        ) {
+            g2.setColor(new Color(252, 253, 254));
+            g2.fillRoundRect(x, y, width, height, 14, 14);
+            g2.setColor(mix(accentColor, Color.WHITE, 0.35));
+            g2.setStroke(new BasicStroke(1.6f));
+            g2.drawRoundRect(x, y, width, height, 14, 14);
+        }
+
+        static void panelHeading(
+            Graphics2D g2,
+            String text,
+            int centreX,
+            int baselineY
+        ) {
+            g2.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 11));
+            g2.setColor(new Color(48, 62, 76));
+            centered(g2, text, centreX, baselineY);
+        }
+
+        static void badge(
+            Graphics2D g2,
+            int x,
+            int y,
+            int width,
+            int height,
+            Color fill,
+            Color border,
+            String text
+        ) {
+            g2.setColor(fill);
+            g2.fillRoundRect(x, y, width, height, 10, 10);
+            g2.setColor(border);
+            g2.drawRoundRect(x, y, width, height, 10, 10);
+            g2.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 10));
+            g2.setColor(border);
+            wrappedCentered(g2, text, x, y, width, height, 12);
+        }
+
+        static void dataRow(
+            Graphics2D g2,
+            int x,
+            int y,
+            int width,
+            int height,
+            String text
+        ) {
+            g2.setColor(new Color(242, 246, 249));
+            g2.fillRoundRect(x, y, width, height, 8, 8);
+            g2.setColor(new Color(202, 212, 221));
+            g2.drawRoundRect(x, y, width, height, 8, 8);
+            g2.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 11));
+            g2.setColor(new Color(50, 64, 77));
+            wrapped(g2, text, x + 10, y + 16, width - 20, 14);
+        }
+
+        static void bullets(
+            Graphics2D g2,
+            String[] lines,
+            int x,
+            int y,
+            int width,
+            int spacing
+        ) {
+            g2.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 10));
+            g2.setColor(new Color(60, 72, 84));
+            int baseline = y;
+            for (String line : lines) {
+                g2.setColor(new Color(54, 116, 173));
+                g2.fillOval(x, baseline - 7, 5, 5);
+                g2.setColor(new Color(60, 72, 84));
+                wrapped(g2, line, x + 11, baseline, width - 11, 13);
+                baseline += spacing;
+            }
+        }
+
+        static void profileNode(
+            Graphics2D g2,
+            int x,
+            int y,
+            int width,
+            int height,
+            boolean tall,
+            String title,
+            String volume,
+            String geometry,
+            String pack
+        ) {
+            Color accentColor = new Color(99, 79, 164);
+            g2.setColor(new Color(244, 241, 251));
+            g2.fillRoundRect(x, y, width, height, 13, 13);
+            g2.setColor(accentColor);
+            g2.setStroke(new BasicStroke(1.7f));
+            g2.drawRoundRect(x, y, width, height, 13, 13);
+            int bottleHeight = tall ? 67 : 48;
+            int bottleY = y + height - bottleHeight - 12;
+            iconBottle(g2, x + 24, bottleY, 30, bottleHeight, accentColor);
+            g2.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 13));
+            g2.setColor(new Color(52, 43, 82));
+            g2.drawString(title, x + 76, y + 25);
+            g2.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 11));
+            g2.drawString(volume, x + 76, y + 45);
+            g2.drawString(geometry, x + 76, y + 63);
+            g2.drawString(pack, x + 76, y + 81);
+        }
+
+        static void iconBottle(
+            Graphics2D g2,
+            int x,
+            int y,
+            int width,
+            int height,
+            Color color
+        ) {
+            int neckWidth = Math.max(8, width / 3);
+            int neckX = x + (width - neckWidth) / 2;
+            int shoulderY = y + Math.max(7, height / 5);
+            g2.setColor(pale(color));
+            g2.fillRoundRect(x, shoulderY, width, height - shoulderY + y,
+                8, 8);
+            g2.setColor(color);
+            g2.drawRoundRect(x, shoulderY, width, height - shoulderY + y,
+                8, 8);
+            g2.drawRect(neckX, y + 3, neckWidth, shoulderY - y - 3);
+            g2.fillRoundRect(neckX - 2, y, neckWidth + 4, 5, 3, 3);
+        }
+
+        static void iconMachine(
+            Graphics2D g2,
+            int x,
+            int y,
+            Color color
+        ) {
+            g2.setColor(pale(color));
+            g2.fillRoundRect(x, y, 54, 42, 8, 8);
+            g2.setColor(color);
+            g2.drawRoundRect(x, y, 54, 42, 8, 8);
+            g2.drawRect(x + 10, y + 11, 14, 18);
+            g2.drawLine(x + 32, y + 12, x + 45, y + 12);
+            g2.drawLine(x + 32, y + 21, x + 45, y + 21);
+            g2.drawLine(x + 32, y + 30, x + 45, y + 30);
+        }
+
+        static void readOnlyShield(Graphics2D g2, int centreX, int centreY) {
+            Polygon shield = new Polygon();
+            shield.addPoint(centreX - 62, centreY - 14);
+            shield.addPoint(centreX - 46, centreY - 14);
+            shield.addPoint(centreX - 42, centreY - 2);
+            shield.addPoint(centreX - 54, centreY + 12);
+            shield.addPoint(centreX - 66, centreY - 2);
+            g2.setColor(new Color(225, 239, 247));
+            g2.fill(shield);
+            g2.setColor(new Color(46, 111, 151));
+            g2.draw(shield);
+            g2.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 10));
+            g2.drawString("READ-ONLY  |  NO ACTIONS", centreX - 35,
+                centreY + 3);
+        }
+
+        static void arrow(
+            Graphics2D g2,
+            double startX,
+            double startY,
+            double endX,
+            double endY
+        ) {
+            Stroke original = g2.getStroke();
+            g2.setStroke(new BasicStroke(1.4f));
+            g2.draw(new Line2D.Double(startX, startY, endX, endY));
+            double angle = Math.atan2(endY - startY, endX - startX);
+            double length = 6.0;
+            double spread = Math.PI / 6.0;
+            GeneralPath head = new GeneralPath();
+            head.moveTo(endX, endY);
+            head.lineTo(
+                endX - length * Math.cos(angle - spread),
+                endY - length * Math.sin(angle - spread)
+            );
+            head.lineTo(
+                endX - length * Math.cos(angle + spread),
+                endY - length * Math.sin(angle + spread)
+            );
+            head.closePath();
+            g2.fill(head);
+            g2.setStroke(original);
+        }
+
+        static void centered(
+            Graphics2D g2,
+            String text,
+            int centreX,
+            int baselineY
+        ) {
+            FontMetrics metrics = g2.getFontMetrics();
+            g2.drawString(text, centreX - metrics.stringWidth(text) / 2,
+                baselineY);
+        }
+
+        static int wrapped(
+            Graphics2D g2,
+            String text,
+            int x,
+            int baselineY,
+            int maximumWidth,
+            int lineHeight
+        ) {
+            FontMetrics metrics = g2.getFontMetrics();
+            String[] words = text.split(" ");
+            StringBuilder line = new StringBuilder();
+            int y = baselineY;
+            for (String word : words) {
+                String candidate = line.length() == 0 ? word :
+                    line.toString() + " " + word;
+                if (line.length() > 0 &&
+                    metrics.stringWidth(candidate) > maximumWidth) {
+                    g2.drawString(line.toString(), x, y);
+                    y += lineHeight;
+                    line.setLength(0);
+                    line.append(word);
+                }
+                else {
+                    line.setLength(0);
+                    line.append(candidate);
+                }
+            }
+            if (line.length() > 0) {
+                g2.drawString(line.toString(), x, y);
+            }
+            return y;
+        }
+
+        static void wrappedCentered(
+            Graphics2D g2,
+            String text,
+            int x,
+            int y,
+            int width,
+            int height,
+            int lineHeight
+        ) {
+            FontMetrics metrics = g2.getFontMetrics();
+            String[] words = text.split(" ");
+            java.util.List<String> lines =
+                new java.util.ArrayList<String>();
+            StringBuilder line = new StringBuilder();
+            for (String word : words) {
+                String candidate = line.length() == 0 ? word :
+                    line.toString() + " " + word;
+                if (line.length() > 0 &&
+                    metrics.stringWidth(candidate) > width - 14) {
+                    lines.add(line.toString());
+                    line.setLength(0);
+                    line.append(word);
+                }
+                else {
+                    line.setLength(0);
+                    line.append(candidate);
+                }
+            }
+            if (line.length() > 0) {
+                lines.add(line.toString());
+            }
+            int baseline = y + (height - lines.size() * lineHeight) / 2 +
+                metrics.getAscent();
+            for (String value : lines) {
+                centered(g2, value, x + width / 2, baseline);
+                baseline += lineHeight;
+            }
         }
     }
 
