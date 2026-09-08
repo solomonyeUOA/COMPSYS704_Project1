@@ -397,19 +397,42 @@ public final class CoordinatorStateV1 {
             activeOrder.liquidBRatios[currentProductIndex];
         requiredBottles = activeOrder.quantities[currentProductIndex];
         completedBottles = 0;
-        if (!m4SimulationBatchOffer.beginProductBatch(
-            activeOrder.orderId,
-            currentProductIndex + 1,
-            requiredBottles,
-            System.currentTimeMillis()
-        )) {
-            throw new IllegalStateException(
-                "conflicting simulation batch quantity for " +
-                activeOrder.orderId
-            );
-        }
+        beginM4SimulationBatch();
+    }
+
+    /**
+     * Arms the simulation-only M4 batch trigger for the product that was just
+     * loaded. This is an environmental side channel, so a payload it cannot
+     * represent - for example an order ID that OrderV1 accepts but the
+     * simulation transport does not - is reported and skipped. It must never
+     * abort order acceptance or a product transition.
+     */
+    private static void beginM4SimulationBatch() {
         lastM4SimulationBatchAttempt = 0;
         m4SimulationBatchTransmissionStarted = false;
+        String rejection = null;
+        try {
+            if (!m4SimulationBatchOffer.beginProductBatch(
+                activeOrder.orderId,
+                currentProductIndex + 1,
+                requiredBottles,
+                System.currentTimeMillis()
+            )) {
+                rejection = "conflicting quantity for " +
+                    m4SimulationBatchOffer.getBatchId();
+            }
+        }
+        catch (IllegalArgumentException invalid) {
+            rejection = invalid.getMessage();
+        }
+        if (rejection != null) {
+            m4SimulationBatchOffer.discard();
+            System.out.println(
+                "[M1-M4-SIM] batch trigger skipped for order " +
+                activeOrder.orderId + " product " +
+                (currentProductIndex + 1) + ": " + rejection
+            );
+        }
     }
 
     private static boolean isPresentPayload(String payload) {

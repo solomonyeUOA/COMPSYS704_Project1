@@ -58,7 +58,8 @@ The six-runtime simulation uses
 M1 derives a stable identity such as `PO0001-P01` and publishes
 `PO0001-P01|10` on `M4_SIM_BATCH_REQUEST`. M4 de-duplicates retries and emits
 exactly `PO0001-P01-B001` through `PO0001-P01-B010`, then waits in `FINISHED`
-for a different batch ID. A second product uses `PO0001-P02` and restarts its
+for a different batch ID. A batch that stops on a context-distribution timeout
+also releases the simulator, so the next batch ID is still accepted. A second product uses `PO0001-P02` and restarts its
 bottle suffix at `B001`.
 
 This link is environmental simulation orchestration only. It is absent from

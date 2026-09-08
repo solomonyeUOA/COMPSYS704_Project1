@@ -18,10 +18,11 @@ public final class RecognitionSimulatorSelfTest {
         multiProductOrderUsesIndependentBatches();
         batchQuantityMatrixQ10AndQ20();
         batchCaseKLegacyPropertiesStillWork();
+        batchCaseLTimeoutReleasesTheSimulator();
         invalidConfigurationAndTransportRegression();
         System.out.println(
             "RecognitionSimulatorSelfTest PASSED " +
-            "(M4 batch cases D-K; legacy compatibility)"
+            "(M4 batch cases D-L; legacy compatibility)"
         );
     }
 
@@ -142,6 +143,37 @@ public final class RecognitionSimulatorSelfTest {
         require("PO0001-P02-B001|S|200".equals(productTwo.get(0)) &&
             "PO0001-P02-B005|S|200".equals(productTwo.get(4)),
             "second product restarts at B001 and finishes at B005");
+    }
+
+    private static void batchCaseLTimeoutReleasesTheSimulator() {
+        RecognitionSimulatorStateV1 simulator = batchDriven();
+        require(simulator.startBatch("PO0007-P01", 3, 0L) ==
+            RecognitionSimulatorStateV1.BatchStartResult.ACCEPTED,
+            "M4-L first batch accepted");
+        require("PO0007-P01-B001|S".equals(simulator.tick(0L, false)),
+            "M4-L first request");
+        require(simulator.tick(1000L, false) == null &&
+            simulator.failureReason() != null,
+            "M4-L context distribution times out");
+        require(!simulator.isBatchActive() && !simulator.isFinished(),
+            "M4-L timed-out batch stops running");
+        require(simulator.tick(2000L, false) == null,
+            "M4-L timed-out batch produces no further profile");
+
+        // A timeout must not wedge the simulator: M1 only offers a bounded
+        // number of copies, so a permanently rejecting M4 would silently kill
+        // the link for the rest of the run.
+        require(simulator.startBatch("PO0007-P02", 2, 2000L) ==
+            RecognitionSimulatorStateV1.BatchStartResult.ACCEPTED,
+            "M4-L next batch accepted after a timeout");
+        require(simulator.failureReason() == null,
+            "M4-L accepted batch clears the previous failure");
+        require("PO0007-P02-B001|S".equals(simulator.tick(2000L, false)),
+            "M4-L next batch restarts at B001");
+        simulator.tick(2001L, true);
+        completeRemaining(simulator, 2011L, 1);
+        require(simulator.isFinished() && simulator.distributedCount() == 2,
+            "M4-L next batch finishes normally");
     }
 
     private static void batchCaseKLegacyPropertiesStillWork() {

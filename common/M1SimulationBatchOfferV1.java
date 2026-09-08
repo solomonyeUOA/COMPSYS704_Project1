@@ -98,6 +98,20 @@ public final class M1SimulationBatchOfferV1 {
         return batchId + "|" + quantity;
     }
 
+    /**
+     * Drops any pending offer and its identity. Used when the Coordinator
+     * cannot establish a batch for the product it has just loaded, so that a
+     * previous product's payload can never be published in its place.
+     */
+    public void discard() {
+        batchId = null;
+        quantity = 0;
+        payload = null;
+        offerCount = 0;
+        absentReactionRequired = false;
+        nextOfferAtMillis = 0L;
+    }
+
     public String getBatchId() {
         return batchId;
     }

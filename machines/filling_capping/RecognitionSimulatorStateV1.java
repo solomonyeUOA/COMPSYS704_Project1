@@ -120,7 +120,10 @@ public final class RecognitionSimulatorStateV1 {
             return requestedQuantity == quantity ?
                 BatchStartResult.DUPLICATE : BatchStartResult.CONFLICT;
         }
-        if (batchActive || (activeBatchId != null && !isFinished())) {
+        // Only a batch that is still running may block the next one. A
+        // terminated batch - finished or failed - must never wedge the
+        // simulator for the rest of the run.
+        if (batchActive) {
             return BatchStartResult.ACTIVE_BATCH;
         }
 
@@ -177,8 +180,12 @@ public final class RecognitionSimulatorStateV1 {
             return null;
         }
         if (nowMillis - bottleStartedMillis >= timeoutMillis) {
+            // Record the identity before the batch is released, because
+            // currentBottleId() is only defined while a batch is active.
             failure = "context distribution timed out for " +
                 currentBottleId();
+            batchActive = false;
+            requestActive = false;
             return null;
         }
         if (nowMillis < nextRequestMillis) {

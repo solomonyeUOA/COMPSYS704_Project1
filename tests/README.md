@@ -91,7 +91,9 @@ reaction.
 retain an identical `<orderId>-Pnn|quantity` payload, a product transition
 creates the next deterministic batch ID, conflicting quantities do not mutate
 the current identity, and the generated Coordinator exposes the expected
-`M4_SIM_BATCH_REQUEST` value.
+`M4_SIM_BATCH_REQUEST` value. It also verifies that an order ID `OrderV1`
+accepts but the simulation transport cannot represent only skips the trigger:
+the order is still accepted and no batch identity is retained.
 
 ## Run the four runtimes
 

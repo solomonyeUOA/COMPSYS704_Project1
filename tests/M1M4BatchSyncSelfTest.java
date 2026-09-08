@@ -7,8 +7,9 @@ public final class M1M4BatchSyncSelfTest {
         caseARetryKeepsIdenticalBatchId();
         caseBNextProductCreatesNewBatchId();
         caseCSamePayloadDoesNotMutateIdentity();
+        caseDInvalidOrderIdSkipsTheTrigger();
         System.out.println(
-            "M1M4BatchSyncSelfTest PASSED (M1 batch cases A-C)"
+            "M1M4BatchSyncSelfTest PASSED (M1 batch cases A-D)"
         );
     }
 
@@ -82,6 +83,24 @@ public final class M1M4BatchSyncSelfTest {
         require(stable.equals(offer.getStablePayload()) &&
             offer.getOfferCount() == 1,
             "M1-C conflict does not mutate identity");
+    }
+
+    private static void caseDInvalidOrderIdSkipsTheTrigger() {
+        // OrderV1 accepts any non-empty order ID, a space included, but the
+        // simulation transport requires printable ASCII without spaces. That
+        // mismatch must be reported and skipped, never thrown into the
+        // Coordinator clock domain where it would abort order acceptance.
+        CoordinatorStateV1.completeOrder();
+        require(CoordinatorStateV1.accept("PO 001|1|P1,60,40,2"),
+            "M1-D order with a transport-hostile ID is still accepted");
+        require(CoordinatorStateV1.requiredBottles == 2 &&
+            CoordinatorStateV1.orderActive,
+            "M1-D production state is unaffected");
+        require(CoordinatorStateV1.currentM4SimulationBatchId() == null &&
+            CoordinatorStateV1.currentM4SimulationBatchPayload() == null,
+            "M1-D no simulation batch identity is retained");
+        require(CoordinatorStateV1.nextM4SimulationBatchRequest() == null,
+            "M1-D nothing is published for the skipped batch");
     }
 
     private static void require(boolean condition, String message) {
