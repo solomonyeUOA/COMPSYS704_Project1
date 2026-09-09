@@ -50,6 +50,8 @@ public final class MockStateV1 {
     public static long lastStartMillis = 0;
     public static long batchStartMillis = 0;
     public static boolean batchActive = false;
+    public static String lastSystemResetId = "";
+    public static int logicalSystemResetCount = 0;
 
     private static int[] bottleStages = new int[0];
     private static long[] bottleStageReadyMillis = new long[0];
@@ -93,6 +95,32 @@ public final class MockStateV1 {
             "[MOCK-LIFECYCLE] start required=" + requiredBottles +
             " emitted=0 admitted=0"
         );
+        return true;
+    }
+
+    /** Test-only idempotent reset used to simulate all three member ACKs. */
+    public static synchronized boolean acceptSystemReset(String resetId) {
+        if (resetId == null || !resetId.matches("RST[0-9]{4,}")) {
+            return false;
+        }
+        if (!resetId.equals(lastSystemResetId)) {
+            lastSystemResetId = resetId;
+            logicalSystemResetCount++;
+            liquidARatio = 0;
+            liquidBRatio = 0;
+            requiredBottles = 0;
+            emittedBottleDone = 0;
+            admittedBottles = 0;
+            pendingBottleDoneEvents = 0;
+            bottleDoneSignalActive = false;
+            bottleDoneSignalUntilMillis = 0L;
+            bottleDoneAbsentGapPending = false;
+            nextBottleAdmissionMillis = 0L;
+            batchActive = false;
+            bottleStages = new int[0];
+            bottleStageReadyMillis = new long[0];
+            setAllStatuses(READY);
+        }
         return true;
     }
 

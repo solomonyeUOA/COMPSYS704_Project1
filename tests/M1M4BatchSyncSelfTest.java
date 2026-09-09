@@ -16,9 +16,9 @@ public final class M1M4BatchSyncSelfTest {
     private static void caseARetryKeepsIdenticalBatchId() {
         M1SimulationBatchOfferV1 offer =
             new M1SimulationBatchOfferV1(3, 600L);
-        require(offer.beginProductBatch("PO0001", 1, 20, 0L),
+        require(offer.beginProductBatch("PO0001", 1, 20, "S", 0L),
             "M1-A initial product batch");
-        String expected = "PO0001-P01|20";
+        String expected = "PO0001-P01|20|S";
         require(expected.equals(offer.nextReactionValue(0L)),
             "M1-A first payload");
         require(offer.nextReactionValue(1L) == null,
@@ -35,12 +35,12 @@ public final class M1M4BatchSyncSelfTest {
 
     private static void caseBNextProductCreatesNewBatchId() {
         require(CoordinatorStateV1.accept(
-            "PO0100|2|APPLE,60,40,1;BERRY,25,75,3"
+            "PO0100|2|APPLE,S,60,40,1;BERRY,L,25,75,3"
         ), "M1-B multi-product order accepted");
         require("PO0100-P01".equals(
             CoordinatorStateV1.currentM4SimulationBatchId()),
             "M1-B first product batch ID");
-        require("PO0100-P01|1".equals(
+        require("PO0100-P01|1|S".equals(
             CoordinatorStateV1.currentM4SimulationBatchPayload()),
             "M1-B first product payload");
         require(CoordinatorStateV1.recordBottleDone(),
@@ -49,7 +49,7 @@ public final class M1M4BatchSyncSelfTest {
         require("PO0100-P02".equals(
             CoordinatorStateV1.currentM4SimulationBatchId()),
             "M1-B next product gets a new ID");
-        require("PO0100-P02|3".equals(
+        require("PO0100-P02|3|L".equals(
             CoordinatorStateV1.currentM4SimulationBatchPayload()),
             "M1-B next product quantity follows POS order");
 
@@ -60,7 +60,7 @@ public final class M1M4BatchSyncSelfTest {
         coordinator.runClockDomain();
         require(coordinator.M4_SIM_BATCH_REQUEST.getStatus(),
             "M1-B generated Coordinator emits simulation request");
-        require("PO0100-P02|3".equals(
+        require("PO0100-P02|3|L".equals(
             coordinator.M4_SIM_BATCH_REQUEST.getValue()),
             "M1-B generated Coordinator carries stable payload");
     }
@@ -68,21 +68,26 @@ public final class M1M4BatchSyncSelfTest {
     private static void caseCSamePayloadDoesNotMutateIdentity() {
         M1SimulationBatchOfferV1 offer =
             new M1SimulationBatchOfferV1(3, 600L);
-        require(offer.beginProductBatch("PO0200", 1, 10, 0L),
+        require(offer.beginProductBatch("PO0200", 1, 10, "L", 0L),
             "M1-C batch accepted");
         String stable = offer.getStablePayload();
         require(stable.equals(offer.nextReactionValue(0L)),
             "M1-C first offer");
-        require(offer.beginProductBatch("PO0200", 1, 10, 50L),
+        require(offer.beginProductBatch("PO0200", 1, 10, "L", 50L),
             "M1-C duplicate begin is idempotent");
         require(stable.equals(offer.getStablePayload()) &&
             offer.getOfferCount() == 1,
             "M1-C duplicate does not reset payload or retry count");
-        require(!offer.beginProductBatch("PO0200", 1, 5, 60L),
+        require(!offer.beginProductBatch("PO0200", 1, 5, "L", 60L),
             "M1-C conflicting quantity rejected");
         require(stable.equals(offer.getStablePayload()) &&
             offer.getOfferCount() == 1,
             "M1-C conflict does not mutate identity");
+        require(!offer.beginProductBatch("PO0200", 1, 10, "S", 70L),
+            "M1-C conflicting size rejected");
+        require(stable.equals(offer.getStablePayload()) &&
+            offer.getOfferCount() == 1,
+            "M1-C size conflict does not mutate identity");
     }
 
     private static void caseDInvalidOrderIdSkipsTheTrigger() {
