@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Experimental read-only 3D monitoring HMI for the automated bottling system.">
+  <title>M1 · Bottling System Web3D HMI</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="identity">
+      <span class="identity-code">M1 / INDIVIDUAL PROJECT</span>
+      <h1>Hierarchical Automated Bottling System 3D Monitoring HMI</h1>
+    </div>
+    <div class="header-status" aria-label="System state">
+      <div class="source-block">
+        <span>TELEMETRY</span>
+        <strong id="source-mode">CONNECTING</strong>
+      </div>
+      <div class="read-only-badge"><i aria-hidden="true"></i>READ-ONLY MONITORING</div>
+      <div id="connection" class="connection is-connecting"><i aria-hidden="true"></i>CONNECTING</div>
+    </div>
+  </header>
+
+  <main>
+    <section class="metric-strip" aria-label="Production overview">
+      <article>
+        <span>Required</span>
+        <strong id="required-count">—</strong>
+        <small>bottles</small>
+      </article>
+      <article>
+        <span>Completed</span>
+        <strong id="completed-count">—</strong>
+        <small>real count</small>
+      </article>
+      <article>
+        <span>Visual flow</span>
+        <strong id="visual-count">—</strong>
+        <small>telemetry-anchored</small>
+      </article>
+      <article class="flow-mode-card">
+        <span>Flow mode</span>
+        <strong id="flow-mode">WAITING</strong>
+        <small id="last-update">No state received</small>
+      </article>
+    </section>
+
+    <section class="workspace" aria-label="3D factory monitoring workspace">
+      <div class="scene-card">
+        <div class="scene-heading">
+          <div>
+            <span class="eyebrow">OVERVIEW / LEVEL 01</span>
+            <h2>Live symbolic production line</h2>
+          </div>
+          <div class="legend" aria-label="Machine status legend">
+            <span><i class="ready"></i>READY</span>
+            <span><i class="busy"></i>BUSY</span>
+            <span><i class="done"></i>DONE</span>
+            <span><i class="fault"></i>FAULT</span>
+          </div>
+        </div>
+
+        <div id="scene" class="scene" aria-label="Interactive three-dimensional bottling line">
+          <canvas id="factory-canvas"></canvas>
+          <button id="overview-button" class="overview-button" type="button">OVERVIEW</button>
+          <div class="scene-help">Drag to orbit · wheel to zoom · select a station</div>
+          <div id="scene-error" class="scene-error" hidden></div>
+        </div>
+
+        <nav id="station-nav" class="station-nav" aria-label="Select machine detail">
+          <button type="button" data-station="0"><span>01</span>Loader</button>
+          <button type="button" data-station="1"><span>02</span>Conveyor</button>
+          <button type="button" data-station="2"><span>03</span>Rotary</button>
+          <button type="button" data-station="3"><span>04</span>Filler A</button>
+          <button type="button" data-station="4"><span>05</span>Filler B</button>
+          <button type="button" data-station="5"><span>06</span>Lid</button>
+          <button type="button" data-station="6"><span>07</span>Capper</button>
+          <button type="button" data-station="7"><span>08</span>Unloader</button>
+        </nav>
+      </div>
+
+      <aside id="detail-panel" class="detail-panel" aria-live="polite" hidden>
+        <div class="detail-panel-bar">
+          <div class="detail-level">MACHINE DETAIL / LEVEL 02</div>
+          <button id="close-detail" type="button" aria-label="Close machine detail">×</button>
+        </div>
+        <div class="detail-title-row">
+          <div>
+            <span id="detail-code">STATION 01</span>
+            <h2 id="detail-name">Loader</h2>
+          </div>
+          <span id="detail-status" class="status-pill waiting">WAITING</span>
+        </div>
+        <div class="detail-progress">
+          <div><span>Symbolic phase progress</span><b id="detail-progress-value">0%</b></div>
+          <div class="progress-track"><i id="detail-progress-bar"></i></div>
+        </div>
+        <div class="detail-scene" aria-label="Selected machine three-dimensional detail">
+          <canvas id="detail-canvas"></canvas>
+          <span>LIVE SYMBOLIC DETAIL</span>
+        </div>
+        <dl class="detail-facts">
+          <div><dt>Controller evidence</dt><dd id="detail-evidence">Not received</dd></div>
+          <div><dt>Lifecycle</dt><dd id="detail-lifecycle">WAITING</dd></div>
+          <div class="wide"><dt>Current phase</dt><dd id="detail-phase">Waiting for real start</dd></div>
+          <div><dt>Presentation</dt><dd id="detail-presentation">Symbolic dispense</dd></div>
+          <div><dt>Boundary</dt><dd>VIZ_* input only</dd></div>
+        </dl>
+        <div id="station-specific" class="station-specific"></div>
+        <div class="boundary-note">
+          <strong>No plant control</strong>
+          <p>This browser renders immutable snapshots. It exposes no actuator, start, stop or resume command.</p>
+        </div>
+      </aside>
+    </section>
+
+    <section class="team-ip-section" aria-labelledby="team-ip-title">
+      <div class="section-title-row">
+        <div>
+          <span class="eyebrow">TEAM INTEGRATION / LEVEL 02</span>
+          <h2 id="team-ip-title">Observed and represented Team-IP extensions</h2>
+        </div>
+        <span>Evidence policy preserved from the Swing IP</span>
+      </div>
+      <div id="team-ip-grid" class="team-ip-grid">
+        <article class="team-card loading">Waiting for state…</article>
+      </div>
+    </section>
+  </main>
+
+  <dialog id="team-detail-dialog" class="team-detail-dialog">
+    <div class="team-dialog-bar">
+      <div>
+        <span id="team-detail-member">TEAM IP</span>
+        <h2 id="team-detail-title">Extension detail</h2>
+      </div>
+      <button id="close-team-detail" type="button" aria-label="Close Team-IP detail">×</button>
+    </div>
+    <div class="team-dialog-body">
+      <section>
+        <span class="dialog-label">ARCHITECTURE / CAPABILITY</span>
+        <p id="team-detail-summary"></p>
+        <ol id="team-detail-architecture" class="architecture-list"></ol>
+      </section>
+      <section>
+        <span class="dialog-label">M1-OBSERVABLE EVIDENCE</span>
+        <strong id="team-detail-headline"></strong>
+        <ul id="team-detail-live"></ul>
+        <div id="team-detail-capabilities" class="capability-list"></div>
+      </section>
+    </div>
+    <footer class="team-dialog-footer">
+      <span id="team-detail-mode">READ-ONLY</span>
+      <strong>NO CONTROL OUTPUTS</strong>
+    </footer>
+  </dialog>
+
+  <footer>
+    <span>M1 WEB3D · EXPERIMENTAL COEXISTENCE LAYER</span>
+    <span>REAL TELEMETRY → LOGICAL STATE → VISUAL INTERPOLATION</span>
+  </footer>
+
+  <script type="module" src="/app.js"></script>
+</body>
+</html>
