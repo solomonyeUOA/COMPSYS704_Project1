@@ -74,7 +74,8 @@
         </ClockDomain>
         <!--
             SIMULATION ONLY. The M1 Coordinator publishes a bounded,
-            idempotent batchId|quantity trigger on port 11014. This signal is
+            idempotent batchId|quantity|sizeCode trigger on port 11014,
+            where sizeCode is S or L. This signal is
             deliberately absent from canonical member4_system.xml.
         -->
         <ClockDomain Name="RecognitionSimulatorCD" Class="RecognitionSimulator">
