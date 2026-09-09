@@ -124,7 +124,15 @@ public final class Member3PlantSelfTest {
 
     private static void testLidPlantSequence() {
         LidLoaderPlantModelV1 lid = new LidLoaderPlantModelV1();
-        require(lid.getMagazineCount() == 5, "magazine starts with five lids");
+        int expectedCapacity = (int) Math.floor(
+            LidLoaderPlantModelV1.USABLE_MAGAZINE_HEIGHT_MM
+                / LidLoaderPlantModelV1.STACKED_LID_THICKNESS_MM
+        );
+        require(lid.getMagazineCapacity() == expectedCapacity,
+            "capacity is derived from the documented Plant geometry");
+        require(expectedCapacity == 30, "documented geometry provides 30 lids");
+        require(lid.getMagazineCount() == lid.getMagazineCapacity(),
+            "magazine starts at its physical capacity");
         require(lid.setPickCommand(true, 0), "pick starts on rising command");
         lid.tick(299);
         require(!lid.isLidPicked(), "pick is not early");
@@ -134,7 +142,37 @@ public final class Member3PlantSelfTest {
         require(lid.setPlaceCommand(true, 300), "place starts after pick");
         lid.tick(600);
         require(lid.isLidPlacedSensorActive(600), "placement sensor activates");
-        require(lid.getMagazineCount() == 4, "one lid is consumed");
+        require(lid.getMagazineCount() == lid.getMagazineCapacity() - 1,
+            "one lid is consumed after completed placement");
+        require(lid.refill(10) == 1,
+            "refill accepts only the one lid that physically fits");
+        require(lid.refill(10) == 0, "a full magazine rejects excess lids");
+        require(lid.getMagazineCount() == lid.getMagazineCapacity(),
+            "refill cannot exceed physical capacity");
+
+        drainLidMagazine(lid, 1000);
+        require(lid.getMagazineCount() == 0, "all finite inventory can be consumed");
+        require(!lid.isLidAvailable(), "empty magazine removes LID_AVAILABLE");
+        require(!lid.setPickCommand(true, 100000),
+            "empty magazine rejects a new pick command");
+        require(lid.refill(4) == 4, "REFILL_LIDS restores available inventory");
+        require(lid.isLidAvailable(), "refilled magazine restores LID_AVAILABLE");
+    }
+
+    private static void drainLidMagazine(LidLoaderPlantModelV1 lid, long startMs) {
+        long nowMs = startMs;
+        while (lid.getMagazineCount() > 0) {
+            lid.setPickCommand(false, nowMs);
+            require(lid.setPickCommand(true, nowMs), "drain pick starts");
+            nowMs += LidLoaderPlantModelV1.PICK_TIME_MS;
+            lid.tick(nowMs);
+            lid.setPickCommand(false, nowMs);
+            lid.setPlaceCommand(false, nowMs);
+            require(lid.setPlaceCommand(true, nowMs), "drain placement starts");
+            nowMs += LidLoaderPlantModelV1.PLACE_TIME_MS;
+            lid.tick(nowMs);
+            lid.setPlaceCommand(false, nowMs);
+        }
     }
 
     private static void testBoundedSignalWindows() {

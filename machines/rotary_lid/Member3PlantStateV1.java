@@ -171,6 +171,10 @@ public final class Member3PlantStateV1 {
         return lid.getMagazineCount();
     }
 
+    public static synchronized int getLidMagazineCapacity() {
+        return lid.getMagazineCapacity();
+    }
+
     public static synchronized String getLidActionName() {
         return lid.getActionName();
     }
@@ -187,8 +191,8 @@ public final class Member3PlantStateV1 {
         return lid.isPlacementSensorHealthy();
     }
 
-    public static synchronized void refillLids(int count) {
-        lid.refill(count);
+    public static synchronized int refillLids(int count) {
+        return lid.refill(count);
     }
 
     public static synchronized void setPickFault(boolean active) {

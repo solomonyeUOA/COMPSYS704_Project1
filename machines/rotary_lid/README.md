@@ -47,6 +47,16 @@ Status requests are observational and cannot start or acknowledge operations.
   do not change motor timing, lid timing or notification windows.
 - The lid loader retains the active bottle identity and de-energises both
   actuators on timeout. Fault reset requires cause-specific evidence.
+- The simulated lid magazine has a finite geometry-derived capacity rather
+  than an order-derived test value. The model assumes a 120 mm internal
+  height, less 8 mm top pick clearance, a 12 mm bottom follower, 4 mm sensor
+  clearance and a 6 mm safety allowance. With a 3 mm stacked-lid thickness,
+  the usable height is 90 mm and
+  `floor(90 / 3) = 30` lids. `magazineCapacity` remains fixed at 30 while
+  `magazineCount` starts at 30, decreases only after a completed placement,
+  and is never allowed to exceed capacity during `REFILL_LIDS(Integer)`.
+  At zero inventory the Plant removes `LID_AVAILABLE` and emits the existing
+  `LID_MAGAZINE_EMPTY` signal; no new integration interface is required.
 - Alignment timeout has no automatic `REHOME`: M1 safe-stop, bottle-position
   reconciliation and independent position evidence are required.
 
@@ -72,11 +82,12 @@ source: `V2|eventId|sourceEpoch|SAFE_STOPPED|stateVersion` and
 currently records requests and retains HOLD rather than inventing physical
 safe-stop evidence.
 
-`FaultManagementGUI` displays the selected policy, attempt count, validated
-evidence, event trace, metrics and GP Controller status. Its controls follow
-testable enablement rules. Fault injection and simulated peer evidence are
-available only with `-Dm3.testMode=true`; they pass through the same validation
-model and never drive an actuator.
+`FaultManagementGUI` is the operator-facing display for the selected policy,
+attempt count, validated evidence, event trace, metrics and GP Controller
+status. Console messages remain implementation and test logs rather than the
+user interface. GUI controls follow testable enablement rules. Fault injection
+and simulated peer evidence are available only with `-Dm3.testMode=true`;
+they pass through the same validation model and never drive an actuator.
 
 ## Build and verify
 
