@@ -64,7 +64,7 @@
             -->
             <oSignal Name="M4_SIM_BATCH_REQUEST"
                      To="RecognitionSimulatorCD.M4_SIM_BATCH_REQUEST"
-                     Class="com.systemj.ipc.SimpleClient"
+                     Class="OptionalSimpleClient"
                      IP="127.0.0.1" Port="11014" />
 
             <!-- Coordinator -> Bottle Loader Controller -->
