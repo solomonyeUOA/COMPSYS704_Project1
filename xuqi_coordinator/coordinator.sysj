@@ -33,6 +33,10 @@ Coordinator(
 
     // SIMULATION / FULL-INTEGRATION ONLY. Not a Controller interface.
     output String signal M4_SIM_BATCH_REQUEST;
+    output String signal TWIN_BATCH_CONTEXT;
+    output signal LABELLER_STATUS_REQUEST;
+    input Integer signal LABELLER_STATUS;
+    output Integer signal VIZ_LABELLER_STATUS;
 
     output signal LOADER_STATUS_REQUEST;
     output signal CONVEYOR_STATUS_REQUEST;
@@ -117,7 +121,6 @@ Coordinator(
                     );
                 }
                 else {
-                    emit START_ORDER(CoordinatorStateV1.requiredBottles);
                     emit VIZ_REQUIRED_BOTTLES(
                         CoordinatorStateV1.requiredBottles
                     );
@@ -272,6 +275,7 @@ Coordinator(
                 emit LID_STATUS_REQUEST;
                 emit CAPPER_STATUS_REQUEST;
                 emit UNLOADER_STATUS_REQUEST;
+                emit LABELLER_STATUS_REQUEST;
                 emit VIZ_REQUIRED_BOTTLES(
                     CoordinatorStateV1.requiredBottles
                 );
@@ -382,6 +386,20 @@ Coordinator(
         } pause;}}
     }
     ||
+    {loop {present(LABELLER_STATUS) {
+        if (CoordinatorStateV1.labellerStatus != #LABELLER_STATUS) {
+            CoordinatorStateV1.labellerStatus = #LABELLER_STATUS;
+            System.out.println("Coordinator LABELLER_STATUS=" + #LABELLER_STATUS);
+        }
+        emit VIZ_LABELLER_STATUS(CoordinatorStateV1.labellerStatus);
+    } pause;}}
+    ||
+    {loop {
+        String twinBatch = CoordinatorStateV1.nextTwinBatchContext();
+        if (twinBatch != null) { emit TWIN_BATCH_CONTEXT(twinBatch); }
+        pause;
+    }}
+    ||
     // Send completion after the BOTTLE_DONE reaction has settled. Separating
     // the two external events avoids coupling final-machine input timing to
     // the POS notification transport.
@@ -437,9 +455,6 @@ Coordinator(
                         else if (CoordinatorStateV1.hasNextProduct()) {
                             CoordinatorStateV1.advanceToNextProduct();
 
-                            emit START_ORDER(
-                                CoordinatorStateV1.requiredBottles
-                            );
                             emit VIZ_REQUIRED_BOTTLES(
                                 CoordinatorStateV1.requiredBottles
                             );
@@ -481,6 +496,9 @@ Coordinator(
     // changing START_ORDER or completion semantics.
     {
         loop {
+            if (CoordinatorStateV1.publishStartOrder()) {
+                emit START_ORDER(CoordinatorStateV1.requiredBottles);
+            }
             if (CoordinatorStateV1.orderActive) {
                 emit FILL_A_RATIO(
                     CoordinatorStateV1.currentLiquidARatio

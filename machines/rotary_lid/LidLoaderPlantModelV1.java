@@ -115,6 +115,15 @@ public final class LidLoaderPlantModelV1 {
         action = Action.IDLE;
         pickTriggerLatched = false;
         placeTriggerLatched = false;
+        placedSensorUntilMs = 0;
+    }
+
+    /** Cancel and return the simulated held lid; inventory is not replenished. */
+    public void resetRuntime() {
+        cancelAction();
+        pickFault = false;
+        placeFault = false;
+        actionStartMs = 0;
     }
 
     public boolean isLidAvailable() {

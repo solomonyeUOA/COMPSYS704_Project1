@@ -246,14 +246,19 @@ public final class RecognitionSimulatorSelfTest {
             RecognitionSimulatorStateV1.BatchStartResult.INVALID,
             "M4-N four-field request rejected");
 
-        // A Coordinator build that does not publish a size yet still works
-        // and takes the default profile.
+        // The integrated protocol must not silently guess a bottle size.
         RecognitionSimulatorStateV1 sizeless = batchDriven();
         require(sizeless.startBatchPayload("PO0009-P01|2", 0L) ==
-            RecognitionSimulatorStateV1.BatchStartResult.ACCEPTED,
-            "M4-N legacy two-field request still accepted");
-        require(M4BottleContextV1.SMALL.equals(sizeless.batchSizeCode()),
-            "M4-N legacy request takes the default size");
+            RecognitionSimulatorStateV1.BatchStartResult.INVALID,
+            "M4-N integrated two-field request rejected");
+        RecognitionSimulatorStateV1 legacy =
+            RecognitionSimulatorStateV1.fromProperties(
+                legacySettings("1", "L"), 0L);
+        legacy.cancelForSystemReset();
+        require(legacy.startBatchPayload("LEGACY-N|2", 0L) ==
+            RecognitionSimulatorStateV1.BatchStartResult.ACCEPTED &&
+            "L".equals(legacy.batchSizeCode()),
+            "M4-N explicit legacy mode retains two-field compatibility");
     }
 
     private static void batchCaseKLegacyPropertiesStillWork() {

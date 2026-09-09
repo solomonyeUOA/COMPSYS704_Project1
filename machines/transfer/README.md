@@ -23,6 +23,10 @@ payload types, IP addresses and ports.
 
 The canonical runtime mapping is `member2_system.xml`.
 
+In the independent `COMPSYS704_Project1_1` copy, M1 also polls the Labeller and
+forwards its status to the visualisation. Whole-system reset and the live twin
+view are integrated additions to the original group boundary.
+
 ## Frozen peer boundaries
 
 - M1 sends `START_ORDER` and read-only Loader/Conveyor/Unloader status polls.
@@ -100,6 +104,51 @@ Workpiece update adapter:
 V1|W|eventId|workpieceId|eventType|resourceId|details|eventTimeMillis
 ```
 
+M2 appends each immutable observation to a local ordered outbox as well as its
+optional legacy telemetry output. Only DigitalTwinCD drains that outbox, so a
+missed optional socket pulse cannot lose the initial CREATED context. Duplicate
+copies cannot advance a twin twice. M3 LIDDED and M4 FILLED/CAPPED/SORTED
+observations are buffered until the preceding workpiece stage is available.
+UNLOADED is not completion: COMPLETE follows actual SORTED evidence.
+
+Every 250 ms, DigitalTwinCD sends a complete replacement `VIZ_TWIN_SNAPSHOT`
+to `ABSVisualisationPlantCD:11008`. The visualisation displays both BottleTwin
+(the WorkpieceTwin store) and ResourceTwin tables, not just bottle counts.
+M2 resource rows contain observed state, operation, linked bottle, fault and
+version for Loader, Conveyor, Labeller and Unloader. Upstream resource rows
+derived from confirmed milestones say `OBSERVED_FILLED`, `OBSERVED_LIDDED`,
+`OBSERVED_CAPPED` or `OBSERVED_SORTED`; they describe the last confirmed
+operation, not an inferred current actuator state.
+
+The full wire form is:
+
+```text
+V2|TWIN|generation|sequence|W=n|R=n|REJECTED=n|WORKPIECES=id,stage,resource,version,size,capacity;...|RESOURCES=id,type,bottle,status,operation,fault,version;...
+```
+
+Each text cell is UTF-8 URL encoded. Startup generation is 0; after reset it
+is the arbitrary-precision numeric RST suffix plus 1, so valid RST0000 is
+distinct from startup. Snapshot sequence remains monotonic across resets.
+
+## Whole-system reset
+
+`M2_SYSTEM_RESET` enters M2TransferFaultAdapterCD:13002. Only `RST[0-9]{4,}`
+identities are accepted. A new identity quarantines all bottle admission,
+de-energises simulated actuators, clears pending feedback and then clears the
+controllers, handoff retries, BOTTLE_DONE hold, active FT incident and both twin
+stores. A later reaction verifies safe state before publishing the unchanged
+resetId as `M2_SYSTEM_RESET_ACK` to CoordinatorCD:11001. ACK delivery uses ten
+bounded retry pulses 100 ms apart. Duplicate reset IDs can repeat an ACK but
+cannot clear newly admitted work; older IDs and alternate numeric spellings
+are rejected.
+
+Retired bottle/batch/event identities survive the reset. M2 event sequences
+are never rewound and the transfer FT source epoch advances. START_ORDER must
+first be ABSENT and consumes one admission window; a fresh LOAD_PROFILE is
+also required before post-reset loading. This prevents a held START from
+restarting a fast one-bottle loader batch. These are simulated actuator safety
+checks; a hardware adapter must implement corresponding confirmed safe motion.
+
 Resource update adapter:
 
 ```text
@@ -160,9 +209,11 @@ $cp = "build\member2-classes;$lib\*"
 & $java -cp $cp Member2DigitalTwinSelfTest
 & $java -cp $cp Member2FaultAdapterSelfTest
 & $java -cp $cp Member2ReliableHandoffSelfTest
+& $java -cp $cp Member2SystemResetSelfTest
+& $java -cp $cp Member2LiveTwinSelfTest
 ```
 
-All five tests must print `PASSED`. The reliable hand-off test checks bounded
+All seven tests must print `PASSED`. The reliable hand-off test checks bounded
 retry timing, mandatory `ABSENT` reactions, lost-pulse recovery and receiver
 de-duplication. The real M2/M3 model compatibility test
 also uses M3's existing Java sources:
@@ -204,11 +255,11 @@ Run the M2 runtime only after the required receiver peers are started:
   com.systemj.SystemJRunner machines\transfer\member2_system.xml
 ```
 
-## Remaining cross-member gates
+## Integration validation
 
-- M1 has not frozen `LABELLER_STATUS_REQUEST`, `LABELLER_STATUS` or
-  `VIZ_LABELLER_STATUS`. M2 implements its proposed Controller-side pair, but
-  does not modify M1 or its Visualisation.
+- The independent project copy connects `LABELLER_STATUS_REQUEST`,
+  `LABELLER_STATUS`, `VIZ_LABELLER_STATUS` and the read-only live twin feed.
+  These additions do not change the original group GitHub repository.
 - M4's real Registry, filling/capping and Sort/Pack runtime is now present and
   its receiver models align with M2's unchanged full-context payload. A live
   multi-runtime timing run is still required before final submission.

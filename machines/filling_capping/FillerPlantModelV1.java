@@ -250,8 +250,22 @@ public final class FillerPlantModelV1 {
         activeBottleId = null;
         geometryProfile = "-";
         commandedShutoffMl = 0;
+        measuredMl = 0;
+        targetMl = 0;
+        stageStartMs = 0L;
         feedback.clear();
         lastAcceptedCommand = null;
+    }
+
+    /** Close both valves and stop dose motion before clearing the cycle. */
+    public void resetForSystem() {
+        safeOutputs();
+        clearFaults();
+    }
+
+    public boolean isSystemResetSafe() {
+        return !injectorOpen && !inletOpen && !doseUnitMoving &&
+            stage == Stage.IDLE && feedback.isEmpty();
     }
 
     private void enterFault(String bottleId, String reason) {

@@ -50,10 +50,11 @@ separate reset subsystem.
 | Coordinator -> M4 simulator | `M4_SIM_BATCH_REQUEST` | Simulation-only `batchId|quantity|sizeCode` publication |
 
 M1's Coordinator-side reset orchestration and ACK barrier are implemented.
-The latest main does not yet contain the M2, M3 or M4 reset receivers and
-matching ACK emitters, so production whole-system reset remains pending
-teammate integration and correctly stays in `RESET_PENDING_EXTERNAL_ACK` until
-all three matching acknowledgements arrive. READY status is not reset evidence.
+This independent repository also implements the M2/M3/M4 safe-state receivers
+and matching ACK emitters. Reset correctly stays in `RESET_PENDING_EXTERNAL_ACK`
+until all three matching acknowledgements arrive. READY status alone is not
+reset evidence. See [reset/twin integration and verification](RESET_TWIN_INTEGRATION.md)
+for the source team-main baseline, simulation safety scope and live test results.
 
 ## Runtime topology
 

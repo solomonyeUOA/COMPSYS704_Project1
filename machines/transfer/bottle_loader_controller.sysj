@@ -25,10 +25,14 @@ BottleLoaderController(
     ||
     {loop {
         present(START_ORDER) {
-            if (!M2MachineStateV1.startLoaderBatch(#START_ORDER)) {
+            if (M2MachineStateV1.isStartOrderArmed() &&
+                !M2MachineStateV1.startLoaderBatch(#START_ORDER)) {
                 System.out.println("M2 Loader rejected START_ORDER=" +
                     #START_ORDER);
             }
+        }
+        else {
+            M2MachineStateV1.observeStartOrderAbsent();
         }
         present(LOAD_PROFILE) {
             if (!M2MachineStateV1.acceptLoadProfile(#LOAD_PROFILE)) {

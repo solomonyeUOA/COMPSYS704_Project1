@@ -25,6 +25,28 @@ public final class M2PlantStateV1 {
     private M2PlantStateV1() {
     }
 
+    public static synchronized void safeStopForSystemReset() {
+        conveyorMotorEnabled = false;
+        M2SystemResetStateV1.observeBottle(loaderBottleId);
+        M2SystemResetStateV1.observeBottle(conveyorBottleId);
+        M2SystemResetStateV1.observeBottle(unloaderBottleId);
+        if (labelCommand != null) {
+            M2SystemResetStateV1.observeBottle(labelCommand.split("\\|", -1)[0]);
+        }
+        reset();
+    }
+
+    public static synchronized boolean isSafeInitialState() {
+        return !conveyorMotorEnabled && loaderBottleId == null &&
+            conveyorBottleId == null && labelCommand == null &&
+            unloaderBottleId == null && !loaderConfirmationPending &&
+            !labelVerificationPending && !removalPending;
+    }
+
+    public static synchronized boolean isConveyorMotorEnabled() {
+        return conveyorMotorEnabled;
+    }
+
     public static synchronized void reset() {
         loaderBottleId = null;
         loaderStartedAt = 0;
@@ -48,11 +70,13 @@ public final class M2PlantStateV1 {
         String bottleId,
         long nowMillis
     ) {
+        if (!M2SystemResetStateV1.allowBottle(bottleId)) { return false; }
         if (loaderBottleId != null) {
             return loaderBottleId.equals(bottleId);
         }
         M2BottleContextV1.validateToken(bottleId, "bottleId");
         loaderBottleId = bottleId;
+        M2SystemResetStateV1.observeBottle(bottleId);
         loaderStartedAt = nowMillis;
         return true;
     }
@@ -77,11 +101,13 @@ public final class M2PlantStateV1 {
     public static synchronized boolean registerConveyorBottle(
         String bottleId
     ) {
+        if (!M2SystemResetStateV1.allowBottle(bottleId)) { return false; }
         M2BottleContextV1.validateToken(bottleId, "bottleId");
         if (conveyorBottleId != null) {
             return conveyorBottleId.equals(bottleId);
         }
         conveyorBottleId = bottleId;
+        M2SystemResetStateV1.observeBottle(bottleId);
         conveyorP1Present = false;
         return true;
     }
@@ -90,6 +116,10 @@ public final class M2PlantStateV1 {
         boolean enabled,
         long nowMillis
     ) {
+        if (M2SystemResetStateV1.isQuarantined() || conveyorBottleId == null) {
+            conveyorMotorEnabled = false;
+            return;
+        }
         if (enabled && !conveyorMotorEnabled) {
             conveyorMotorStartedAt = nowMillis;
         }
@@ -140,12 +170,14 @@ public final class M2PlantStateV1 {
         if (fields.length != 2) {
             return false;
         }
+        if (!M2SystemResetStateV1.allowBottle(fields[0])) { return false; }
         M2BottleContextV1.validateToken(fields[0], "bottleId");
         M2BottleContextV1.validateToken(fields[1], "labelData");
         if (labelCommand != null) {
             return labelCommand.equals(payload);
         }
         labelCommand = payload;
+        M2SystemResetStateV1.observeBottle(fields[0]);
         labelStartedAt = nowMillis;
         return true;
     }
@@ -177,11 +209,13 @@ public final class M2PlantStateV1 {
         String bottleId,
         long nowMillis
     ) {
+        if (!M2SystemResetStateV1.allowBottle(bottleId)) { return false; }
         M2BottleContextV1.validateToken(bottleId, "bottleId");
         if (unloaderBottleId != null) {
             return unloaderBottleId.equals(bottleId);
         }
         unloaderBottleId = bottleId;
+        M2SystemResetStateV1.observeBottle(bottleId);
         unloadStartedAt = nowMillis;
         return true;
     }

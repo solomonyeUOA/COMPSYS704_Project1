@@ -37,6 +37,7 @@ public final class Member3MachineStateV1 {
     public static synchronized boolean requestRotation(
         boolean stationBarrierSatisfied
     ) {
+        if (M3SystemResetStateV1.isQuarantined()) return false;
         boolean started = rotary.requestRotation(
             nextCycleId,
             stationBarrierSatisfied
@@ -52,6 +53,7 @@ public final class Member3MachineStateV1 {
         long elapsedMs,
         boolean tableAlignedWithSensor
     ) {
+        if (M3SystemResetStateV1.isQuarantined()) return;
         rotary.tick(elapsedMs, tableAlignedWithSensor);
         reportRotaryFaultIfPresent();
     }
@@ -59,6 +61,7 @@ public final class Member3MachineStateV1 {
     public static synchronized void tickRotaryNow(
         boolean tableAlignedWithSensor
     ) {
+        if (M3SystemResetStateV1.isQuarantined()) return;
         long now = java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(System.nanoTime());
         rotary.tick(Math.max(0, now - lastRotaryTickMs),
             tableAlignedWithSensor);
@@ -67,6 +70,7 @@ public final class Member3MachineStateV1 {
     }
 
     public static synchronized boolean takeRotationDoneEvent() {
+        if (M3SystemResetStateV1.isQuarantined()) return false;
         if (rotary.getStatus() != DONE || rotationDonePublished) {
             return false;
         }
@@ -107,6 +111,10 @@ public final class Member3MachineStateV1 {
         String bottleId,
         boolean lidAvailable
     ) {
+        if (M3SystemResetStateV1.isQuarantined()) {
+            lidLoader.retireBottle(bottleId);
+            return false;
+        }
         if (lidLoader.getStatus() == DONE) {
             return false;
         }
@@ -126,6 +134,7 @@ public final class Member3MachineStateV1 {
         boolean lidPicked,
         boolean lidPlaced
     ) {
+        if (M3SystemResetStateV1.isQuarantined()) return;
         lidLoader.tick(elapsedMs, lidPicked, lidPlaced);
         reportLidFaultIfPresent();
     }
@@ -134,6 +143,7 @@ public final class Member3MachineStateV1 {
         boolean lidPicked,
         boolean lidPlaced
     ) {
+        if (M3SystemResetStateV1.isQuarantined()) return;
         long now = java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(System.nanoTime());
         lidLoader.tick(Math.max(0, now - lastLidTickMs),
             lidPicked, lidPlaced);
@@ -146,6 +156,7 @@ public final class Member3MachineStateV1 {
     }
 
     public static synchronized String takeLidDoneBottleId() {
+        if (M3SystemResetStateV1.isQuarantined()) return null;
         if (lidLoader.getStatus() != DONE || lidDonePublished) {
             return null;
         }
@@ -193,6 +204,7 @@ public final class Member3MachineStateV1 {
 
     /** Restores deterministic state before a simulation or test run. */
     public static synchronized void reset() {
+        M3SystemResetStateV1.resetForTest();
         rotary = new RotaryControllerModelV1();
         lidLoader = new LidLoaderControllerModelV1();
         lastRotaryTickMs = java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(System.nanoTime());
@@ -201,6 +213,19 @@ public final class Member3MachineStateV1 {
         lidDonePublished = false;
         nextCycleId = 1;
         FaultSupervisorStateV2_1.reset();
+    }
+
+    public static synchronized void stopForSystemReset() {
+        rotary.stopOutputs();
+        lidLoader.stopOutputs();
+        rotationDonePublished = lidDonePublished = false;
+    }
+
+    public static synchronized void finishSystemReset() {
+        rotary.resetRuntime();
+        lidLoader.resetRuntime();
+        lastRotaryTickMs = lastLidTickMs =
+            java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(System.nanoTime());
     }
 
     public static synchronized long getActiveCycleId() {

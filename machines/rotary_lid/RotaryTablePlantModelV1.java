@@ -22,10 +22,26 @@ public final class RotaryTablePlantModelV1 {
     private long movementStartMs;
     private long pendingCycleId;
     private long lastCommittedCycleId;
+    private long retiredCycleWatermark;
     private int completedSteps;
     private String fillOfferId;
     private String capOfferId;
     private String labelOfferId;
+    private final java.util.Set<String> retiredBottleIds =
+        new java.util.HashSet<String>();
+
+    public void retireContext(String payload) {
+        try { retiredBottleIds.add(BottleContextV1.parse(payload).getBottleId()); }
+        catch (IllegalArgumentException ignored) { }
+    }
+
+    public void retireBottle(String id) {
+        try {
+            BottleContextV1.validateBottleId(id);
+            retiredBottleIds.add(id);
+        }
+        catch (IllegalArgumentException ignored) { }
+    }
 
     public boolean registerContext(String payload) {
         BottleContextV1 context;
@@ -35,6 +51,7 @@ public final class RotaryTablePlantModelV1 {
         catch (IllegalArgumentException exception) {
             return false;
         }
+        if (retiredBottleIds.contains(context.getBottleId())) return false;
         BottleContextV1 existing = contexts.get(context.getBottleId());
         if (existing != null) {
             return existing.encode().equals(context.encode());
@@ -58,7 +75,7 @@ public final class RotaryTablePlantModelV1 {
         catch (IllegalArgumentException exception) {
             return false;
         }
-        if (moving || movementComplete || positions[LOAD_POSITION] != null ||
+        if (retiredBottleIds.contains(id) || moving || movementComplete || positions[LOAD_POSITION] != null ||
             findBottle(id) != null) {
             return false;
         }
@@ -100,6 +117,7 @@ public final class RotaryTablePlantModelV1 {
 
     /** Atomically shifts slots after the Controller publishes matching DONE. */
     public boolean commitRotation(long cycleId) {
+        if (cycleId <= retiredCycleWatermark) return false;
         // A repeated confirmation acknowledges the same commit without shifting again.
         if (cycleId > 0 && cycleId == lastCommittedCycleId) {
             return true;
@@ -174,6 +192,7 @@ public final class RotaryTablePlantModelV1 {
             return false;
         }
         positions[LABEL_POSITION] = null;
+        retiredBottleIds.add(bottleId);
         contexts.remove(bottleId);
         labelOfferId = null;
         return true;
@@ -324,5 +343,35 @@ public final class RotaryTablePlantModelV1 {
             positions[i] = positions[i - 1];
         }
         positions[LOAD_POSITION] = null;
+    }
+
+    /** Stop the simulated motor before allowing bottle reconciliation. */
+    public void stopForSystemReset() {
+        moving = false;
+        triggerLatched = false;
+        lastCommittedCycleId = Math.max(lastCommittedCycleId, pendingCycleId);
+        retiredCycleWatermark = Math.max(retiredCycleWatermark, lastCommittedCycleId);
+        movementComplete = false;
+    }
+
+    public String reconcileSimulatedReset(String resetId) {
+        if (moving) return null;
+        String before = snapshot();
+        retiredBottleIds.addAll(contexts.keySet());
+        int removed = 0;
+        for (int i = 0; i < positions.length; i++) {
+            if (positions[i] != null) {
+                retiredBottleIds.add(positions[i].getId());
+                removed++;
+                positions[i] = null;
+            }
+        }
+        contexts.clear();
+        clearOfferLatches();
+        pendingCycleId = 0;
+        completedSteps = 0;
+        alignmentFault = false;
+        aligned = true;
+        return "SIMULATED_REMOVAL_CONFIRMED count=" + removed + " before=" + before;
     }
 }

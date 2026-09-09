@@ -18,6 +18,7 @@
         </ClockDomain>
 
         <ClockDomain Name="RotaryTablePlantCD" Class="RotaryTablePlant">
+            <oSignal Name="M3_WORKPIECE_OBSERVATION" To="DigitalTwinCD.M3_WORKPIECE_OBSERVATION" Class="OptionalSimpleClient" IP="127.0.0.1" Port="14002" />
             <iSignal Name="ROTARY_TABLE_TRIGGER" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="12003" />
             <iSignal Name="ROTATION_DONE" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="12003" />
             <iSignal Name="ROTARY_CONTEXT_TO_PLANT" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="12003" />
@@ -77,6 +78,8 @@
         </ClockDomain>
 
         <ClockDomain Name="FaultSupervisorCD" Class="FaultSupervisor">
+            <iSignal Name="M3_SYSTEM_RESET" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="13003" />
+            <oSignal Name="M3_SYSTEM_RESET_ACK" To="CoordinatorCD.M3_SYSTEM_RESET_ACK" Class="OptionalSimpleClient" IP="127.0.0.1" Port="11001" />
             <iSignal Name="TRANSFER_FAULT_EVENT" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="13003" />
             <iSignal Name="TRANSFER_RECOVERY_ACK" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="13003" />
             <iSignal Name="TRANSFER_RECOVERY_RESULT" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="13003" />

@@ -97,7 +97,7 @@ public final class WorkpieceTwin {
         return new Snapshot(this);
     }
 
-    private static boolean legalTransition(Stage current, Stage next) {
+    static boolean legalTransition(Stage current, Stage next) {
         if (next == Stage.FAULT && current != Stage.COMPLETE) {
             return true;
         }
@@ -119,7 +119,7 @@ public final class WorkpieceTwin {
             case LABELLED:
                 return next == Stage.UNLOADED;
             case UNLOADED:
-                return next == Stage.SORTED || next == Stage.COMPLETE;
+                return next == Stage.SORTED;
             case SORTED:
                 return next == Stage.COMPLETE;
             default:

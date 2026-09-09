@@ -18,6 +18,7 @@
         </ClockDomain>
 
         <ClockDomain Name="RotaryTablePlantCD" Class="RotaryTablePlant">
+            <oSignal Name="M3_WORKPIECE_OBSERVATION" To="Member3DemoDriverCD.M3_WORKPIECE_OBSERVATION" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="12009" />
             <iSignal Name="ROTARY_TABLE_TRIGGER" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="12003" />
             <iSignal Name="ROTATION_DONE" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="12003" />
             <iSignal Name="ROTARY_CONTEXT_TO_PLANT" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="12003" />
@@ -77,6 +78,7 @@
         </ClockDomain>
 
         <ClockDomain Name="Member3DemoDriverCD" Class="Member3DemoDriver">
+            <iSignal Name="M3_WORKPIECE_OBSERVATION" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="12009" />
             <iSignal Name="ROTARY_STATUS" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="12009" />
             <iSignal Name="LID_STATUS" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="12009" />
             <iSignal Name="BOTTLE_AT_FILL" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="12009" />

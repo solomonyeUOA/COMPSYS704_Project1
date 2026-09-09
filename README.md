@@ -1,4 +1,45 @@
-# COMPSYS704 Project 1 - Development Integration Baseline
+# COMPSYS704 Project 1 - Independent Integration Workspace
+
+This is `COMPSYS704_Project1_1`, copied with main history from the team repository
+at `42317b9` (PR #18, inspected 10 September 2026). Integration fixes here do not
+change `COMPSYS704_Project1`. Local `origin` points here; `upstream` is the team
+repository with its push URL disabled locally.
+
+## Run locally (Windows)
+
+In PowerShell:
+
+```powershell
+cd D:\Auckland_University\COMPSYS_704\Project1\github_1
+python tools\project.py test
+python tools\project.py run --no-build
+```
+
+The first command verifies Java 8 and the Lab3 SystemJ JARs, compiles the project,
+and runs regression tests. The second launches all six real simulation runtimes,
+including POS, the ABS visualization and M3 fault GUI. Enter products in POS and
+submit. Stop **all** runtimes with Ctrl+C in the launching terminal. Alternatively,
+double-click `run-project.bat` to build and open the interactive simulation.
+
+Open the **M2 Digital Twin** card in ABS visualization, then **Live workpieces**
+or **Live resources**. Workpieces show bottle ID, confirmed stage, resource,
+version and S/200 mL or L/500 mL profile. Resource rows include machine ID/type,
+linked bottle, status, operation, fault and version. M2 resources have live
+controller observations; upstream `OBSERVED_*` rows are last confirmed completed
+operations, not a continuous actuator-state feed. The existing overview animation
+remains symbolic; neither twin table controls machines.
+
+The launcher defaults to ports **+10000** (e.g. Coordinator 21001), because this
+PC has an unrelated service on canonical port 11001. It remaps every XML in a
+generated run directory without changing source XML. Use `--port-offset 20000`
+for a second isolated run. Logs remain under `build/runs/<timestamp>`.
+
+Default toolchain: Adoptium JDK `8.0.502.7` and this PC's Lab3 `lib` folder.
+Other computers can set `--java-home` and `--systemj-lib` (or `PROJECT_JAVA_HOME`
+and `SYSTEMJ_LIB`). Eclipse is optional; no IDE reconfiguration is required.
+
+See [the reset/twin integration notes](integration/RESET_TWIN_INTEGRATION.md)
+for scope, reproducible live checks and limitations.
 
 This repository is the current development-stage integration baseline for the
 Automated Bottling System (ABS). It contains M1's Swing POS, Coordinator and
@@ -159,9 +200,10 @@ The POS Reset System control sends a bounded String-valued
 clears M1-owned state and fans the identity out as
 `M2_SYSTEM_RESET`, `M3_SYSTEM_RESET`, `M4_SYSTEM_RESET` and
 `VIZ_SYSTEM_RESET`. It reports `SYSTEM_RESET_COMPLETE` only after matching
-M2/M3/M4 ACKs. The production teammate receivers are a pending integration
-contract; until they are implemented the state intentionally remains
-`RESET_PENDING_EXTERNAL_ACK`.
+M2/M3/M4 ACKs. This independent workspace implements all three receivers with
+simulation-safe reset barriers and retained stale-work tombstones. If a member
+is missing or cannot confirm safety, the Coordinator correctly remains in
+`RESET_PENDING_EXTERNAL_ACK`; receipt alone is not completion.
 
 ## Local Clock Domains and ports
 

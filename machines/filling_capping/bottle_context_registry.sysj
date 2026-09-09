@@ -2,15 +2,26 @@
 
 BottleContextRegistry(
     input String signal BOTTLE_RECOGNISED;
+    input String signal M4_SYSTEM_RESET;
 
     output String signal ROTARY_BOTTLE_CONTEXT;
     output String signal LOAD_PROFILE;
     output String signal UNLOAD_PROFILE;
+    output String signal M4_SYSTEM_RESET_ACK;
+    output String signal M4_WORKPIECE_OBSERVATION;
 )
 ->{
     System.out.println("M4 BottleContextRegistryCD started");
 
     {loop {
+        present(M4_SYSTEM_RESET) {
+            M4SystemResetStateV1.request(#M4_SYSTEM_RESET);
+        }
+        M4SystemResetStateV1.tick();
+        String resetAck = M4SystemResetStateV1.takeAck();
+        if (resetAck != null) {
+            emit M4_SYSTEM_RESET_ACK(resetAck);
+        }
         present(BOTTLE_RECOGNISED) {
             if (!Member4MachineStateV1.acceptRecognition(
                 #BOTTLE_RECOGNISED
@@ -35,6 +46,10 @@ BottleContextRegistry(
         String unload = Member4MachineStateV1.takeUnloadProfile();
         if (unload != null) {
             emit UNLOAD_PROFILE(unload);
+        }
+        String observation = Member4MachineStateV1.takeWorkpieceObservation();
+        if (observation != null) {
+            emit M4_WORKPIECE_OBSERVATION(observation);
         }
         pause;
     }}

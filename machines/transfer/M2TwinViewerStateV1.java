@@ -5,6 +5,10 @@ public final class M2TwinViewerStateV1 {
     private M2TwinViewerStateV1() {
     }
 
+    public static synchronized void reset() {
+        nextRequestAtMillis = 0;
+    }
+
     public static synchronized boolean shouldRequest(long nowMillis) {
         if (nowMillis < nextRequestAtMillis) {
             return false;

@@ -430,7 +430,7 @@ public final class ABSVisualisationFlowSelfTest {
         assertTrue("TEAM_IP_VISUAL_B has no invented live twin",
             !m2.isLiveEvidenceAvailable());
         assertEquals("TEAM_IP_VISUAL_B reports unavailable live snapshot",
-            "LIVE SNAPSHOT NOT EXPOSED TO M1", m2.getLiveHeadline());
+            "AWAITING LIVE SNAPSHOT", m2.getLiveHeadline());
         assertContains("TEAM_IP_VISUAL_B does not infer a bottle",
             m2.getLiveLines()[0], "No current bottle");
         assertContains("TEAM_IP_VISUAL_B capability-only representation",
@@ -533,7 +533,7 @@ public final class ABSVisualisationFlowSelfTest {
             !m4.isLiveEvidenceAvailable());
         assertEquals(
             "TEAM_IP_VISUAL_G explicitly reports unavailable live size",
-            "CURRENT LIVE SIZE NOT EXPOSED TO M1",
+            "AWAITING LIVE SIZE CONTEXT",
             m4.getLiveHeadline());
         assertContains("TEAM_IP_VISUAL_G says no size is guessed",
             m4.getLiveLines()[0], "No symbolic bottle is guessed");
@@ -616,7 +616,9 @@ public final class ABSVisualisationFlowSelfTest {
     private static int countButtons(java.awt.Container container) {
         int count = 0;
         for (java.awt.Component component : container.getComponents()) {
-            if (component instanceof javax.swing.JButton) {
+            // Scrollbar arrows are navigation chrome, not machine controls.
+            if (component instanceof javax.swing.JButton &&
+                !(component instanceof javax.swing.plaf.basic.BasicArrowButton)) {
                 count++;
             }
             if (component instanceof java.awt.Container) {

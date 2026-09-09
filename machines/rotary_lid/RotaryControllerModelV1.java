@@ -134,4 +134,18 @@ public final class RotaryControllerModelV1 {
         faultSequence++;
         faultEventId = "ROTARY-" + faultSequence;
     }
+
+    /** Runtime reset preserves cycle and fault identity across the boundary. */
+    public void stopOutputs() { motorEnabled = false; }
+
+    public void resetRuntime() {
+        lastCompletedCycleId = Math.max(lastCompletedCycleId, activeCycleId);
+        activeCycleId = 0;
+        state = State.READY;
+        stateElapsedMs = 0;
+        tablePosition = 0;
+        motorEnabled = false;
+        faultReason = "";
+        faultEventId = null;
+    }
 }

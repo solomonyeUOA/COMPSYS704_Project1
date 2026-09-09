@@ -3,6 +3,9 @@
 <System xmlns="http://systemjtechnology.com">
     <SubSystem Name="MEMBER4_SIMULATION_SS" Local="true">
         <ClockDomain Name="BottleContextRegistryCD" Class="BottleContextRegistry">
+            <iSignal Name="M4_SYSTEM_RESET" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="11011" />
+            <oSignal Name="M4_SYSTEM_RESET_ACK" To="CoordinatorCD.M4_SYSTEM_RESET_ACK" Class="OptionalSimpleClient" IP="127.0.0.1" Port="11001" />
+            <oSignal Name="M4_WORKPIECE_OBSERVATION" To="DigitalTwinCD.M4_WORKPIECE_OBSERVATION" Class="OptionalSimpleClient" IP="127.0.0.1" Port="14002" />
             <iSignal Name="BOTTLE_RECOGNISED" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="11011" />
             <oSignal Name="ROTARY_BOTTLE_CONTEXT" To="RotaryTableControllerCD.ROTARY_BOTTLE_CONTEXT" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="11003" />
             <oSignal Name="LOAD_PROFILE" To="BottleLoaderControllerCD.LOAD_PROFILE" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="11002" />

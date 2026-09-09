@@ -4,6 +4,42 @@ This folder contains the M3 SystemJ Controllers, simulated Plant models,
 fault-tolerance IP extension, visualisation and deterministic tests. The
 implementation follows `COMPSYS704_Interface_Interim_Final.xlsx` V2.1.
 
+## Whole-system simulation reset and live twin observations
+
+`FaultSupervisorCD:13003` accepts `M3_SYSTEM_RESET(resetId)` using
+`RST[0-9]{4,}`. It closes the work gate, stops the rotary motor, cancels the
+lid action, and confirms the lid is home with no held lid. After a 750 ms
+transport drain, the simulation records every occupied rotary slot before
+removing its bottle. Only then does it clear controller/FT runtime state and
+send the unchanged ID to `CoordinatorCD.M3_SYSTEM_RESET_ACK:11001`.
+ACK uses ten 100 ms PRESENT windows with 100 ms ABSENT gaps, so completion
+after the original reset pulse is still delivered to a slower Coordinator.
+`SIMULATED_REMOVAL_CONFIRMED` is explicit simulated service evidence; a physical
+machine needs measured stop/home and operator bottle reconciliation in its place.
+
+Duplicate completed reset IDs re-ACK without clearing fresh work. Older IDs,
+retired bottles/cycles, old FT messages and IDs discarded during quarantine
+cannot restart work. Lid inventory/geometry, fault policies, GUI lifecycle and
+event sequences survive reset. The fault dashboard's local reset also preserves
+retired FT IDs; use the POS whole-system reset for coordinated machine reset.
+M3 retires the preceding M2 fault source epoch at every whole-system reset,
+including a reset before any fault was observed: `E01`, then `E01R1`, `E01R2`,
+and so on. Late unseen events/ACKs/results from those epochs cannot replace or
+fail a fresh recovery. `GUI-TEST` retains its independent monotonic event IDs.
+If overriding `m2.sourceEpoch`, supply the same base property to M2 and M3.
+
+Each successful P3 lid placement queues
+`V1|W|M3-LID-<sequence>|bottleId|LIDDED|LID-1|-|timestampMillis` to
+`DigitalTwinCD.M3_WORKPIECE_OBSERVATION:14002`. Bounded repeated windows retain
+the same event ID; failed/duplicate placements do not invent observations.
+Reset cancels queued windows while preserving the sequence. The standalone M3
+demo routes this observation to its own local driver; the integrated mapping
+uses the M2 twin receiver.
+
+`Member3SystemResetSelfTest` covers active rotation/pick/place, safe-before-ACK
+ordering, finite inventory, FT retry/lockout, stale traffic, bounded offer
+cancellation, GUI sequence continuity, and a complete new P1-P6 bottle after reset.
+
 ## Frozen boundaries
 
 | Owner | Clock domain | Receiver port | Frozen status interface |

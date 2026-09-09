@@ -2,6 +2,7 @@
 <System xmlns="http://systemjtechnology.com">
     <SubSystem Name="ROTARY_PLANT_SS" Local="true">
         <ClockDomain Name="RotaryTablePlantCD" Class="RotaryTablePlant">
+            <oSignal Name="M3_WORKPIECE_OBSERVATION" To="DigitalTwinCD.M3_WORKPIECE_OBSERVATION" Class="OptionalSimpleClient" IP="127.0.0.1" Port="14002" />
             <iSignal Name="ROTARY_TABLE_TRIGGER" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="12003" />
             <iSignal Name="ROTATION_DONE" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="12003" />
             <iSignal Name="ROTARY_CONTEXT_TO_PLANT" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="12003" />

@@ -28,7 +28,8 @@ public final class FaultGuiActionsV2_1 {
             return sendResume();
         }
         if ("reset".equals(action)) {
-            FaultSupervisorStateV2_1.reset();
+            if (M3SystemResetStateV1.isQuarantined()) return false;
+            FaultSupervisorStateV2_1.resetRuntimePreservingHistory();
             return true;
         }
         throw new IllegalArgumentException("unknown action: " + action);

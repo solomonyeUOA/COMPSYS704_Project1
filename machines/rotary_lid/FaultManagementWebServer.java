@@ -141,8 +141,7 @@ public final class FaultManagementWebServer {
             return sendResume();
         }
         if ("reset".equals(action)) {
-            FaultSupervisorStateV2_1.reset();
-            return true;
+            return FaultGuiActionsV2_1.perform("reset", fault);
         }
         throw new IllegalArgumentException("unknown action");
     }

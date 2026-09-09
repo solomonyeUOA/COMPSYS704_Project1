@@ -40,6 +40,10 @@ import javax.swing.JProgressBar;
 import javax.swing.SwingConstants;
 import javax.swing.SwingUtilities;
 import javax.swing.Timer;
+import javax.swing.JTable;
+import javax.swing.JScrollPane;
+import javax.swing.JTabbedPane;
+import javax.swing.table.DefaultTableModel;
 
 /**
  * Handwritten Swing view for the Overall ABS Visualisation Plant.
@@ -47,7 +51,8 @@ import javax.swing.Timer;
  * It receives data only through ABSVisualisationPlantCD. It has no Controller
  * connections and contains no machine or Plant control logic. This view is
  * intentionally symbolic: it shows Controller state, batch progress and
- * shared visual-only bottle records without claiming real bottle tracking.
+ * shared visual-only bottle records. Separate read-only twin tables display
+ * actual Controller/Plant observations, not the symbolic animation records.
  */
 public final class ABSVisualisation {
     private static final int LOADER = 0;
@@ -112,6 +117,10 @@ public final class ABSVisualisation {
     private static boolean requiredBottlesReceived = false;
     private static boolean completedBottlesReceived = false;
     private static String lastSystemResetId = "";
+    private static final ABSLiveTwinModel LIVE_TWIN = new ABSLiveTwinModel();
+    private static String lastTwinEvidence = "";
+    private static int labellerStatus;
+    private static boolean hasLabellerStatus;
 
     private final JFrame frame;
     private final ProductionLinePanel productionLinePanel;
@@ -119,6 +128,7 @@ public final class ABSVisualisation {
     private final JLabel requiredLabel;
     private final JLabel completedLabel;
     private final JLabel progressLabel;
+    private final JLabel labellerStatusLabel = createCountLabel("Labeller: awaiting live status");
     private final JProgressBar progressBar;
     private final Timer animationTimer;
     private final JDialog[] detailDialogs;
@@ -223,6 +233,7 @@ public final class ABSVisualisation {
         completedLabel = createCountLabel("Completed bottles: --");
         countPanel.add(requiredLabel);
         countPanel.add(completedLabel);
+        countPanel.add(labellerStatusLabel);
         progressPanel.add(countPanel, BorderLayout.SOUTH);
         footer.add(progressPanel, BorderLayout.CENTER);
         frame.add(footer, BorderLayout.SOUTH);
@@ -495,13 +506,44 @@ public final class ABSVisualisation {
         }
     }
 
+    public static synchronized void updateLabellerStatus(int status) {
+        if (status < 0 || status > 4 || (hasLabellerStatus && labellerStatus == status)) return;
+        hasLabellerStatus = true;
+        labellerStatus = status;
+        System.out.println("ABS Visualisation Labeller=" + statusName(status) + " (" + status + ")");
+        final ABSVisualisation ui = instance;
+        if (ui != null) SwingUtilities.invokeLater(new Runnable() {
+            public void run() { ui.labellerStatusLabel.setText("Labeller: " + statusName(labellerStatus)); }
+        });
+    }
+
+    public static synchronized void updateTwinSnapshot(String payload) {
+        if (!LIVE_TWIN.accept(payload)) return;
+        ABSLiveTwinModel.Snapshot snapshot = LIVE_TWIN.snapshot();
+        TEAM_IP_MODEL.acceptTwinEvidence(snapshot);
+        teamIpSnapshot = TEAM_IP_MODEL.getSnapshot();
+        System.out.println("[VIZ-TWIN] generation=" + snapshot.generation +
+            " W=" + snapshot.workpieceCount() + " R=" + snapshot.resourceCount() + " rejected=" + snapshot.rejected);
+        String evidence = payload.substring(payload.indexOf("|W="));
+        if (!evidence.equals(lastTwinEvidence)) {
+            lastTwinEvidence = evidence;
+            System.out.println("[VIZ-TWIN-DATA] " + payload);
+        }
+    }
+
     /** Resets only this read-only M1 projection; it never commands a Plant. */
     public static synchronized void resetSystem(String resetId) {
         if (resetId == null || !resetId.matches("RST[0-9]{4,}") ||
-            resetId.equals(lastSystemResetId)) {
+            (!lastSystemResetId.isEmpty() && new java.math.BigInteger(resetId.substring(3)).compareTo(
+                new java.math.BigInteger(lastSystemResetId.substring(3))) <= 0)) {
             return;
         }
         lastSystemResetId = resetId;
+        lastTwinEvidence = "";
+        LIVE_TWIN.observeReset(resetId);
+        TEAM_IP_MODEL.acceptTwinEvidence(LIVE_TWIN.snapshot());
+        hasLabellerStatus = false;
+        labellerStatus = 0;
         requiredBottles = 0;
         completedBottles = 0;
         requiredBottlesReceived = true;
@@ -526,6 +568,7 @@ public final class ABSVisualisation {
             SwingUtilities.invokeLater(new Runnable() {
                 @Override
                 public void run() {
+                    ui.labellerStatusLabel.setText("Labeller: awaiting live status");
                     ui.refreshAll();
                 }
             });
@@ -1085,11 +1128,11 @@ public final class ABSVisualisation {
             String status;
             if (extensionIndex ==
                 ABSVisualisationTeamIpModel.M2_DIGITAL_TWIN) {
-                status = "LIVE TO M1: NOT EXPOSED";
+                status = value.getLiveHeadline();
             }
             else if (extensionIndex ==
                 ABSVisualisationTeamIpModel.M4_TWO_SIZE) {
-                status = "LIVE SIZE TO M1: NOT EXPOSED";
+                status = value.getLiveHeadline();
             }
             else {
                 status = "CURRENT: " + value.getLiveHeadline();
@@ -1111,6 +1154,17 @@ public final class ABSVisualisation {
         private final JLabel owner = new JLabel();
         private final JLabel representation = new JLabel();
         private final TeamIpArchitectureCanvas architectureCanvas;
+        private final DefaultTableModel workpieceRows = readOnlyTable(new String[] {
+            "Bottle", "Stage", "Resource", "Version", "Size", "Capacity mL"});
+        private final DefaultTableModel resourceRows = readOnlyTable(new String[] {
+            "Resource", "Type", "Bottle", "Status", "Operation", "Fault", "Version"});
+        private ABSLiveTwinModel.Snapshot displayedTwin;
+
+        private static DefaultTableModel readOnlyTable(String[] columns) {
+            return new DefaultTableModel(columns, 0) {
+                public boolean isCellEditable(int row, int column) { return false; }
+            };
+        }
 
         TeamIpDetailPanel(int index) {
             extensionIndex = index;
@@ -1130,7 +1184,21 @@ public final class ABSVisualisation {
             heading.add(owner);
             add(heading, BorderLayout.NORTH);
 
-            add(architectureCanvas, BorderLayout.CENTER);
+            if (index == ABSVisualisationTeamIpModel.M2_DIGITAL_TWIN ||
+                index == ABSVisualisationTeamIpModel.M4_TWO_SIZE) {
+                JTabbedPane tabs = new JTabbedPane();
+                tabs.addTab("Architecture", architectureCanvas);
+                JTable workpieces = new JTable(workpieceRows);
+                workpieces.setAutoCreateRowSorter(true);
+                tabs.addTab("Live workpieces", new JScrollPane(workpieces));
+                JTable resources = new JTable(resourceRows);
+                resources.setAutoCreateRowSorter(true);
+                tabs.addTab("Live resources", new JScrollPane(resources));
+                tabs.setSelectedIndex(1);
+                add(tabs, BorderLayout.CENTER);
+            } else {
+                add(architectureCanvas, BorderLayout.CENTER);
+            }
 
             representation.setHorizontalAlignment(SwingConstants.CENTER);
             representation.setOpaque(true);
@@ -1144,6 +1212,19 @@ public final class ABSVisualisation {
         }
 
         void syncState() {
+            ABSLiveTwinModel.Snapshot live = LIVE_TWIN.snapshot();
+            if (displayedTwin != live) {
+                displayedTwin = live;
+                workpieceRows.setRowCount(0);
+                resourceRows.setRowCount(0);
+                if (live != null) {
+                    for (String[] row : live.workpieces()) workpieceRows.addRow(row);
+                    for (String[] row : live.resources()) {
+                        row[3] = statusName(Integer.parseInt(row[3]));
+                        resourceRows.addRow(row);
+                    }
+                }
+            }
             ABSVisualisationTeamIpModel.ExtensionSnapshot extension =
                 teamIpSnapshot.getExtension(extensionIndex);
             title.setText(extension.getMember() + " IP - " +
@@ -1286,14 +1367,13 @@ public final class ABSVisualisation {
             TeamIpGraphics.badge(
                 g2, 598, 99, 194, 36,
                 new Color(246, 238, 217), new Color(147, 102, 26),
-                "M1 LIVE CONNECTION: NOT EXPOSED"
+                value.isLiveEvidenceAvailable() ? "M1 LIVE CONNECTION: ACTIVE" : "AWAITING LIVE SNAPSHOT"
             );
             g2.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 11));
             g2.setColor(new Color(75, 84, 93));
             TeamIpGraphics.wrapped(
                 g2,
-                "Live Digital Twin snapshots are owned by M2 and are not " +
-                    "part of the current M1 visualisation telemetry.",
+                value.getLiveLines()[0] + " Open Live workpieces / Live resources for confirmed state.",
                 592,
                 158,
                 206,
@@ -1474,7 +1554,7 @@ public final class ABSVisualisation {
             TeamIpGraphics.badge(
                 g2, 595, 211, 200, 48,
                 new Color(246, 238, 217), new Color(147, 102, 26),
-                "CURRENT LIVE SIZE: NOT EXPOSED TO M1"
+                value.getLiveHeadline()
             );
             g2.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 11));
             g2.setColor(new Color(75, 84, 93));
