@@ -176,7 +176,7 @@ has no automatic source. `RECOGNITION_REQUEST` remains internal to M4.
 Use these two simulation mappings together:
 
 ```text
-xuqi_coordinator/coordinator_simulation.xml
+xuqi_coordinator/coordinator.xml
 machines/filling_capping/member4_simulation.xml
 ```
 

@@ -80,9 +80,9 @@ simulation-only signal `M4_SIM_BATCH_REQUEST:String` as
 identical bounded pulses about 600 ms apart with an `ABSENT` reaction between
 pulses. This does not replace `START_ORDER`, change Controller ownership, or
 alter any frozen M1/M2/M3/M4 production interface. Use
-`xuqi_coordinator/coordinator_simulation.xml` together with
-`machines/filling_capping/member4_simulation.xml`; canonical production keeps
-`xuqi_coordinator/coordinator.xml` and `member4_system.xml`.
+`xuqi_coordinator/coordinator.xml` together with
+`machines/filling_capping/member4_simulation.xml`. With the canonical
+`member4_system.xml`, the optional simulation output remains disconnected.
 
 ## Design basis
 

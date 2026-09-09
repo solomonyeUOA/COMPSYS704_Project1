@@ -66,7 +66,10 @@ $testSources = Get-ChildItem tests -Filter *.java |
 
 javac -cp "<SYSTEMJ_LIB_DIR>/*" -d build/classes `
   @generatedSources @commonSources @testSources `
-  xuqi_pos/POSVisualisation.java visualisation/ABSVisualisation.java
+  xuqi_pos/POSVisualisation.java `
+  visualisation/ABSVisualisation.java `
+  visualisation/ABSVisualisationFlowModel.java `
+  visualisation/ABSVisualisationTeamIpModel.java
 ```
 
 Do not manually edit generated Java files.

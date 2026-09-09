@@ -52,8 +52,7 @@ require a physical end-to-end acceptance run.
 
 ## Simulation-only M1 -> M4 batch trigger
 
-The six-runtime simulation uses
-`xuqi_coordinator/coordinator_simulation.xml` and
+The six-runtime simulation uses `xuqi_coordinator/coordinator.xml` and
 `machines/filling_capping/member4_simulation.xml`. For every product batch,
 M1 derives a stable identity such as `PO0001-P01` and publishes
 `PO0001-P01|10` on `M4_SIM_BATCH_REQUEST`. M4 de-duplicates retries and emits
