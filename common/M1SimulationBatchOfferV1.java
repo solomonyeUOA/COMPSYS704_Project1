@@ -11,6 +11,7 @@ public final class M1SimulationBatchOfferV1 {
     private final long retryIntervalMillis;
     private String batchId;
     private int quantity;
+    private String sizeCode;
     private String payload;
     private int offerCount;
     private boolean absentReactionRequired;
@@ -36,7 +37,8 @@ public final class M1SimulationBatchOfferV1 {
 
     /**
      * Starts the transport window for one Coordinator-owned product batch.
-     * Calling this again with the same identity and quantity is idempotent.
+     * Calling this again with the same identity, quantity and size is
+     * idempotent. A quantity or size conflict never mutates the stable offer.
      * A different identity is valid only because the Coordinator calls this
      * method at a confirmed product lifecycle boundary.
      */
@@ -44,6 +46,7 @@ public final class M1SimulationBatchOfferV1 {
         String orderId,
         int oneBasedProductIndex,
         int requestedQuantity,
+        String requestedSizeCode,
         long nowMillis
     ) {
         validateOrderId(orderId);
@@ -55,6 +58,9 @@ public final class M1SimulationBatchOfferV1 {
         if (requestedQuantity < 1) {
             throw new IllegalArgumentException("quantity must be positive");
         }
+        if (OrderV2.capacityFor(requestedSizeCode) == 0) {
+            throw new IllegalArgumentException("sizeCode must be S or L");
+        }
 
         String requestedBatchId = orderId + "-P" + String.format(
             Locale.ROOT,
@@ -62,16 +68,34 @@ public final class M1SimulationBatchOfferV1 {
             Integer.valueOf(oneBasedProductIndex)
         );
         if (requestedBatchId.equals(batchId)) {
-            return requestedQuantity == quantity;
+            return requestedQuantity == quantity &&
+                requestedSizeCode.equals(sizeCode);
         }
 
         batchId = requestedBatchId;
         quantity = requestedQuantity;
-        payload = batchId + "|" + quantity;
+        sizeCode = requestedSizeCode;
+        payload = batchId + "|" + quantity + "|" + sizeCode;
         offerCount = 0;
         absentReactionRequired = false;
         nextOfferAtMillis = nowMillis;
         return true;
+    }
+
+    /** Legacy source-compatible overload; an OrderV1 product defaults to S. */
+    public boolean beginProductBatch(
+        String orderId,
+        int oneBasedProductIndex,
+        int requestedQuantity,
+        long nowMillis
+    ) {
+        return beginProductBatch(
+            orderId,
+            oneBasedProductIndex,
+            requestedQuantity,
+            OrderV2.SMALL,
+            nowMillis
+        );
     }
 
     public String nextReactionValue(long nowMillis) {
@@ -95,7 +119,7 @@ public final class M1SimulationBatchOfferV1 {
         offerCount++;
         absentReactionRequired = true;
         nextOfferAtMillis = nowMillis + retryIntervalMillis;
-        return batchId + "|" + quantity;
+        return batchId + "|" + quantity + "|" + sizeCode;
     }
 
     /**
@@ -106,6 +130,7 @@ public final class M1SimulationBatchOfferV1 {
     public void discard() {
         batchId = null;
         quantity = 0;
+        sizeCode = null;
         payload = null;
         offerCount = 0;
         absentReactionRequired = false;
@@ -117,7 +142,8 @@ public final class M1SimulationBatchOfferV1 {
     }
 
     public String getStablePayload() {
-        return batchId == null ? null : batchId + "|" + quantity;
+        return batchId == null ? null :
+            batchId + "|" + quantity + "|" + sizeCode;
     }
 
     public int getOfferCount() {

@@ -441,6 +441,17 @@ final class ABSVisualisationFlowModel {
         publish();
     }
 
+    /** Clears all symbolic/animation state after a confirmed reset request. */
+    synchronized void resetSystem() {
+        resetBatchNow(0);
+        lastRealtimeTickNanos = 0L;
+        for (int index = 0; index < MODULE_COUNT; index++) {
+            statuses[index] = IDLE_STATUS;
+            hasStatus[index] = true;
+        }
+        publish();
+    }
+
     synchronized void acceptStatus(int index, int status) {
         checkModuleIndex(index);
         if (hasStatus[index] && statuses[index] == status) {

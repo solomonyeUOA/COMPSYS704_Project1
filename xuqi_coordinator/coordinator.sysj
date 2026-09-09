@@ -6,6 +6,18 @@
 Coordinator(
     input String signal ORDER;
     output String signal ORDER_COMPLETE;
+    input String signal SYSTEM_RESET_REQUEST;
+    output String signal SYSTEM_RESET_COMPLETE;
+
+    // M1-owned whole-system reset orchestration boundary. Teammates ACK only
+    // after their local runtime has reached its defined safe initial state.
+    output String signal M2_SYSTEM_RESET;
+    output String signal M3_SYSTEM_RESET;
+    output String signal M4_SYSTEM_RESET;
+    output String signal VIZ_SYSTEM_RESET;
+    input String signal M2_SYSTEM_RESET_ACK;
+    input String signal M3_SYSTEM_RESET_ACK;
+    input String signal M4_SYSTEM_RESET_ACK;
 
     // Frozen M3-facing V2.1 safety-coordination boundary.
     input String signal FT_FAULT_ALERT;
@@ -72,6 +84,13 @@ Coordinator(
                         CoordinatorStateV1.ftSnapshot()
                     );
                 }
+                else if (CoordinatorStateV1.isSystemResetBlockingOrders()) {
+                    System.out.println(
+                        "Coordinator rejected ORDER while reset ACKs are " +
+                        "pending: " + receivedOrder + " [COORD-RESET] " +
+                        CoordinatorStateV1.systemResetSnapshot()
+                    );
+                }
                 else if (CoordinatorStateV1.orderActive) {
                     if (!CoordinatorStateV1.isDuplicateOfLastAcceptedOrder(
                         receivedOrder
@@ -106,9 +125,13 @@ Coordinator(
 
                     System.out.println(
                         "Coordinator accepted ORDER " +
-                        CoordinatorStateV1.activeOrder.orderId +
+                        CoordinatorStateV1.currentOrderId() +
                         ", product=" +
                         CoordinatorStateV1.currentProductId() +
+                        ", size=" +
+                        CoordinatorStateV1.currentSizeCode() +
+                        ", capacityMl=" +
+                        CoordinatorStateV1.currentCapacityMl() +
                         ", quantity=" +
                         CoordinatorStateV1.requiredBottles +
                         ", A=" +
@@ -126,9 +149,94 @@ Coordinator(
         }
     }
     ||
+    // One accepted reset identity clears all M1-owned runtime state, fans out
+    // bounded copies and blocks completion until M2, M3 and M4 all ACK it.
+    {
+        {loop {present(SYSTEM_RESET_REQUEST) {
+            if (CoordinatorStateV1.beginSystemReset(
+                #SYSTEM_RESET_REQUEST
+            )) {
+                System.out.println(
+                    "[COORD-RESET] accepted SYSTEM_RESET_REQUEST " +
+                    #SYSTEM_RESET_REQUEST + " " +
+                    CoordinatorStateV1.systemResetSnapshot()
+                );
+            }
+        } pause;}}
+        ||
+        {loop {
+            String m2Reset = CoordinatorStateV1.nextM2SystemReset();
+            if (m2Reset != null) {
+                emit M2_SYSTEM_RESET(m2Reset);
+            }
+            pause;
+        }}
+        ||
+        {loop {
+            String m3Reset = CoordinatorStateV1.nextM3SystemReset();
+            if (m3Reset != null) {
+                emit M3_SYSTEM_RESET(m3Reset);
+            }
+            pause;
+        }}
+        ||
+        {loop {
+            String m4Reset = CoordinatorStateV1.nextM4SystemReset();
+            if (m4Reset != null) {
+                emit M4_SYSTEM_RESET(m4Reset);
+            }
+            pause;
+        }}
+        ||
+        {loop {
+            String vizReset =
+                CoordinatorStateV1.nextVisualisationSystemReset();
+            if (vizReset != null) {
+                emit VIZ_SYSTEM_RESET(vizReset);
+            }
+            pause;
+        }}
+        ||
+        {loop {present(M2_SYSTEM_RESET_ACK) {
+            CoordinatorStateV1.recordM2SystemResetAck(
+                #M2_SYSTEM_RESET_ACK
+            );
+        } pause;}}
+        ||
+        {loop {present(M3_SYSTEM_RESET_ACK) {
+            CoordinatorStateV1.recordM3SystemResetAck(
+                #M3_SYSTEM_RESET_ACK
+            );
+        } pause;}}
+        ||
+        {loop {present(M4_SYSTEM_RESET_ACK) {
+            CoordinatorStateV1.recordM4SystemResetAck(
+                #M4_SYSTEM_RESET_ACK
+            );
+        } pause;}}
+        ||
+        {loop {
+            String resetComplete =
+                CoordinatorStateV1.nextSystemResetComplete();
+            if (resetComplete != null) {
+                emit SYSTEM_RESET_COMPLETE(resetComplete);
+                if (CoordinatorStateV1.
+                    systemResetCompletionTransmissionStarted) {
+                    System.out.println(
+                        "[COORD-RESET] SYSTEM_RESET_COMPLETE attempt=" +
+                        CoordinatorStateV1.
+                            lastSystemResetCompletionAttempt + " " +
+                        resetComplete
+                    );
+                }
+            }
+            pause;
+        }}
+    }
+    ||
     // Bounded simulation-only product-batch publication. The helper retains
-    // one stable batchId|quantity payload for 3 pulses about 600 ms apart and
-    // inserts an ABSENT reaction between copies.
+    // one stable batchId|quantity|sizeCode payload for 3 copies about 600 ms
+    // apart and inserts an ABSENT reaction between copies.
     {
         loop {
             String simulationBatchRequest =
@@ -348,7 +456,7 @@ Coordinator(
                             CoordinatorStateV1.completeOrder();
                             System.out.println(
                                 "Coordinator completed final bottle for " +
-                                CoordinatorStateV1.activeOrder.orderId
+                                CoordinatorStateV1.currentOrderId()
                             );
                             System.out.println(
                                 "[COORD-LIFECYCLE] completeOrder " +
