@@ -53,6 +53,15 @@
                      Class="OptionalSimpleClient"
                      IP="127.0.0.1" Port="13003" />
 
+            <!--
+                SIMULATION ONLY: stable batchId|quantity, 3 bounded pulses
+                about 600 ms apart with an ABSENT reaction between pulses.
+            -->
+            <oSignal Name="M4_SIM_BATCH_REQUEST"
+                     To="RecognitionSimulatorCD.M4_SIM_BATCH_REQUEST"
+                     Class="OptionalSimpleClient"
+                     IP="127.0.0.1" Port="11014" />
+
             <!-- Coordinator -> Bottle Loader Controller -->
             <oSignal Name="START_ORDER"
                      To="BottleLoaderControllerCD.START_ORDER"
