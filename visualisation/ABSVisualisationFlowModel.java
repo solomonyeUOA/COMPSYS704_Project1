@@ -5,7 +5,7 @@ import java.util.List;
 /**
  * Deterministic, read-only visual reconciliation model for ABSVisualisation.
  *
- * The model consumes only the frozen M1 visualisation boundary. It never sends
+ * The model consumes read-only GP status/count and IP telemetry. It never sends
  * commands and deliberately does not claim to know physical bottle positions,
  * bottle identifiers, recipe ratios, or timing. Status edges are evidence for
  * a symbolic stage; the published geometry is an immutable UI snapshot.
@@ -18,8 +18,10 @@ final class ABSVisualisationFlowModel {
     static final int FILLER_B = 4;
     static final int LID = 5;
     static final int CAPPER = 6;
-    static final int UNLOADER = 7;
-    static final int MODULE_COUNT = 8;
+    static final int LABELLER = 7;
+    static final int UNLOADER = 8;
+    static final int SORT_PACK = 9;
+    static final int MODULE_COUNT = 10;
 
     static final int IDLE_STATUS = 0;
     static final int READY_STATUS = 1;
@@ -610,7 +612,9 @@ final class ABSVisualisationFlowModel {
     }
 
     private void claimPendingStages() {
-        claimLinearStage(UNLOADER, CAPPER);
+        claimLinearStage(SORT_PACK, UNLOADER);
+        claimLinearStage(UNLOADER, LABELLER);
+        claimLinearStage(LABELLER, CAPPER);
         claimLinearStage(CAPPER, LID);
         claimLinearStage(LID, FILLER_B);
         claimLinearStage(FILLER_B, FILLER_A);
@@ -737,7 +741,8 @@ final class ABSVisualisationFlowModel {
             if (completedCycles[index] >= current.cycleNumber) {
                 current.completionConfirmed = true;
             }
-            if (index == UNLOADER && realCompleted > visualCompleted) {
+            if (index == UNLOADER &&
+                current.bottle.displayId <= realCompleted) {
                 current.completionConfirmed = true;
             }
             if (statuses[index] == FAULT_STATUS) {
@@ -829,16 +834,17 @@ final class ABSVisualisationFlowModel {
     }
 
     private void finishVisuallyConfirmedBottle() {
-        WorkState unloader = work[UNLOADER];
-        if (unloader == null ||
-            unloader.progress < 100.0 - COMPLETE_EPSILON ||
-            realCompleted <= visualCompleted) {
+        WorkState sorted = work[SORT_PACK];
+        if (sorted == null || !sorted.completionConfirmed ||
+            statuses[SORT_PACK] == FAULT_STATUS ||
+            sorted.progress < 100.0 - COMPLETE_EPSILON ||
+            sorted.bottle.displayId > realCompleted) {
             return;
         }
-        unloader.bottle.progress = 100.0;
-        unloader.bottle.lifecycle = BottleLifecycle.COMPLETED;
-        traceModel(unloader.bottle, "COMPLETED");
-        work[UNLOADER] = null;
+        sorted.bottle.progress = 100.0;
+        sorted.bottle.lifecycle = BottleLifecycle.COMPLETED;
+        traceModel(sorted.bottle, "COMPLETED");
+        work[SORT_PACK] = null;
         visualCompleted++;
     }
 
@@ -878,14 +884,16 @@ final class ABSVisualisationFlowModel {
     }
 
     private void confirmUnloaderFromRealCount() {
-        if (work[UNLOADER] != null && realCompleted > visualCompleted) {
+        if (work[UNLOADER] != null &&
+            work[UNLOADER].bottle.displayId <= realCompleted) {
             work[UNLOADER].completionConfirmed = true;
         }
     }
 
     /**
-     * A completed-count increase proves that those bottles traversed every
-     * stage, even when the one-second Coordinator polling missed short status
+     * A GP completed-count increase proves traversal through UNLOADER, not
+     * downstream SORT_PACK. Independent sort status evidence is mandatory.
+     * Even when the one-second Coordinator polling missed short status
      * edges. Add only the minimum missing cycle evidence. Geometry still
      * advances through every stage using the same bounded interpolation.
      */
@@ -894,7 +902,7 @@ final class ABSVisualisationFlowModel {
         if (provenBottles <= 0) {
             return;
         }
-        for (int module = 0; module < MODULE_COUNT; module++) {
+        for (int module = 0; module <= UNLOADER; module++) {
             int reached = bottlesAtOrBeyond(module, provenBottles);
             long missing = Math.max(0, provenBottles - reached);
             long pendingCycles = Math.max(
@@ -1126,7 +1134,9 @@ final class ABSVisualisationFlowModel {
             rotaryCycle != null && rotaryCycle.completionConfirmed :
             work[index] != null && work[index].completionConfirmed;
         if (progress >= 100.0 - COMPLETE_EPSILON) {
-            if (index == UNLOADER && realCompleted <= visualCompleted) {
+            if (index == UNLOADER ||
+                (index == SORT_PACK && work[index] != null &&
+                    work[index].bottle.displayId > realCompleted)) {
                 return ModuleLifecycle.HOLDING;
             }
             return confirmed ? ModuleLifecycle.COMPLETE :
@@ -1182,8 +1192,18 @@ final class ABSVisualisationFlowModel {
                 (progress < 72.0 ? "SYMBOLIC TIGHTENING" :
                     "HEAD ASCENDING");
         }
-        return progress < 75.0 ? "SYMBOLIC UNLOAD" :
-            "WAITING FOR COMPLETION CONFIRMATION";
+        if (index == LABELLER) {
+            return progress < 25.0 ? "LABEL ALIGNMENT" :
+                (progress < 80.0 ? "SYMBOLIC LABEL APPLICATION" :
+                    "LABEL HANDOFF");
+        }
+        if (index == UNLOADER) {
+            return progress < 75.0 ? "SYMBOLIC BOTTLE UNLOAD" :
+                "WAITING FOR SORT/PACK START";
+        }
+        return progress < 55.0 ? "SYMBOLIC SORT" :
+            (progress < 100.0 ? "SYMBOLIC PACK" :
+                "WAITING FOR GP COMPLETION CONFIRMATION");
     }
 
     private String determineMode() {
@@ -1270,8 +1290,12 @@ final class ABSVisualisationFlowModel {
                 return "LID";
             case CAPPER:
                 return "CAPPER";
+            case LABELLER:
+                return "LABELLER";
             case UNLOADER:
                 return "UNLOADER";
+            case SORT_PACK:
+                return "SORT_PACK";
             default:
                 return "UNKNOWN";
         }

@@ -71,11 +71,11 @@ bottleId|L|500|GEOM_L|PACK_L
 
 The event-valued M2 hand-offs `BOTTLE_AT_CONVEYOR`, `LOAD_BOTTLE`,
 `MARK_LABELLED`, `UNLOAD_READY`, `P6_CLEAR` and `BOTTLE_READY_FOR_SORT` retain
-one pending bottle payload and offer it as at most three single-reaction
-`PRESENT` pulses. Pulses start 600 ms apart by default and each is followed by
-an explicit `ABSENT` reaction. This preserves bounded retry and observable
-event edges without holding a peer input `PRESENT` for thousands of its fast
-reactions. Copies preserve the exact bottle ID and payload.
+one pending bottle payload and offer it as at most five 200 ms `PRESENT`
+windows, separated by 100 ms `ABSENT` gaps. This lets independently scheduled
+receivers observe a handoff even when individual reactions are missed.
+Copies preserve the exact bottle ID and payload; the number of logical
+windows remains bounded regardless of the producer's reaction rate.
 
 The local M2 receivers acknowledge `BOTTLE_AT_CONVEYOR` and `UNLOAD_READY`
 after accepting the matching bottle, which cancels their remaining copies.
@@ -83,8 +83,18 @@ The frozen M2/M3 and M2/M4 interfaces contain no acknowledgement for the other
 events, so those offers stop after the bounded retry count. Receiver models
 de-duplicate matching copies and reject conflicting payloads without repeating
 physical work. The defaults can be adjusted for an integration experiment
-with `m2.handoff.maximumOffers` and `m2.handoff.retryIntervalMillis`;
+with `m2.handoff.maximumOffers`, `m2.handoff.holdMillis` and
+`m2.handoff.retryGapMillis` (the former `retryIntervalMillis` pulse setting
+is no longer used);
 production signal names, payloads, ports and receiver ownership are unchanged.
+
+Loader, labeller and unloader commands/sensor confirmations, and conveyor
+transfer context, use up to ten 100 ms PRESENT windows with 25 ms ABSENT gaps.
+Canonical co-located Controller/Plant receivers acknowledge matching identities
+after acceptance. Completed plant identities prevent repeat physical actions.
+Label PASS/FAIL is latched at physical completion, not when its feedback is
+eventually delivered. System reset cancels all pending offers and retires old
+work. These are bounded retries, not a guarantee during a total connection loss.
 
 ## Digital Twin IP
 

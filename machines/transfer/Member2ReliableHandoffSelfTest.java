@@ -7,6 +7,7 @@ public final class Member2ReliableHandoffSelfTest {
         testBoundedRetryPulses();
         testFastReactionEmissionBound();
         testLostPulseRecovery();
+        testHeldHandoffWindows();
         testLoaderConveyorHandoffAndDeduplication();
         testP6HandoffChain();
         testSequentialQ3P6Handoffs();
@@ -99,7 +100,7 @@ public final class Member2ReliableHandoffSelfTest {
         check(SMALL_CONTEXT.equals(
             M2MachineStateV1.nextBottleAtConveyorOffer(0L)),
             "BOTTLE_AT_CONVEYOR first pulse");
-        check(M2MachineStateV1.nextBottleAtConveyorOffer(1L) == null,
+        check(M2MachineStateV1.nextBottleAtConveyorOffer(200L) == null,
             "BOTTLE_AT_CONVEYOR returns to ABSENT");
         check(M2MachineStateV1.offerConveyorBottle(SMALL_CONTEXT),
             "conveyor accepts matching context");
@@ -118,9 +119,11 @@ public final class Member2ReliableHandoffSelfTest {
             "conveyor accepts complete P1 evidence");
         check("B701".equals(M2MachineStateV1.nextLoadBottleOffer(500L)),
             "LOAD_BOTTLE first pulse");
-        check(M2MachineStateV1.nextLoadBottleOffer(501L) == null,
+        check("B701".equals(M2MachineStateV1.nextLoadBottleOffer(699L)),
+            "LOAD_BOTTLE held PRESENT for slow peer");
+        check(M2MachineStateV1.nextLoadBottleOffer(700L) == null,
             "LOAD_BOTTLE ABSENT reaction");
-        check("B701".equals(M2MachineStateV1.nextLoadBottleOffer(1100L)),
+        check("B701".equals(M2MachineStateV1.nextLoadBottleOffer(800L)),
             "LOAD_BOTTLE bounded retry");
     }
 
@@ -157,14 +160,14 @@ public final class Member2ReliableHandoffSelfTest {
         check(SMALL_CONTEXT.equals(
             M2MachineStateV1.nextBottleReadyForSortOffer(1000L)),
             "BOTTLE_READY_FOR_SORT first pulse");
-        check(M2MachineStateV1.nextP6ClearOffer(1001L) == null,
+        check(M2MachineStateV1.nextP6ClearOffer(1200L) == null,
             "P6_CLEAR ABSENT reaction");
-        check(M2MachineStateV1.nextBottleReadyForSortOffer(1001L) == null,
+        check(M2MachineStateV1.nextBottleReadyForSortOffer(1200L) == null,
             "sort handoff ABSENT reaction");
-        check("B701".equals(M2MachineStateV1.nextP6ClearOffer(1600L)),
+        check("B701".equals(M2MachineStateV1.nextP6ClearOffer(1300L)),
             "P6_CLEAR bounded retry");
         check(SMALL_CONTEXT.equals(
-            M2MachineStateV1.nextBottleReadyForSortOffer(1600L)),
+            M2MachineStateV1.nextBottleReadyForSortOffer(1300L)),
             "sort handoff bounded retry");
     }
 
@@ -222,16 +225,39 @@ public final class Member2ReliableHandoffSelfTest {
         String expected,
         long start
     ) {
-        check(nextOffer(signalName, start + 1L) == null,
-            signalName + " first pulse returns to ABSENT");
-        check(expected.equals(nextOffer(signalName, start + 600L)),
-            signalName + " second pulse");
-        check(nextOffer(signalName, start + 601L) == null,
-            signalName + " second pulse returns to ABSENT");
-        check(expected.equals(nextOffer(signalName, start + 1200L)),
-            signalName + " third pulse");
-        check(nextOffer(signalName, start + 1201L) == null,
-            signalName + " bounded completion");
+        for (int copy = 0; copy < 5; copy++) {
+            long window = start + copy * 300L;
+            check(expected.equals(nextOffer(signalName, window)), signalName + " stable held copy");
+            check(expected.equals(nextOffer(signalName, window + 199L)), signalName + " PRESENT200ms");
+            check(nextOffer(signalName, window + 200L) == null, signalName + " ABSENT starts");
+            check(nextOffer(signalName, window + 299L) == null, signalName + " ABSENT100ms");
+        }
+        check(nextOffer(signalName, start + 1500L) == null, signalName + " bounded completion");
+    }
+
+    private static void testHeldHandoffWindows() {
+        M2HeldSignalOfferV1 offer = new M2HeldSignalOfferV1(5, 200L, 100L);
+        check(offer.arm("HOLD-B001", "HOLD-B001|S", 0L), "held offer armed");
+        check(!offer.arm("OTHER", "OTHER|S", 0L), "new bottle cannot overwrite pending handoff");
+        int presentSamples = 0;
+        int windows = 0;
+        boolean wasPresent = false;
+        for (long now = 0; now <= 1500L; now++) {
+            String payload = offer.nextReactionValue(now);
+            boolean present = payload != null;
+            if (present) {
+                check("HOLD-B001|S".equals(payload), "all held reactions preserve identity and size");
+                presentSamples++;
+                if (!wasPresent) { windows++; }
+            }
+            wasPresent = present;
+        }
+        check(windows == 5 && presentSamples == 1000 && !offer.isActive(),
+            "five200ms windows remain bounded despite fast producer reactions");
+        check(offer.arm("HOLD-B002", "HOLD-B002|L", 2000L), "new event can rearm");
+        check(!offer.acknowledge("WRONG"), "wrong identity cannot cancel held handoff");
+        check(offer.acknowledge("HOLD-B002") && offer.nextReactionValue(2001L) == null,
+            "matching acknowledgement cancels all remaining held copies");
     }
 
     private static String nextOffer(String signalName, long nowMillis) {

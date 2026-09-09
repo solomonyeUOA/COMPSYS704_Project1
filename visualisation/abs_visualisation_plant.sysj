@@ -18,6 +18,7 @@ ABSVisualisationPlant(
     input String signal VIZ_FT_EVIDENCE;
     input String signal VIZ_SYSTEM_RESET;
     input Integer signal VIZ_LABELLER_STATUS;
+    input Integer signal VIZ_SORT_PACK_STATUS;
     input String signal VIZ_TWIN_SNAPSHOT;
 )
 ->{
@@ -94,6 +95,10 @@ ABSVisualisationPlant(
     ||
     {loop {present(VIZ_LABELLER_STATUS) {
         ABSVisualisation.updateLabellerStatus(#VIZ_LABELLER_STATUS);
+    } pause;}}
+    ||
+    {loop {present(VIZ_SORT_PACK_STATUS) {
+        ABSVisualisation.updateStatus("Sort / Pack", #VIZ_SORT_PACK_STATUS);
     } pause;}}
     ||
     {loop {present(VIZ_TWIN_SNAPSHOT) {

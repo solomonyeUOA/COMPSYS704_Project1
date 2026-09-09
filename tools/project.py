@@ -117,6 +117,8 @@ def run(args):
     try:
         for name, config in configs:
             options = [f"-Djava.awt.headless={str(args.headless).lower()}"]
+            if name == "visualisation" and args.trace_visualisation:
+                options.append("-Dabs.visualisation.trace=true")
             if name == "pos" and args.order:
                 options += ["-Dabs.pos.testOrder=" + args.order,
                             "-Dabs.pos.testOrderDelayMillis=10000",
@@ -163,12 +165,16 @@ def run(args):
             if err.strip():
                 print(f"{name}: stderr contains {len(err.splitlines())} lines; inspect {name}.err.log")
 
-    if args.expect_completions is not None or args.expect_reset or args.expect_twins:
+    if args.expect_completions is not None or args.expect_reset or args.expect_twins or args.expect_workpieces is not None or args.expect_visual_completions is not None:
         pos_log = (run_dir / "pos.out.log").read_text(encoding="utf-8", errors="replace")
         coord_log = (run_dir / "coordinator.out.log").read_text(encoding="utf-8", errors="replace")
         viz_log = (run_dir / "visualisation.out.log").read_text(encoding="utf-8", errors="replace")
         completions = set(re.findall(r"received completion: orderId=([^,\s]+), status=COMPLETED", pos_log))
         checks = []
+        if args.expect_visual_completions is not None:
+            visual_done = set(re.findall(r"ABS_VIZ_MODEL batch=(\d+) bottle=(B\d+) stage=COMPLETED", viz_log))
+            checks.append((len(visual_done) == args.expect_visual_completions,
+                           f"GUI animated {len(visual_done)} full journeys through Sort / Pack (expected {args.expect_visual_completions})"))
         if args.expect_completions is not None:
             checks.append((len(completions) == args.expect_completions,
                            f"POS completed {len(completions)} distinct orders (expected {args.expect_completions})"))
@@ -176,13 +182,16 @@ def run(args):
             checks.append(("received system reset completion:" in pos_log and
                            "m2Ack=true m3Ack=true m4Ack=true" in coord_log,
                            "reset reached POS after all three member ACKs"))
-        if args.expect_twins:
+        if args.expect_twins or args.expect_workpieces is not None:
             snapshots = re.findall(r"\[VIZ-TWIN-DATA\] (V2\|TWIN\|[^\r\n]+)", viz_log)
             final = snapshots[-1].split("|") if snapshots else []
             complete = len(final) == 9 and final[4] != "W=0" and int(final[5][2:]) >= 4 and final[6] == "REJECTED=0"
             if complete:
                 complete = all(row.split(",")[1] == "COMPLETE" for row in final[7][len("WORKPIECES="):].split(";"))
             checks.append((complete, "final visualization has confirmed COMPLETE workpieces, resource twins and no rejected updates"))
+            if args.expect_workpieces is not None:
+                checks.append((complete and final[4] == f"W={args.expect_workpieces}",
+                               f"exactly {args.expect_workpieces} completed bottle twins, no missing or extra bottles"))
         checks.append((all(not (run_dir / (name + ".err.log")).read_text(encoding="utf-8", errors="replace").strip()
                            for name, _ in CONFIGS), "all six runtime stderr logs are empty"))
         for okay, description in checks:
@@ -207,7 +216,20 @@ def main():
     parser.add_argument("--expect-completions", type=int, help="Fail unless POS receives exactly N distinct order completions")
     parser.add_argument("--expect-reset", action="store_true", help="Require the real three-member reset ACK barrier and POS completion")
     parser.add_argument("--expect-twins", action="store_true", help="Require live workpiece AND resource rows at the visualization")
+    parser.add_argument("--expect-workpieces", type=int, help="Require exactly N completed bottle twins")
+    parser.add_argument("--trace-visualisation", action="store_true", help="Log symbolic-flow reconciliation for UI diagnostics")
+    parser.add_argument("--expect-visual-completions", type=int, help="Require N actual GUI animation completions through Sort / Pack; enables tracing")
     args = parser.parse_args()
+    if args.expect_workpieces is not None and args.expect_workpieces < 1:
+        parser.error("--expect-workpieces must be at least 1 (use --expect-reset for an empty reset)")
+    if args.expect_completions is not None and args.expect_completions < 0:
+        parser.error("--expect-completions must not be negative")
+    if args.expect_visual_completions is not None and args.expect_visual_completions < 1:
+        parser.error("--expect-visual-completions must be at least 1")
+    if args.expect_visual_completions is not None:
+        if args.headless:
+            parser.error("--expect-visual-completions requires the GUI (omit --headless)")
+        args.trace_visualisation = True
     globals()["ROOT"] = args.repo_root.resolve()
     try:
         {"build": build, "test": test, "run": run}[args.action](args)

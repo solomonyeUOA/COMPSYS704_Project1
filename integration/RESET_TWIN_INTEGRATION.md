@@ -113,6 +113,54 @@ commands above reproduce them. These checks validate the simulation scope,
 not physical hardware. The unmodified team checkout was separately verified
 at `42317b9`; its reset still lacks the member ACK implementation.
 
+## QA M2-8 / M2-9 / M2-10 follow-up (10 September 2026)
+
+The overall production view now contains ten clickable stations, including
+the explicit finishing sequence **Lid -> Cap -> Label -> Bottle Unloader ->
+Sort / Pack**. Labeller telemetry feeds its own station, and M4 Sort/Pack
+status is forwarded through the Coordinator to a separate station. GP
+unloading counts never manufacture a Sort/Pack completion. Symbolic animation
+may lag the actual counters; confirmed bottle/resource records remain in the
+Digital Twin tables. Starting a new batch replaces the prior symbolic view.
+
+The reported two-order limit was not a POS submission cap. One defect left the
+labeller DONE when its two completion outputs drained in reverse order.
+Another class of stalls came from missed single-reaction commands, feedback,
+and intermember handoffs. The labeller now rearms after both outputs drain,
+regardless of order; its resource READY event matches that transition.
+M2 uses bottle-correlated bounded PRESENT windows for all six handoffs and
+its four machine actuation/context paths. Completed identities prevent
+re-actuation, sensor results are retained, and label PASS/FAIL is latched at
+physical completion. M1's simulation batch request also uses held windows.
+
+Final-source verification:
+
+- Full build: 34 SystemJ sources and 108 handwritten Java sources;
+  **31 executable suites passed**, with 29 clock domains and zero wiring
+  warnings. Fault evaluation remains 11/11 with zero tested unsafe outputs.
+- Label/actuation regression: 528 assertions, including dropped windows,
+  immutable delayed FAIL, duplicate commands and reset cancellation.
+  Repeated-order model regression: 304 assertions for five three-bottle orders.
+- Actual GUI: three L/500 mL bottles all reached COMPLETE, eight resources,
+  zero rejected twin updates, one POS order completion, and three traced
+  animation journeys through Sort/Pack. Evidence:
+  `build/runs/20260910-034954-618693`. The saved logs were rechecked after the
+  laptop reboot; this is live evidence, not a render fixture.
+- Active mixed-order reset: matching M2/M3/M4 ACKs, cleared generation 2
+  with W=0/R=0, cancelled PO0001, and fresh PO0002 completed with three
+  COMPLETE S/L bottles. Evidence: `build/runs/20260910-035732-850023`.
+- Five consecutive mixed S/L orders without reset: PO0001 through PO0005
+  all completed; exactly 15 bottle twins reached COMPLETE, with eight
+  resource records and zero rejected updates. Evidence:
+  `build/runs/20260910-035851-730607` (115-second acceptance run).
+- All six runtime stderr logs were empty in all three above live checks.
+  Test processes were stopped afterward.
+
+Earlier failed GUI runs were retained for diagnosis: they exposed lost
+LOAD_BOTTLE, MARK_LABELLED and sort-ready pulses. They are not counted as
+passing checks. No M3 logic change was needed for this follow-up. Reproduce
+the GUI and repeated-order acceptance using the commands in the root README.
+
 ## Limits
 
 This is an integrated **simulation**, not hardware safety certification. M3
@@ -122,3 +170,9 @@ Transport retries are bounded; a disconnected member can still leave reset
 pending, intentionally. Identity history currently persists within a running
 JVM, not across a full six-runtime restart. Start/stop all six together. The
 launcher never pushes either GitHub repository or stops unrelated services.
+
+For a failed label verification, use POS **Reset System** and submit a fresh
+order after the member ACK barrier completes. Clearing the injected verifier
+fault must not turn an earlier FAIL into PASS. Same-bottle relabelling through
+the low-level `resetLabellerFault` helper is not an integrated recovery path;
+it would require a separately correlated new attempt and physical clearance.

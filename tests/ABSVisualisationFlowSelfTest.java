@@ -22,6 +22,8 @@ public final class ABSVisualisationFlowSelfTest {
         caseJSixPositionRotaryIdentity();
         caseKDelayedCompletionHoldsAtExit();
         caseLLongIdleAndElapsedTimerDoNotDrift();
+        caseMExplicitDownstreamJourney();
+        caseNSortFaultCannotFabricateCompletion();
         teamIpVisualCaseAM2ArchitectureSnapshot();
         teamIpVisualCaseBM2DoesNotInventLiveTwin();
         teamIpVisualCaseCM3NormalEvidence();
@@ -35,7 +37,7 @@ public final class ABSVisualisationFlowSelfTest {
         teamIpFaultStillFreezesAnimation();
         System.out.println(
             "ABSVisualisationFlowSelfTest PASS (" + assertions +
-            " assertions; flow cases A-L; TEAM_IP_VISUAL cases A-J; " +
+            " assertions; flow cases A-N; TEAM_IP_VISUAL cases A-J; " +
             "fault freeze regression)"
         );
     }
@@ -80,7 +82,18 @@ public final class ABSVisualisationFlowSelfTest {
         assertEquals("B sparse polling does not teleport completion", 0,
             sparse.getSnapshot().getVisualCompleted());
         tick(sparse, 2600);
-        assertEquals("B sparse polling converges from completed evidence", 3,
+        assertEquals("B GP count alone never fabricates Sort/Pack", 0,
+            sparse.getSnapshot().getVisualCompleted());
+        assertEquals("B GP count never invents Sort/Pack cycles", 0L,
+            sparse.getStartedCycles(ABSVisualisationFlowModel.SORT_PACK));
+        for (int cycle = 0; cycle < 3; cycle++) {
+            sparse.acceptStatus(ABSVisualisationFlowModel.SORT_PACK,
+                ABSVisualisationFlowModel.DONE_STATUS);
+            sparse.acceptStatus(ABSVisualisationFlowModel.SORT_PACK,
+                ABSVisualisationFlowModel.READY_STATUS);
+        }
+        tick(sparse, 2600);
+        assertEquals("B sparse polling plus actual sort evidence converges", 3,
             sparse.getSnapshot().getVisualCompleted());
         assertEquals("B sparse polling reconstructs three Loader cycles", 3L,
             sparse.getClaimedCycles(ABSVisualisationFlowModel.LOADER));
@@ -217,6 +230,9 @@ public final class ABSVisualisationFlowSelfTest {
             model.getCatchUpMultiplier(),
             ABSVisualisationFlowModel.MAX_CATCH_UP_MULTIPLIER);
         tick(model, COMPLETE_TICKS + 80);
+        assertEquals("G unload count cannot skip sorting", 0,
+            model.getSnapshot().getVisualCompleted());
+        completeStage(model, ABSVisualisationFlowModel.SORT_PACK);
         assertEquals("G eventually reconciles", 1,
             model.getSnapshot().getVisualCompleted());
         assertTrue("G visual count never exceeds real count",
@@ -309,24 +325,25 @@ public final class ABSVisualisationFlowSelfTest {
         model.acceptRequired(1);
         routeBottleToUnloader(model);
         completeStage(model, ABSVisualisationFlowModel.UNLOADER);
+        completeStage(model, ABSVisualisationFlowModel.SORT_PACK);
 
         ABSVisualisationFlowModel.ModuleSnapshot waiting =
-            model.getSnapshot().getModule(ABSVisualisationFlowModel.UNLOADER);
+            model.getSnapshot().getModule(ABSVisualisationFlowModel.SORT_PACK);
         assertNear("K bottle reaches symbolic exit", 100.0,
             waiting.getProgress(), 0.001);
         assertEquals("K exit waits for real completed count",
-            "WAITING FOR COMPLETION CONFIRMATION", waiting.getPhase());
+            "WAITING FOR GP COMPLETION CONFIRMATION", waiting.getPhase());
         assertEquals("K unconfirmed exit lifecycle holds",
             ABSVisualisationFlowModel.ModuleLifecycle.HOLDING,
             waiting.getLifecycle());
         assertEquals("K visual completion does not run ahead", 0,
             model.getSnapshot().getVisualCompleted());
-        assertEquals("K B1 remains at Unloader", 1,
+        assertEquals("K B1 remains at Sort/Pack", 1,
             waiting.getCurrentBottleId());
 
         tick(model, 600);
         ABSVisualisationFlowModel.ModuleSnapshot stillWaiting =
-            model.getSnapshot().getModule(ABSVisualisationFlowModel.UNLOADER);
+            model.getSnapshot().getModule(ABSVisualisationFlowModel.SORT_PACK);
         assertNear("K delayed evidence has no exit drift", 100.0,
             stillWaiting.getProgress(), 0.0);
         assertEquals("K delayed evidence keeps B1", 1,
@@ -338,9 +355,9 @@ public final class ABSVisualisationFlowSelfTest {
         tick(model, 1);
         assertEquals("K real count releases visual completion", 1,
             model.getSnapshot().getVisualCompleted());
-        assertEquals("K completed B1 leaves Unloader", 0,
+        assertEquals("K completed B1 leaves Sort/Pack", 0,
             model.getSnapshot().getModule(
-                ABSVisualisationFlowModel.UNLOADER).getCurrentBottleId());
+                ABSVisualisationFlowModel.SORT_PACK).getCurrentBottleId());
     }
 
     private static void caseLLongIdleAndElapsedTimerDoNotDrift() {
@@ -392,6 +409,74 @@ public final class ABSVisualisationFlowSelfTest {
         assertAtMost("L stalled EDT cannot cross BUSY hold",
             afterStall, ABSVisualisationFlowModel.BUSY_HOLD_PERCENT);
         assertTrue("L elapsed timer invariants", stalledEdt.invariantsHold());
+    }
+
+    private static void caseMExplicitDownstreamJourney() {
+        assertEquals("M includes ten production modules", 10,
+            ABSVisualisationFlowModel.MODULE_COUNT);
+        assertEquals("M cap follows lid", ABSVisualisationFlowModel.LID + 1,
+            ABSVisualisationFlowModel.CAPPER);
+        assertEquals("M label follows cap", ABSVisualisationFlowModel.CAPPER + 1,
+            ABSVisualisationFlowModel.LABELLER);
+        assertEquals("M unload follows label", ABSVisualisationFlowModel.LABELLER + 1,
+            ABSVisualisationFlowModel.UNLOADER);
+        assertEquals("M sort/pack follows unload", ABSVisualisationFlowModel.UNLOADER + 1,
+            ABSVisualisationFlowModel.SORT_PACK);
+        ABSVisualisationFlowModel model = new ABSVisualisationFlowModel();
+        model.acceptRequired(1);
+        for (int module = ABSVisualisationFlowModel.LOADER;
+            module <= ABSVisualisationFlowModel.UNLOADER; module++) {
+            completeStage(model, module);
+            assertEquals("M bottle enters explicit stage " + module, module,
+                model.getSnapshot().getBottles().get(0).getStage());
+        }
+        model.acceptCompleted(1);
+        tick(model, 600);
+        assertEquals("M GP completion remains visible at unload", 1,
+            model.getSnapshot().getRealCompleted());
+        assertEquals("M GP completion alone leaves visual completion zero", 0,
+            model.getSnapshot().getVisualCompleted());
+        assertEquals("M unloaded bottle waits for sort evidence", 1,
+            model.getModuleSnapshot(ABSVisualisationFlowModel.UNLOADER)
+                .getCurrentBottleId());
+        model.acceptStatus(ABSVisualisationFlowModel.SORT_PACK,
+            ABSVisualisationFlowModel.READY_STATUS);
+        tick(model, 300);
+        assertEquals("M sort READY alone cannot invent a cycle", 0L,
+            model.getStartedCycles(ABSVisualisationFlowModel.SORT_PACK));
+        completeStage(model, ABSVisualisationFlowModel.SORT_PACK);
+        assertEquals("M fully completed bottle ends at Sort/Pack",
+            ABSVisualisationFlowModel.SORT_PACK,
+            model.getSnapshot().getBottles().get(0).getStage());
+        assertEquals("M full journey confirms one visual completion", 1,
+            model.getVisualCompleted());
+    }
+
+    private static void caseNSortFaultCannotFabricateCompletion() {
+        ABSVisualisationFlowModel model = new ABSVisualisationFlowModel();
+        model.acceptRequired(1);
+        routeBottleToUnloader(model);
+        completeStage(model, ABSVisualisationFlowModel.UNLOADER);
+        completeStage(model, ABSVisualisationFlowModel.SORT_PACK);
+        model.acceptStatus(ABSVisualisationFlowModel.SORT_PACK,
+            ABSVisualisationFlowModel.FAULT_STATUS);
+        model.acceptCompleted(1);
+        tick(model, 120);
+        assertEquals("N sort fault blocks final completion even at 100%", 0,
+            model.getVisualCompleted());
+        assertEquals("N sorted bottle identity retained during fault", 1,
+            model.getModuleSnapshot(ABSVisualisationFlowModel.SORT_PACK)
+                .getCurrentBottleId());
+        assertEquals("N sort fault lifecycle is visible",
+            ABSVisualisationFlowModel.ModuleLifecycle.FAULTED,
+            model.getModuleSnapshot(ABSVisualisationFlowModel.SORT_PACK)
+                .getLifecycle());
+        model.resetSystem();
+        tick(model, 10);
+        assertEquals("N reset clears all downstream bottles", 0,
+            model.getSnapshot().getBottles().size());
+        assertEquals("N reset clears sort cycle evidence", 0L,
+            model.getStartedCycles(ABSVisualisationFlowModel.SORT_PACK));
     }
 
     private static void teamIpVisualCaseAM2ArchitectureSnapshot() {
@@ -666,6 +751,7 @@ public final class ABSVisualisationFlowSelfTest {
         routeBottleToUnloader(model);
         completeStage(model, ABSVisualisationFlowModel.UNLOADER);
         model.acceptCompleted(realCompleted);
+        completeStage(model, ABSVisualisationFlowModel.SORT_PACK);
         tick(model, COMPLETE_TICKS + 20);
     }
 
@@ -679,6 +765,7 @@ public final class ABSVisualisationFlowSelfTest {
         completeStage(model, ABSVisualisationFlowModel.FILLER_B);
         completeStage(model, ABSVisualisationFlowModel.LID);
         completeStage(model, ABSVisualisationFlowModel.CAPPER);
+        completeStage(model, ABSVisualisationFlowModel.LABELLER);
     }
 
     private static void completeStage(

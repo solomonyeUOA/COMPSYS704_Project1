@@ -44,7 +44,10 @@ BottleLoaderController(
     ||
     {loop {
         present(LOAD_CONFIRMED) {
-            if (!M2MachineStateV1.confirmLoaded(#LOAD_CONFIRMED)) {
+            if (M2MachineStateV1.confirmLoaded(#LOAD_CONFIRMED)) {
+                M2PlantStateV1.acknowledgeLoadConfirmation(#LOAD_CONFIRMED);
+            }
+            else {
                 System.out.println("M2 Loader rejected LOAD_CONFIRMED=" +
                     #LOAD_CONFIRMED);
             }
@@ -58,7 +61,7 @@ BottleLoaderController(
             entryAvailable = true;
         }
         String loadCommand =
-            M2MachineStateV1.takeLoadCommand(entryAvailable);
+            M2MachineStateV1.nextLoadCommandOffer(entryAvailable);
         if (loadCommand != null) {
             emit LOAD_CMD(loadCommand);
         }

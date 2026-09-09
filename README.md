@@ -41,6 +41,51 @@ and `SYSTEMJ_LIB`). Eclipse is optional; no IDE reconfiguration is required.
 See [the reset/twin integration notes](integration/RESET_TWIN_INTEGRATION.md)
 for scope, reproducible live checks and limitations.
 
+### Finishing stages and repeated orders (QA M2-8 / M2-9 / M2-10)
+
+The overall view now shows the complete finishing sequence:
+**Lid Loader -> Capper -> Labeller -> Bottle Unloader -> Sort / Pack**.
+Labeller and Sort / Pack each have a status badge and a clickable read-only
+detail view. The dashed downstream placeholder is no longer used. Sort / Pack
+status comes from its actual Controller through the Coordinator; GP unloading
+completion is not treated as proof that sorting has finished.
+
+There is **no two-order submission limit**. Submit Order is disabled while one
+order is active, then becomes available when that order completes. The previous
+stall was a labeller completion-drain bug, not a POS limit: if `UNLOAD_READY`
+was consumed before `MARK_LABELLED`, the labeller could remain DONE and refuse
+the next bottle. It now rearms only after both outputs have been consumed,
+in either order, and its ResourceTwin returns to READY at that same transition.
+Live testing also exposed missed one-reaction machine commands/confirmations
+and simulation batch requests. These now use bounded retained transmissions;
+duplicate bottle identities cannot trigger the same physical operation twice.
+You do not need Reset System between successfully completed orders. Resource
+limits still apply (for example the lid magazine must eventually be refilled).
+
+After pulling source changes, rebuild before using `--no-build`:
+
+```powershell
+python tools\project.py test
+python tools\project.py run --no-build
+```
+
+Repeated-order acceptance (five mixed S/L orders, 15 bottle twins):
+
+```powershell
+python tools\project.py run --no-build --headless --order 'PO0001|2|P1,S,60,40,1;P2,L,50,50,2' --order-count 5 --duration 115 --expect-completions 5 --expect-workpieces 15
+```
+
+To check the actual GUI animation through all ten stages, leave the ABS window
+open until this test stops its six runtimes automatically:
+
+```powershell
+python tools\project.py run --no-build --order 'PO0001|1|P1,L,60,40,3' --duration 120 --expect-completions 1 --expect-workpieces 3 --expect-visual-completions 3
+```
+
+The overview is a symbolic animation and can catch up after the real GP count
+increases. A new batch replaces the previous batch's symbolic view; use the
+BottleTwin and ResourceTwin tables for retained confirmed records.
+
 This repository is the current development-stage integration baseline for the
 Automated Bottling System (ABS). It contains M1's Swing POS, Coordinator and
 display-only Visualisation; M2's Loader, Conveyor, Labeller, Unloader,
@@ -63,7 +108,7 @@ agreed and applied consistently to source, XML and tests.
   `RotaryTableControllerCD:11003` with separate `CONVEYOR_*` and `ROTARY_*`
   status interfaces.
 - `MockControllerCD` remains a regression fixture and is not a production
-  substitute for the eight real Machine Controllers.
+  substitute for the real Machine Controllers.
 - M3 owns `RotaryTableControllerCD:11003`, `LidLoaderControllerCD:11006`,
   `RotaryTablePlantCD:12003`, `LidLoaderPlantCD:12006` and
   `FaultSupervisorCD:13003`.
@@ -143,8 +188,8 @@ cycle.
 For integrated simulation, each accepted product batch also publishes the
 simulation-only signal `M4_SIM_BATCH_REQUEST:String` as
 `<orderId>-P<two-digit product index>|<quantity>|<sizeCode>`. The Coordinator
-sends three identical bounded copies about 600 ms apart with an `ABSENT`
-reaction between copies. This does not replace `START_ORDER` or change
+sends three identical bounded copies, each PRESENT for 200 ms with 600 ms
+ABSENT gaps between copies. This does not replace `START_ORDER` or change
 Controller ownership. The current M4 `RecognitionSimulatorCD` consumes the
 third field, de-duplicates identical retries, rejects reuse of a batch ID with
 a different quantity or size, and emits bottles at the batch-specific size.

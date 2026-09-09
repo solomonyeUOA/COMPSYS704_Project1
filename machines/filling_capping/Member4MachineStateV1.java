@@ -288,6 +288,10 @@ public final class Member4MachineStateV1 {
         return capper.getStatus();
     }
 
+    public static synchronized int getSortPackStatus() {
+        return sortPack.getStatus();
+    }
+
     public static synchronized String snapshot() {
         return fillerA.snapshot() + "\n" + fillerB.snapshot() + "\n" +
             capper.snapshot() + "\n" + sortPack.snapshot();

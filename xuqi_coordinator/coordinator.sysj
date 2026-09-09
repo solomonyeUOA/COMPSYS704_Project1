@@ -37,6 +37,8 @@ Coordinator(
     output signal LABELLER_STATUS_REQUEST;
     input Integer signal LABELLER_STATUS;
     output Integer signal VIZ_LABELLER_STATUS;
+    input Integer signal SORT_PACK_STATUS;
+    output Integer signal VIZ_SORT_PACK_STATUS;
 
     output signal LOADER_STATUS_REQUEST;
     output signal CONVEYOR_STATUS_REQUEST;
@@ -238,8 +240,8 @@ Coordinator(
     }
     ||
     // Bounded simulation-only product-batch publication. The helper retains
-    // one stable batchId|quantity|sizeCode payload for 3 copies about 600 ms
-    // apart and inserts an ABSENT reaction between copies.
+    // one stable batchId|quantity|sizeCode payload for 3 PRESENT windows
+    // of 200 ms, separated by 600 ms ABSENT gaps.
     {
         loop {
             String simulationBatchRequest =
@@ -487,6 +489,14 @@ Coordinator(
             pause;
         }
     }
+    ||
+    {loop {present(SORT_PACK_STATUS) {
+        if (CoordinatorStateV1.sortPackStatus != #SORT_PACK_STATUS) {
+            CoordinatorStateV1.sortPackStatus = #SORT_PACK_STATUS;
+            System.out.println("Coordinator SORT_PACK_STATUS=" + #SORT_PACK_STATUS);
+        }
+        emit VIZ_SORT_PACK_STATUS(#SORT_PACK_STATUS);
+    } pause;}}
     ||
     // Keep the active product recipe PRESENT in every logical reaction.
     // This branch deliberately sits outside the one-second status poll and

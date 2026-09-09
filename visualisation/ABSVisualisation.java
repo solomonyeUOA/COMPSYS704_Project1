@@ -62,7 +62,9 @@ public final class ABSVisualisation {
     private static final int FILLER_B = 4;
     private static final int LID = 5;
     private static final int CAPPER = 6;
-    private static final int UNLOADER = 7;
+    private static final int LABELLER = 7;
+    private static final int UNLOADER = 8;
+    private static final int SORT_PACK = 9;
 
     private static final int READY_STATUS = 1;
     private static final int BUSY_STATUS = 2;
@@ -97,7 +99,9 @@ public final class ABSVisualisation {
         "Filler B",
         "Lid Loader",
         "Capper",
-        "Bottle Unloader"
+        "Labeller",
+        "Bottle Unloader",
+        "Sort / Pack"
     };
     private static final int[] STATUSES = new int[MACHINE_NAMES.length];
     private static final boolean[] HAS_STATUS =
@@ -131,6 +135,8 @@ public final class ABSVisualisation {
     private final JLabel labellerStatusLabel = createCountLabel("Labeller: awaiting live status");
     private final JProgressBar progressBar;
     private final Timer animationTimer;
+    private long animationFrames;
+    private long nextAnimationTraceMillis;
     private final JDialog[] detailDialogs;
     private final ModuleDetailPanel[] detailPanels;
     private final JDialog[] teamIpDialogs;
@@ -245,6 +251,15 @@ public final class ABSVisualisation {
                 public void actionPerformed(ActionEvent event) {
                     VISUAL_MODEL.tickElapsed(System.nanoTime());
                     renderSnapshot = VISUAL_MODEL.getSnapshot();
+                    animationFrames++;
+                    long traceNow = System.currentTimeMillis();
+                    if (TRACE_ENABLED && traceNow >= nextAnimationTraceMillis) {
+                        nextAnimationTraceMillis = traceNow + 1000L;
+                        System.out.println("ABS_VIZ_FRAME frames=" + animationFrames +
+                            " real=" + renderSnapshot.getRealCompleted() +
+                            " visual=" + renderSnapshot.getVisualCompleted() +
+                            " required=" + renderSnapshot.getRequired());
+                    }
                     teamIpSnapshot = TEAM_IP_MODEL.getSnapshot();
                     productionLinePanel.repaint();
                     teamIpExtensionsPanel.syncState();
@@ -258,6 +273,7 @@ public final class ABSVisualisation {
         frame.addWindowListener(new WindowAdapter() {
             @Override
             public void windowClosed(WindowEvent event) {
+                if (TRACE_ENABLED) System.out.println("ABS_VIZ_WINDOW_CLOSED animation stopped");
                 animationTimer.stop();
                 closeAllDetailWindows();
                 synchronized (ABSVisualisation.class) {
@@ -510,6 +526,7 @@ public final class ABSVisualisation {
         if (status < 0 || status > 4 || (hasLabellerStatus && labellerStatus == status)) return;
         hasLabellerStatus = true;
         labellerStatus = status;
+        updateStatus("Labeller", status);
         System.out.println("ABS Visualisation Labeller=" + statusName(status) + " (" + status + ")");
         final ABSVisualisation ui = instance;
         if (ui != null) SwingUtilities.invokeLater(new Runnable() {
@@ -650,8 +667,12 @@ public final class ABSVisualisation {
                 return "VIZ_LID_STATUS";
             case CAPPER:
                 return "VIZ_CAPPER_STATUS";
+            case LABELLER:
+                return "VIZ_LABELLER_STATUS";
             case UNLOADER:
                 return "VIZ_UNLOADER_STATUS";
+            case SORT_PACK:
+                return "VIZ_SORT_PACK_STATUS";
             default:
                 return "VIZ_UNKNOWN_STATUS";
         }
@@ -1991,7 +2012,7 @@ public final class ABSVisualisation {
     /** Custom symbolic plant renderer; it never infers bottle locations. */
     static final class ProductionLinePanel extends JPanel {
         private static final long serialVersionUID = 1L;
-        private static final int DESIGN_WIDTH = 1160;
+        private static final int DESIGN_WIDTH = 1360;
         private static final int DESIGN_HEIGHT = 420;
         private static final Rectangle[] MODULE_HIT_REGIONS = {
             new Rectangle(20, 142, 116, 164),
@@ -2001,7 +2022,9 @@ public final class ABSVisualisation {
             new Rectangle(452, 236, 128, 138),
             new Rectangle(607, 142, 112, 164),
             new Rectangle(740, 142, 112, 164),
-            new Rectangle(992, 142, 146, 164)
+            new Rectangle(870, 142, 126, 164),
+            new Rectangle(1016, 142, 146, 164),
+            new Rectangle(1182, 142, 156, 164)
         };
         private final DetailWindowOpener detailWindowOpener;
         private int hoveredModule = -1;
@@ -2176,7 +2199,7 @@ public final class ABSVisualisation {
             g2.setColor(new Color(62, 72, 84));
             drawCenteredText(
                 g2,
-                "REAL Coordinator state + shared IDEALISED bottle flow  |  no real bottle telemetry or feedback",
+                "LIVE Controller status + shared SYMBOLIC bottle flow  |  actual bottle records in Digital Twin",
                 DESIGN_WIDTH / 2,
                 27
             );
@@ -2198,14 +2221,15 @@ public final class ABSVisualisation {
             );
             drawLidLoader(g2, 607, 142, 112, 164, statuses, received);
             drawCapper(g2, 740, 142, 112, 164, statuses, received);
-            drawPassiveDownstreamBoundary(g2, 870, 160, 104, 128);
-            drawUnloader(g2, 992, 142, 146, 164, statuses, received);
+            drawLabeller(g2, 870, 142, 126, 164, statuses, received);
+            drawUnloader(g2, 1016, 142, 146, 164, statuses, received);
+            drawSortPack(g2, 1182, 142, 156, 164, statuses, received);
 
             g2.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 12));
             g2.setColor(new Color(78, 86, 98));
             drawCenteredText(
                 g2,
-                "Bottle IDs/positions are IDEALISED shared visual records only; the exit graphic is not a second Controller.",
+                "Symbolic positions only. Unloader confirms GP bottle completion; Sort / Pack has its own status and confirmed twin event.",
                 DESIGN_WIDTH / 2,
                 400
             );
@@ -2219,7 +2243,7 @@ public final class ABSVisualisation {
             drawCenteredText(
                 g2,
                 "INPUT  >  LOAD  >  TRANSPORT  >  ROTARY PROCESSING  >  " +
-                "FILL A  >  FILL B  >  LID  >  CAP  >  UNLOAD  >  COMPLETION",
+                "FILL A  >  FILL B  >  LID  >  CAP  >  LABEL  >  BOTTLE UNLOADER  >  SORT / PACK",
                 DESIGN_WIDTH / 2,
                 57
             );
@@ -2246,7 +2270,8 @@ public final class ABSVisualisation {
 
             drawArrow(g2, 719, 224, 740, 224);
             drawArrow(g2, 852, 224, 870, 224);
-            drawArrow(g2, 974, 224, 992, 224);
+            drawArrow(g2, 996, 224, 1016, 224);
+            drawArrow(g2, 1162, 224, 1182, 224);
 
             drawActiveConnector(g2, LOADER, 136, 224, 153, 224);
             drawActiveConnector(g2, CONVEYOR, 257, 224, 275, 224);
@@ -2254,7 +2279,9 @@ public final class ABSVisualisation {
             drawActiveConnector(g2, FILLER_B, 433, 224, 452, 305);
             drawActiveConnector(g2, LID, 580, 141, 607, 224);
             drawActiveConnector(g2, CAPPER, 719, 224, 740, 224);
-            drawActiveConnector(g2, UNLOADER, 852, 224, 992, 224);
+            drawActiveConnector(g2, LABELLER, 852, 224, 870, 224);
+            drawActiveConnector(g2, UNLOADER, 996, 224, 1016, 224);
+            drawActiveConnector(g2, SORT_PACK, 1162, 224, 1182, 224);
             g2.setStroke(originalStroke);
         }
 
@@ -2819,6 +2846,50 @@ public final class ABSVisualisation {
             g2.setStroke(originalStroke);
         }
 
+        private void drawLabeller(Graphics2D g2, int x, int y, int width, int height,
+                                  int[] statuses, boolean[] received) {
+            drawMachineFrame(g2, x, y, width, height, LABELLER, "Labeller", statuses, received);
+            ABSVisualisationFlowModel.ModuleSnapshot shared = renderModule(LABELLER);
+            g2.setColor(new Color(147, 168, 183));
+            g2.fillOval(x + 16, y + 48, 30, 30);
+            g2.setColor(new Color(72, 91, 107));
+            g2.drawOval(x + 16, y + 48, 30, 30);
+            g2.drawOval(x + 27, y + 59, 8, 8);
+            g2.drawLine(x + 43, y + 72, x + 80, y + 92);
+            drawLayeredBottle(g2, x + 72, y + 70, 24, 46,
+                LIQUID_A_COLOR, 60, LIQUID_B_COLOR, 40, true, true);
+            g2.setColor(isDone(LABELLER, statuses, received) ? new Color(207, 239, 217) : Color.WHITE);
+            g2.fillRect(x + 75, y + 92, 18, 13);
+            g2.setColor(new Color(56, 77, 94));
+            g2.drawRect(x + 75, y + 92, 18, 13);
+            for (int offset = 2; offset < 15; offset += 3)
+                g2.drawLine(x + 75 + offset, y + 95, x + 75 + offset, y + 102);
+            g2.drawLine(x + 15, y + 119, x + width - 15, y + 119);
+            drawBottleIdentity(g2, x + 83, y + 122, shared.getCurrentBottleId());
+            if (isDone(LABELLER, statuses, received)) drawDoneTick(g2, x + width - 15, y + 40);
+        }
+
+        private void drawSortPack(Graphics2D g2, int x, int y, int width, int height,
+                                  int[] statuses, boolean[] received) {
+            drawMachineFrame(g2, x, y, width, height, SORT_PACK, "Sort / Pack", statuses, received);
+            g2.setColor(new Color(80, 99, 116));
+            drawArrow(g2, x + 20, y + 82, x + 80, y + 57);
+            drawArrow(g2, x + 20, y + 82, x + 80, y + 106);
+            g2.setColor(new Color(225, 234, 242));
+            g2.fillRect(x + 89, y + 44, 46, 27);
+            g2.fillRect(x + 89, y + 93, 46, 31);
+            g2.setColor(new Color(70, 89, 106));
+            g2.drawRect(x + 89, y + 44, 46, 27);
+            g2.drawRect(x + 89, y + 93, 46, 31);
+            g2.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 9));
+            drawCenteredText(g2, "S / 200", x + 112, y + 61);
+            drawCenteredText(g2, "L / 500", x + 112, y + 112);
+            drawLayeredBottle(g2, x + 19, y + 59, 18, 36,
+                LIQUID_A_COLOR, 60, LIQUID_B_COLOR, 40, true, true);
+            drawBottleIdentity(g2, x + 28, y + 101, renderModule(SORT_PACK).getCurrentBottleId());
+            if (isDone(SORT_PACK, statuses, received)) drawDoneTick(g2, x + width - 15, y + 40);
+        }
+
         private void drawUnloader(
             Graphics2D g2,
             int x,
@@ -2885,7 +2956,7 @@ public final class ABSVisualisation {
             g2.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 10));
             g2.setColor(new Color(79, 88, 99));
             drawCenteredText(
-                g2, done ? "collected" : "collection output",
+                g2, done ? "sent to Sort / Pack" : "discharge to Sort / Pack",
                 x + width / 2, y + 128
             );
             if (done) {
@@ -3613,6 +3684,14 @@ public final class ABSVisualisation {
                         )
                     );
                     break;
+                case LABELLER:
+                case SORT_PACK:
+                    primaryMetricValue.setText(wrapInformationText(
+                        "Symbolic stage progress: " + oneDecimal(detailModel.getProgress()) + "%"));
+                    secondaryMetricValue.setText(wrapInformationText(machineIndex == LABELLER ?
+                        "Apply label, verify, then release to Bottle Unloader." :
+                        "Route S/L and place into package. Sort confirmation is separate from GP unloader completion."));
+                    break;
                 case UNLOADER:
                     primaryMetricValue.setText(
                         wrapInformationText(
@@ -3623,8 +3702,8 @@ public final class ABSVisualisation {
                     secondaryMetricValue.setText(
                         wrapInformationText(
                             detailModel.getPhase() +
-                            "<br>Completion is counted only after real " +
-                            "VIZ_COMPLETED_BOTTLES increases."
+                            "<br>GP unloading is confirmed by " +
+                            "VIZ_COMPLETED_BOTTLES. Full visual completion also waits for Sort / Pack."
                         )
                     );
                     updateRealBatchInformation();
@@ -3801,6 +3880,10 @@ public final class ABSVisualisation {
                         break;
                     case CAPPER:
                         drawCapperDetail(g2);
+                        break;
+                    case LABELLER:
+                    case SORT_PACK:
+                        drawFinishingDetail(g2);
                         break;
                     case UNLOADER:
                         drawUnloaderDetail(g2);
@@ -4419,6 +4502,23 @@ public final class ABSVisualisation {
                     (int)Math.round(headY - 9.0));
             }
 
+            private void drawFinishingDetail(Graphics2D g2) {
+                ProductionLinePanel painter = new ProductionLinePanel();
+                Graphics2D stageGraphics = (Graphics2D)g2.create();
+                stageGraphics.translate(machineIndex == LABELLER ? 100 : 60, 65);
+                stageGraphics.scale(2.4, 2.0);
+                int[] values = new int[MACHINE_NAMES.length];
+                boolean[] received = new boolean[MACHINE_NAMES.length];
+                synchronized (ABSVisualisation.class) {
+                    System.arraycopy(STATUSES, 0, values, 0, values.length);
+                    System.arraycopy(HAS_STATUS, 0, received, 0, received.length);
+                }
+                if (machineIndex == LABELLER)
+                    painter.drawLabeller(stageGraphics, 0, 0, 126, 164, values, received);
+                else painter.drawSortPack(stageGraphics, 0, 0, 156, 164, values, received);
+                stageGraphics.dispose();
+            }
+
             private void drawUnloaderDetail(Graphics2D g2) {
                 g2.setColor(new Color(71, 87, 102));
                 g2.setStroke(new BasicStroke(5.0f));
@@ -4473,7 +4573,7 @@ public final class ABSVisualisation {
                 g2.setColor(new Color(66, 82, 98));
                 g2.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 13));
                 g2.drawString("DISCHARGE RAMP", 75, 215);
-                g2.drawString("COLLECTION AREA", 340, 171);
+                g2.drawString("TO SORT / PACK", 340, 171);
             }
 
             private void drawStateOverlay(Graphics2D g2) {

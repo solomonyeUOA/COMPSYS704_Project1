@@ -14,7 +14,9 @@ ConveyorPlant(
 
     {loop {
         present(CONVEYOR_TRANSFER) {
-            M2PlantStateV1.registerConveyorBottle(#CONVEYOR_TRANSFER);
+            if (M2PlantStateV1.registerConveyorBottle(#CONVEYOR_TRANSFER)) {
+                M2MachineStateV1.acknowledgeConveyorTransfer(#CONVEYOR_TRANSFER);
+            }
         }
         present(MOTOR_CMD) {
             M2PlantStateV1.setConveyorMotor(

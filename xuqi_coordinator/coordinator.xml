@@ -2,6 +2,8 @@
 <System xmlns="http://systemjtechnology.com">
     <SubSystem Name="COORDINATOR_SS" Local="true">
         <ClockDomain Name="CoordinatorCD" Class="Coordinator">
+            <iSignal Name="SORT_PACK_STATUS" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="11001" />
+            <oSignal Name="VIZ_SORT_PACK_STATUS" To="ABSVisualisationPlantCD.VIZ_SORT_PACK_STATUS" Class="OptionalSimpleClient" IP="127.0.0.1" Port="11008" />
             <iSignal Name="LABELLER_STATUS" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="11001" />
             <oSignal Name="LABELLER_STATUS_REQUEST" To="LabellerControllerCD.LABELLER_STATUS_REQUEST" Class="OptionalSimpleClient" IP="127.0.0.1" Port="11013" />
             <oSignal Name="VIZ_LABELLER_STATUS" To="ABSVisualisationPlantCD.VIZ_LABELLER_STATUS" Class="OptionalSimpleClient" IP="127.0.0.1" Port="11008" />

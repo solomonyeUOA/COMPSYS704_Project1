@@ -34,6 +34,7 @@ public final class CoordinatorStateV1 {
     public static int capperStatus = 0;
     public static int unloaderStatus = 0;
     public static int labellerStatus = 0;
+    public static int sortPackStatus = 0;
     private static java.math.BigInteger resetWatermark = java.math.BigInteger.valueOf(-1L);
     private static final java.util.Set<String> acceptedOrderIds = new java.util.HashSet<String>();
     private static long nextTwinContextMillis;
@@ -235,8 +236,8 @@ public final class CoordinatorStateV1 {
     }
 
     /**
-     * Returns at most three identical copies with a 600 ms retry interval and
-     * an ABSENT reaction between copies.
+     * Returns three bounded 200 ms PRESENT windows with the identical batch
+     * payload, separated by 600 ms ABSENT gaps. No receipt ACK is inferred.
      */
     public static String nextM4SimulationBatchRequest() {
         return nextM4SimulationBatchRequest(System.currentTimeMillis());
@@ -775,6 +776,7 @@ public final class CoordinatorStateV1 {
         capperStatus = 0;
         unloaderStatus = 0;
         labellerStatus = 0;
+        sortPackStatus = 0;
         nextTwinContextMillis = 0L;
         startOrderUntilMillis = 0L;
     }

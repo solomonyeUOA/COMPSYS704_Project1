@@ -15,12 +15,27 @@ public final class M2PlantStateV1 {
     private static String labelCommand;
     private static long labelStartedAt;
     private static boolean labelVerificationPending;
+    private static String labelVerificationResult;
     private static boolean labelVerificationFault;
 
     private static String unloaderBottleId;
     private static long unloadStartedAt;
     private static boolean removalPending;
     private static boolean removalFault;
+    private static final java.util.Set<String> removedBottleIds =
+        new java.util.HashSet<String>();
+    private static final java.util.Set<String> loadedBottleIds =
+        new java.util.HashSet<String>();
+    private static final java.util.Set<String> transferredBottleIds =
+        new java.util.HashSet<String>();
+    private static final java.util.Map<String, String> verifiedLabelCommands =
+        new java.util.HashMap<String, String>();
+    private static M2HeldSignalOfferV1 removalConfirmationOffer =
+        new M2HeldSignalOfferV1(10, 100L, 25L);
+    private static M2HeldSignalOfferV1 loadConfirmationOffer =
+        new M2HeldSignalOfferV1(10, 100L, 25L);
+    private static M2HeldSignalOfferV1 labelVerificationOffer =
+        new M2HeldSignalOfferV1(10, 100L, 25L);
 
     private M2PlantStateV1() {
     }
@@ -40,7 +55,9 @@ public final class M2PlantStateV1 {
         return !conveyorMotorEnabled && loaderBottleId == null &&
             conveyorBottleId == null && labelCommand == null &&
             unloaderBottleId == null && !loaderConfirmationPending &&
-            !labelVerificationPending && !removalPending;
+            !labelVerificationPending && !removalPending &&
+            !removalConfirmationOffer.isActive() &&
+            !loadConfirmationOffer.isActive() && !labelVerificationOffer.isActive();
     }
 
     public static synchronized boolean isConveyorMotorEnabled() {
@@ -59,11 +76,19 @@ public final class M2PlantStateV1 {
         labelCommand = null;
         labelStartedAt = 0;
         labelVerificationPending = false;
+        labelVerificationResult = null;
         labelVerificationFault = false;
         unloaderBottleId = null;
         unloadStartedAt = 0;
         removalPending = false;
         removalFault = false;
+        removedBottleIds.clear();
+        loadedBottleIds.clear();
+        transferredBottleIds.clear();
+        verifiedLabelCommands.clear();
+        removalConfirmationOffer = new M2HeldSignalOfferV1(10, 100L, 25L);
+        loadConfirmationOffer = new M2HeldSignalOfferV1(10, 100L, 25L);
+        labelVerificationOffer = new M2HeldSignalOfferV1(10, 100L, 25L);
     }
 
     public static synchronized boolean commandLoad(
@@ -74,6 +99,7 @@ public final class M2PlantStateV1 {
         if (loaderBottleId != null) {
             return loaderBottleId.equals(bottleId);
         }
+        if (loadedBottleIds.contains(bottleId)) { return true; }
         M2BottleContextV1.validateToken(bottleId, "bottleId");
         loaderBottleId = bottleId;
         M2SystemResetStateV1.observeBottle(bottleId);
@@ -93,9 +119,29 @@ public final class M2PlantStateV1 {
             return null;
         }
         String result = loaderBottleId;
+        loadedBottleIds.add(loaderBottleId);
         loaderBottleId = null;
         loaderConfirmationPending = false;
         return result;
+    }
+
+    public static synchronized String nextLoadConfirmationOffer() {
+        return nextLoadConfirmationOffer(System.currentTimeMillis());
+    }
+
+    static synchronized String nextLoadConfirmationOffer(long nowMillis) {
+        if (M2SystemResetStateV1.isQuarantined()) { return null; }
+        if (!loadConfirmationOffer.isActive()) {
+            String bottleId = takeLoadConfirmed();
+            if (bottleId != null) {
+                loadConfirmationOffer.arm(bottleId, bottleId, nowMillis);
+            }
+        }
+        return loadConfirmationOffer.nextReactionValue(nowMillis);
+    }
+
+    public static synchronized boolean acknowledgeLoadConfirmation(String bottleId) {
+        return loadConfirmationOffer.acknowledge(bottleId);
     }
 
     public static synchronized boolean registerConveyorBottle(
@@ -103,6 +149,7 @@ public final class M2PlantStateV1 {
     ) {
         if (!M2SystemResetStateV1.allowBottle(bottleId)) { return false; }
         M2BottleContextV1.validateToken(bottleId, "bottleId");
+        if (transferredBottleIds.contains(bottleId)) { return true; }
         if (conveyorBottleId != null) {
             return conveyorBottleId.equals(bottleId);
         }
@@ -152,6 +199,7 @@ public final class M2PlantStateV1 {
             conveyorMotorEnabled) {
             return false;
         }
+        transferredBottleIds.add(conveyorBottleId);
         conveyorBottleId = null;
         conveyorP1Present = false;
         return true;
@@ -173,6 +221,8 @@ public final class M2PlantStateV1 {
         if (!M2SystemResetStateV1.allowBottle(fields[0])) { return false; }
         M2BottleContextV1.validateToken(fields[0], "bottleId");
         M2BottleContextV1.validateToken(fields[1], "labelData");
+        String verified = verifiedLabelCommands.get(fields[0]);
+        if (verified != null) { return verified.equals(payload); }
         if (labelCommand != null) {
             return labelCommand.equals(payload);
         }
@@ -183,8 +233,13 @@ public final class M2PlantStateV1 {
     }
 
     public static synchronized void tickLabeller(long nowMillis) {
-        if (labelCommand != null &&
+        if (labelCommand != null && !labelVerificationPending &&
             nowMillis - labelStartedAt >= DEFAULT_ACTION_MILLIS) {
+            // Capture the verifier at physical completion, not later when an
+            // older unacknowledged feedback offer finally frees the outbox.
+            String bottleId = labelCommand.split("\\|", -1)[0];
+            labelVerificationResult = bottleId + "|" +
+                (labelVerificationFault ? "FAIL" : "PASS");
             labelVerificationPending = true;
         }
     }
@@ -194,11 +249,31 @@ public final class M2PlantStateV1 {
             return null;
         }
         String bottleId = labelCommand.split("\\|", -1)[0];
-        String result = bottleId + "|" +
-            (labelVerificationFault ? "FAIL" : "PASS");
+        String result = labelVerificationResult;
+        verifiedLabelCommands.put(bottleId, labelCommand);
         labelCommand = null;
         labelVerificationPending = false;
+        labelVerificationResult = null;
         return result;
+    }
+
+    public static synchronized String nextLabelVerificationOffer() {
+        return nextLabelVerificationOffer(System.currentTimeMillis());
+    }
+
+    static synchronized String nextLabelVerificationOffer(long nowMillis) {
+        if (M2SystemResetStateV1.isQuarantined()) { return null; }
+        if (!labelVerificationOffer.isActive()) {
+            String evidence = takeLabelVerification();
+            if (evidence != null) {
+                labelVerificationOffer.arm(evidence.split("\\|", -1)[0], evidence, nowMillis);
+            }
+        }
+        return labelVerificationOffer.nextReactionValue(nowMillis);
+    }
+
+    public static synchronized boolean acknowledgeLabelVerification(String bottleId) {
+        return labelVerificationOffer.acknowledge(bottleId);
     }
 
     public static synchronized void setLabelVerificationFault(boolean active) {
@@ -211,12 +286,14 @@ public final class M2PlantStateV1 {
     ) {
         if (!M2SystemResetStateV1.allowBottle(bottleId)) { return false; }
         M2BottleContextV1.validateToken(bottleId, "bottleId");
+        if (removedBottleIds.contains(bottleId)) { return true; }
         if (unloaderBottleId != null) {
             return unloaderBottleId.equals(bottleId);
         }
         unloaderBottleId = bottleId;
         M2SystemResetStateV1.observeBottle(bottleId);
         unloadStartedAt = nowMillis;
+        System.out.println("[M2-UNLOAD] actuator accepted " + bottleId);
         return true;
     }
 
@@ -232,9 +309,32 @@ public final class M2PlantStateV1 {
             return null;
         }
         String result = unloaderBottleId + "|true";
+        removedBottleIds.add(unloaderBottleId);
         unloaderBottleId = null;
         removalPending = false;
         return result;
+    }
+
+    /** Keep sensor evidence across lost network reactions without re-actuating. */
+    public static synchronized String nextRemovalConfirmationOffer() {
+        return nextRemovalConfirmationOffer(System.currentTimeMillis());
+    }
+
+    static synchronized String nextRemovalConfirmationOffer(long nowMillis) {
+        if (M2SystemResetStateV1.isQuarantined()) { return null; }
+        if (!removalConfirmationOffer.isActive()) {
+            String evidence = takeRemovalConfirmed();
+            if (evidence != null) {
+                String bottleId = evidence.split("\\|", -1)[0];
+                removalConfirmationOffer.arm(bottleId, evidence, nowMillis);
+                System.out.println("[M2-UNLOAD] sensor confirmed " + bottleId);
+            }
+        }
+        return removalConfirmationOffer.nextReactionValue(nowMillis);
+    }
+
+    public static synchronized boolean acknowledgeRemovalConfirmation(String bottleId) {
+        return removalConfirmationOffer.acknowledge(bottleId);
     }
 
     public static synchronized void setRemovalFault(boolean active) {
