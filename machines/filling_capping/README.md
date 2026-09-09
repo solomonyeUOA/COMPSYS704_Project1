@@ -150,7 +150,8 @@ java -cp "/path/to/COMPSYS704_Lab_3/lib/*" \
 
 javac -cp "/path/to/COMPSYS704_Lab_3/lib/*" \
   -d build/member4-classes \
-  build/member4-generated/*.java machines/filling_capping/*.java
+  build/member4-generated/*.java machines/filling_capping/*.java \
+  common/OptionalSimpleClient.java
 
 java -cp "build/member4-classes:/path/to/COMPSYS704_Lab_3/lib/*" \
   Member4ModelSelfTest
@@ -206,8 +207,9 @@ Generated Java and class files are build artifacts and must not be committed.
 
 `RecognitionSimulatorCD` supplies the environmental stimulus that a physical
 camera/size sensor would provide. It is included only in
-`member4_simulation.xml`; canonical `member4_system.xml` remains unchanged and
-has no automatic source. `RECOGNITION_REQUEST` remains internal to M4.
+`member4_simulation.xml`. The canonical `member4_system.xml` still has no
+automatic recognition source, although this draft adds reset/twin and status
+integration to that XML. `RECOGNITION_REQUEST` remains internal to M4.
 
 Use these two simulation mappings together:
 
@@ -229,8 +231,8 @@ PO0002-P01|2|L
 mix both bottle types, and the recognition request M4 generates for that
 batch carries it as `<bottleId>|S` or `<bottleId>|L`.
 
-M1 sends at most three identical copies about 600 ms apart and inserts an
-`ABSENT` reaction after every pulse. M4 accepts one logical batch
+M1 sends at most three identical copies, each PRESENT for 200 ms with a
+600 ms ABSENT gap between copies. M4 accepts one logical batch
 idempotently, generates `PO0001-P01-B001` through `PO0001-P01-B003`, then
 waits for a different batch. The same ID with the same quantity and the same
 size never restarts; the same ID with a different quantity **or** a different

@@ -1,11 +1,17 @@
-# Independent reset, labeller and twin integration
+# M1-M4 reset, labeller and twin integration draft
 
 This work targets the reset contract in the local QA document
-`COMPSYS704_Reset_Team_Modification_Instructions.docx`. The original team main
-at `42317b9` builds and passes its 20 regression suites, but the live reset test
-stalls at `RESET_PENDING_EXTERNAL_ACK` with all three ACK flags false. It also
-does not yet connect actual bottle/resource twin rows to the M1 UI. Fixes live
-only in the independent `COMPSYS704_Project1_1` repository.
+`COMPSYS704_Reset_Team_Modification_Instructions.docx`. During the original
+inspection, team main `42317b9` built and passed its 20 regression suites, but
+the live reset test stalled at `RESET_PENDING_EXTERNAL_ACK` with all three ACK
+flags false. It did not yet connect actual bottle/resource twin rows to the M1
+UI. This draft imports the fixes from `COMPSYS704_Project1_1` commits `4922537`
+and `a179761` into the team repository for M1/M2/M3/M4 review.
+
+The historical verification sections below describe runs in the independent
+`github_1` checkout, not runs in this team checkout. Their local ignored log
+paths are relative to `github_1`. Team-branch verification must be recorded
+separately; neither simulation scope nor hardware limitations change on import.
 
 ## Ownership and changes
 
@@ -52,7 +58,8 @@ all upstream actuators.
 
 ## Reproduce live checks
 
-From the independent repository after `python tools/project.py test`:
+From this repository root after `python tools/project.py test` (configure the
+pinned toolchain paths as described in the root README if needed):
 
 ```powershell
 # Small bottle; actual POS completion and both kinds of twins required.
@@ -72,16 +79,7 @@ post-reset empty generation before new work. Regression tests additionally
 cover duplicate/old resets, stale batches/bottles/events, S/L profiles, queued
 observation ordering and unsafe reset states.
 
-To run the synchronized original checkout without modifying its tracked files:
-
-```powershell
-python D:\Auckland_University\COMPSYS_704\Project1\github_1\tools\project.py run --repo-root D:\Auckland_University\COMPSYS_704\Project1\github
-```
-
-That command deliberately runs original behavior, including its incomplete
-member reset receivers; use `github_1` for the independent fixes.
-
-## Verified on 10 September 2026
+## Historical verification in github_1: 10 September 2026, commit 4922537
 
 - Full build: 34 SystemJ sources and 103 handwritten Java sources, Java 8 with
   all 14 pinned SystemJ JAR checksums verified.
@@ -110,10 +108,11 @@ member reset receivers; use `github_1` for the independent fixes.
 
 Run directories are local ignored evidence, not committed binaries/logs. The
 commands above reproduce them. These checks validate the simulation scope,
-not physical hardware. The unmodified team checkout was separately verified
-at `42317b9`; its reset still lacks the member ACK implementation.
+not physical hardware. The unmodified team baseline was separately verified
+at `42317b9`; that baseline lacked the member ACK implementation now included
+in this draft.
 
-## QA M2-8 / M2-9 / M2-10 follow-up (10 September 2026)
+## Historical QA follow-up in github_1: 10 September 2026, commit a179761
 
 The overall production view now contains ten clickable stations, including
 the explicit finishing sequence **Lid -> Cap -> Label -> Bottle Unloader ->
@@ -133,7 +132,7 @@ its four machine actuation/context paths. Completed identities prevent
 re-actuation, sensor results are retained, and label PASS/FAIL is latched at
 physical completion. M1's simulation batch request also uses held windows.
 
-Final-source verification:
+Final-source verification in the independent `github_1` checkout:
 
 - Full build: 34 SystemJ sources and 108 handwritten Java sources;
   **31 executable suites passed**, with 29 clock domains and zero wiring
@@ -160,6 +159,38 @@ Earlier failed GUI runs were retained for diagnosis: they exposed lost
 LOAD_BOTTLE, MARK_LABELLED and sort-ready pulses. They are not counted as
 passing checks. No M3 logic change was needed for this follow-up. Reproduce
 the GUI and repeated-order acceptance using the commands in the root README.
+
+## Team integration branch verification (10 September 2026)
+
+These checks were rerun in `D:\Auckland_University\COMPSYS_704\Project1\github`
+on `integration/m1-m4-reset-twins-finishing`, based on team main `42317b9`.
+The imported runtime source/XML matches the tested independent `a179761`;
+the subsequent changes adapt documentation only.
+
+- `python tools/project.py test`: 34 SystemJ sources, 108 handwritten Java
+  sources, all 31 executable suites passed; 29 canonical clock domains,
+  zero wiring warnings; fault evaluation 11/11 with zero tested unsafe outputs.
+- Five consecutive mixed S/L orders without reset: PO0001 through PO0005
+  completed, exactly 15 COMPLETE bottle twins, eight resource records and
+  zero rejected updates. New evidence: `build/runs/20260910-042336-631346`.
+- Reset during an active order: all three member ACKs reached the Coordinator
+  and POS, generation 2 cleared to W=0/R=0, then fresh PO0002 completed with
+  three COMPLETE mixed S/L bottles. New evidence:
+  `build/runs/20260910-042252-736808`.
+- All six stderr logs were empty in both new live runs. Their test processes
+  stopped afterward. The user's existing `github_1` GUI was left running;
+  isolated port offsets avoided interfering with it.
+
+Exact live commands used after the full build:
+
+```powershell
+python tools\project.py run --no-build --headless --port-offset 30000 --order 'PO0001|2|P1,S,60,40,1;P2,L,50,50,2' --order-count 5 --duration 150 --expect-completions 5 --expect-workpieces 15
+python tools\project.py run --no-build --headless --port-offset 20000 --order 'PO0001|2|P1,S,60,40,1;P2,L,50,50,2' --order-count 2 --reset-after 12 --duration 65 --expect-reset --expect-completions 1 --expect-workpieces 3
+```
+
+This supplements, rather than relabels, the historical GUI evidence above.
+All four members should review their interfaces and reproduce the checks on
+their own pinned toolchain before this draft is marked ready to merge.
 
 ## Limits
 

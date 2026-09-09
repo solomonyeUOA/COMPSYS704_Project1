@@ -23,7 +23,7 @@ payload types, IP addresses and ports.
 
 The canonical runtime mapping is `member2_system.xml`.
 
-In the independent `COMPSYS704_Project1_1` copy, M1 also polls the Labeller and
+In this team integration draft, M1 also polls the Labeller and
 forwards its status to the visualisation. Whole-system reset and the live twin
 view are integrated additions to the original group boundary.
 
@@ -178,6 +178,8 @@ used when no detail is required.
 - `M2PlantStateV1.java`: deterministic high-level Plant model.
 - `M2MachineStateV1.java`: SystemJ-facing state facade.
 - `M2BoundedSignalOfferV1.java`: retained bounded retry-pulse transport.
+- `M2HeldSignalOfferV1.java`: retained bounded PRESENT-window transport for
+  machine actuation, context and cross-member handoffs.
 - `WorkpieceTwin.java`, `ResourceTwin.java`, `DigitalTwinStoreV1.java`: twin
   models and single-owner store.
 - `M2TransferFault*V2_1.java`: frozen V2.1 payload/correlation implementation.
@@ -221,9 +223,11 @@ $cp = "build\member2-classes;$lib\*"
 & $java -cp $cp Member2ReliableHandoffSelfTest
 & $java -cp $cp Member2SystemResetSelfTest
 & $java -cp $cp Member2LiveTwinSelfTest
+& $java -cp $cp Member2ReliableActuationSelfTest
+& $java -cp $cp Member2RepeatedOrdersSelfTest
 ```
 
-All seven tests must print `PASSED`. The reliable hand-off test checks bounded
+All nine tests must print `PASSED`. The reliable hand-off test checks bounded
 retry timing, mandatory `ABSENT` reactions, lost-pulse recovery and receiver
 de-duplication. The real M2/M3 model compatibility test
 also uses M3's existing Java sources:
@@ -267,9 +271,9 @@ Run the M2 runtime only after the required receiver peers are started:
 
 ## Integration validation
 
-- The independent project copy connects `LABELLER_STATUS_REQUEST`,
+- This integration draft connects `LABELLER_STATUS_REQUEST`,
   `LABELLER_STATUS`, `VIZ_LABELLER_STATUS` and the read-only live twin feed.
-  These additions do not change the original group GitHub repository.
+  These cross-member additions require M1 review alongside the M2 changes.
 - M4's real Registry, filling/capping and Sort/Pack runtime is now present and
   its receiver models align with M2's unchanged full-context payload. A live
   multi-runtime timing run is still required before final submission.

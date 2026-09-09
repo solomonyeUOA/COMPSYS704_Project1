@@ -1,16 +1,17 @@
-# COMPSYS704 Project 1 - Independent Integration Workspace
+# COMPSYS704 Project 1 - M1-M4 Integration Draft
 
-This is `COMPSYS704_Project1_1`, copied with main history from the team repository
-at `42317b9` (PR #18, inspected 10 September 2026). Integration fixes here do not
-change `COMPSYS704_Project1`. Local `origin` points here; `upstream` is the team
-repository with its push URL disabled locally.
+This branch proposes the complete M1/M2/M3/M4 simulation integration for the
+team repository `COMPSYS704_Project1`, based on team main `42317b9` (PR #18).
+It imports the reset/twin and finishing-stage fixes previously tested in
+`COMPSYS704_Project1_1` at `4922537` and `a179761`. It is a draft for all four
+members to review, not an assertion that the team has approved every change.
 
 ## Run locally (Windows)
 
 In PowerShell:
 
 ```powershell
-cd D:\Auckland_University\COMPSYS_704\Project1\github_1
+cd D:\Auckland_University\COMPSYS_704\Project1\github
 python tools\project.py test
 python tools\project.py run --no-build
 ```
@@ -34,9 +35,20 @@ PC has an unrelated service on canonical port 11001. It remaps every XML in a
 generated run directory without changing source XML. Use `--port-offset 20000`
 for a second isolated run. Logs remain under `build/runs/<timestamp>`.
 
-Default toolchain: Adoptium JDK `8.0.502.7` and this PC's Lab3 `lib` folder.
-Other computers can set `--java-home` and `--systemj-lib` (or `PROJECT_JAVA_HOME`
-and `SYSTEMJ_LIB`). Eclipse is optional; no IDE reconfiguration is required.
+The default paths match M2's PC: Adoptium JDK `8.0.502.7` and its Lab3 `lib`
+folder. On another computer, use your own paths to the same pinned Java 8 and
+SystemJ JARs; the compiler is not bundled in this repository. For example:
+
+```powershell
+$env:PROJECT_JAVA_HOME = 'C:\path\to\jdk8u502'
+$env:SYSTEMJ_LIB = 'D:\path\to\COMPSYS704_Lab_3\lib'
+python tools\project.py test
+python tools\project.py run --no-build
+```
+
+Alternatively pass `--java-home` and `--systemj-lib` to each command. The
+launcher verifies the pinned JAR checksums before running. Eclipse is optional;
+no IDE reconfiguration is required. See [the toolchain lock](toolchain/README.md).
 
 See [the reset/twin integration notes](integration/RESET_TWIN_INTEGRATION.md)
 for scope, reproducible live checks and limitations.
@@ -122,6 +134,26 @@ agreed and applied consistently to source, XML and tests.
   actuators or physical Plant state.
 - The obsolete combined `TransportControllerCD` / `TRANSPORT_*` status
   boundary is not part of the current M1 architecture.
+
+## Draft PR member review
+
+- [ ] M1: review Coordinator reset/batch delivery, ten-stage Swing overview,
+  and read-only BottleTwin/ResourceTwin tables. This PR extends the current
+  Swing UI; the separate, unmerged Web3D prototype is not imported. Agree its
+  future telemetry/UI compatibility before combining those branches.
+- [ ] M2: review label verification, bounded identity-preserving handoffs,
+  repeated-order rearming, safe reset and both twin stores.
+- [ ] M3: review simulated rotary/lid reset reconciliation, retained identity
+  fences and confirmed LIDDED observations.
+- [ ] M4: review safe filling/capping/sort reset, S/L context, confirmed twin
+  observations and Sort/Pack telemetry.
+- [ ] All members: rebuild, repeat the live checks, inspect cross-member
+  interfaces and agree the documented simulation limits before marking ready.
+
+The [verification notes](integration/RESET_TWIN_INTEGRATION.md) distinguish
+historical `github_1` GUI checks from new team-checkout checks: 31 suites,
+five consecutive mixed orders / 15 completed bottles, and active reset
+followed by fresh production all passed on this integration branch.
 
 ## Start here
 
@@ -245,7 +277,7 @@ The POS Reset System control sends a bounded String-valued
 clears M1-owned state and fans the identity out as
 `M2_SYSTEM_RESET`, `M3_SYSTEM_RESET`, `M4_SYSTEM_RESET` and
 `VIZ_SYSTEM_RESET`. It reports `SYSTEM_RESET_COMPLETE` only after matching
-M2/M3/M4 ACKs. This independent workspace implements all three receivers with
+M2/M3/M4 ACKs. This integration branch implements all three receivers with
 simulation-safe reset barriers and retained stale-work tombstones. If a member
 is missing or cannot confirm safety, the Coordinator correctly remains in
 `RESET_PENDING_EXTERNAL_ACK`; receipt alone is not completion.
