@@ -111,6 +111,7 @@ public final class ABSVisualisation {
     private static int completedBottles = 0;
     private static boolean requiredBottlesReceived = false;
     private static boolean completedBottlesReceived = false;
+    private static String lastSystemResetId = "";
 
     private final JFrame frame;
     private final ProductionLinePanel productionLinePanel;
@@ -489,6 +490,43 @@ public final class ABSVisualisation {
                 public void run() {
                     ui.teamIpExtensionsPanel.syncState();
                     ui.refreshDetailPanels();
+                }
+            });
+        }
+    }
+
+    /** Resets only this read-only M1 projection; it never commands a Plant. */
+    public static synchronized void resetSystem(String resetId) {
+        if (resetId == null || !resetId.matches("RST[0-9]{4,}") ||
+            resetId.equals(lastSystemResetId)) {
+            return;
+        }
+        lastSystemResetId = resetId;
+        requiredBottles = 0;
+        completedBottles = 0;
+        requiredBottlesReceived = true;
+        completedBottlesReceived = true;
+        for (int index = 0; index < STATUSES.length; index++) {
+            STATUSES[index] = 0;
+            HAS_STATUS[index] = true;
+        }
+        VISUAL_MODEL.resetSystem();
+        TEAM_IP_MODEL.acceptM3Evidence(
+            "V1|NORMAL|M1_RESET|" + resetId +
+            "|RESET_REQUESTED|RESET_PENDING_EXTERNAL_ACK"
+        );
+        renderSnapshot = VISUAL_MODEL.getSnapshot();
+        teamIpSnapshot = TEAM_IP_MODEL.getSnapshot();
+        System.out.println(
+            "ABS Visualisation reset to safe initial state: " + resetId
+        );
+
+        final ABSVisualisation ui = instance;
+        if (ui != null) {
+            SwingUtilities.invokeLater(new Runnable() {
+                @Override
+                public void run() {
+                    ui.refreshAll();
                 }
             });
         }

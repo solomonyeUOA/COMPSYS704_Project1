@@ -8,11 +8,15 @@ replace the production Clock Domains or ports.
 
 ```text
 POSCD -> ORDER -> CoordinatorCD
+POSCD -> SYSTEM_RESET_REQUEST(resetId) -> CoordinatorCD
 CoordinatorCD -> START_ORDER / ratios / eight STATUS_REQUEST signals
 MockControllerCD -> eight STATUS signals
 Mock final path -> Capper -> Conveyor output -> Bottle Unloader
 Bottle Unloader -> BOTTLE_DONE -> CoordinatorCD
 CoordinatorCD -> ORDER_COMPLETE -> POSCD
+CoordinatorCD -> M2/M3/M4/VIZ system-reset fan-out
+MockControllerCD -> M2/M3/M4 matching reset ACKs -> CoordinatorCD
+CoordinatorCD -> SYSTEM_RESET_COMPLETE -> POSCD (only after all three ACKs)
 CoordinatorCD -> ten VIZ_* signals -> ABSVisualisationPlantCD
 M3 FaultSupervisorCD -> four FT_* safety inputs -> CoordinatorCD:11001
 CoordinatorCD -> FT_SAFE_STOP_ACK / FT_RESUME_DECISION ->
@@ -78,7 +82,9 @@ Run the framework-free protocol/state check:
 
 ```powershell
 java -cp "build/classes;<SYSTEMJ_LIB_DIR>/*" OrderV1SelfTest
+java -cp "build/classes;<SYSTEMJ_LIB_DIR>/*" OrderV2SelfTest
 java -cp "build/classes;<SYSTEMJ_LIB_DIR>/*" M1M4BatchSyncSelfTest
+java -cp "build/classes;<SYSTEMJ_LIB_DIR>/*" SystemResetSelfTest
 ```
 
 Expected output: `OrderV1SelfTest PASSED`. This check now also verifies that an
@@ -91,9 +97,9 @@ a held `BOTTLE_DONE` window counts once and re-arms only after an `ABSENT`
 reaction.
 
 `M1M4BatchSyncSelfTest` verifies the simulation-only batch contract: retries
-retain an identical `<orderId>-Pnn|quantity` payload, a product transition
+retain an identical `<orderId>-Pnn|quantity|sizeCode` payload, a product transition
 creates the next deterministic batch ID, conflicting quantities do not mutate
-the current identity, and the generated Coordinator exposes the expected
+the current identity, conflicting sizes are rejected, and the generated Coordinator exposes the expected
 `M4_SIM_BATCH_REQUEST` value. It also verifies that an order ID `OrderV1`
 accepts but the simulation transport cannot represent only skips the trigger:
 the order is still accepted and no batch identity is retained.
@@ -117,7 +123,7 @@ java -cp "build/classes;<SYSTEMJ_LIB_DIR>/*" `
   com.systemj.SystemJRunner visualisation/abs_visualisation_plant.xml
 
 # Terminal 3 - automatic quantity=2 order
-java "-Dabs.pos.testOrder=PO001|1|P1,60,40,2" `
+java "-Dabs.pos.testOrder=PO001|1|P1,S,60,40,2" `
   -cp "build/classes;<SYSTEMJ_LIB_DIR>/*" `
   com.systemj.SystemJRunner xuqi_pos/pos.xml
 
@@ -131,6 +137,9 @@ Visualisation. Normal interactive POS use omits `abs.pos.testOrder`.
 For slower startup environments, add
 `-Dabs.pos.testOrderDelayMillis=10000`; the normal test default remains five
 seconds.
+An integration-only automatic reset can be scheduled with
+`-Dabs.pos.testResetDelayMillis=<milliseconds>`; normal POS runs omit this
+property and can request reset only through the confirmed UI action.
 
 For the mandatory consecutive-order regression, add
 `-Dabs.pos.testOrderCount=2 -Dabs.pos.testOrderIntervalMillis=750`. POS assigns
@@ -151,7 +160,7 @@ only once.
 POS:
 
 ```text
-POS sent ORDER: PO001|1|P1,60,40,2
+POS sent ORDER: PO001|1|P1,S,60,40,2
 POS received completion: orderId=PO001, status=COMPLETED, ...
 ```
 
@@ -200,6 +209,35 @@ This test validates POS/Coordinator, Coordinator/Mock and
 Coordinator/Visualisation communication. It does not validate real Machine
 Controllers, physical Plants, M3 `FaultSupervisorCD`, independent safe-stop
 evidence, or the still-undefined M1 FT String payload field order.
+
+## Size-aware order and whole-system reset contract
+
+New POS submissions use ORDER V2:
+`orderId|productCount|productId,sizeCode,A%,B%,quantity;...`, where `S` is
+200 mL and `L` is 500 mL. `OrderV1` remains accepted by the Coordinator and
+defaults to the S/200 mL profile. The simulation-only M4 payload is now
+`batchId|quantity|sizeCode`. M4's `RecognitionSimulatorCD` must be updated by
+Member 4 before a POS-selected size is consumed in the full team runtime.
+
+`SystemResetSelfTest` covers reset while idle/active, duplicate reset copies,
+stale completion isolation, pending ORDER/completion/M4 retry cancellation,
+post-reset order reuse safety, both bottle sizes, and an S-then-L order.
+The unified Mock acknowledges the M2/M3/M4 reset requests independently.
+
+Production teammate responsibilities remain intentionally unimplemented here:
+
+- M2: receive `M2_SYSTEM_RESET` at `M2TransferFaultAdapterCD:13002`, safely
+  clear/de-energise M2 state, then return the same ID as
+  `M2_SYSTEM_RESET_ACK` to `CoordinatorCD:11001`.
+- M3: receive `M3_SYSTEM_RESET` at `FaultSupervisorCD:13003`, safely reset
+  M3 controller/fault state, then return matching `M3_SYSTEM_RESET_ACK`.
+- M4: receive `M4_SYSTEM_RESET` at `BottleContextRegistryCD:11011`, safely
+  clear contexts/queues/commands/model faults, then return matching
+  `M4_SYSTEM_RESET_ACK`; also parse the new M4 simulation size field.
+
+Each receiver must handle duplicate reset IDs idempotently and must ACK only
+after reaching its defined safe initial state. Until all three production
+receivers exist, Coordinator correctly remains `RESET_PENDING_EXTERNAL_ACK`.
 
 ## Three-runtime regression
 

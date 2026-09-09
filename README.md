@@ -76,10 +76,11 @@ cycle.
 
 For integrated simulation, each accepted product batch also publishes the
 simulation-only signal `M4_SIM_BATCH_REQUEST:String` as
-`<orderId>-P<two-digit product index>|<quantity>`. The Coordinator sends three
-identical bounded pulses about 600 ms apart with an `ABSENT` reaction between
-pulses. This does not replace `START_ORDER`, change Controller ownership, or
-alter any frozen M1/M2/M3/M4 production interface. Use
+`<orderId>-P<two-digit product index>|<quantity>|<sizeCode>`. The Coordinator
+sends three identical bounded copies about 600 ms apart with an `ABSENT`
+reaction between copies. This does not replace `START_ORDER` or change
+Controller ownership. Member 4 must update `RecognitionSimulatorCD` to consume
+the third field before POS-selected S/L profiles work in the full team runtime. Use
 `xuqi_coordinator/coordinator.xml` together with
 `machines/filling_capping/member4_simulation.xml`. With the canonical
 `member4_system.xml`, the optional simulation output remains disconnected.
@@ -107,18 +108,33 @@ integration/                topology, port manifest and merge checklist
 tools/                      structural integration validation
 ```
 
-## POS V1 protocol
+## POS order protocols
 
 ```text
-ORDER:
+ORDER V2 (new POS submissions):
+orderId|productCount|productId,sizeCode,A%,B%,quantity;...
+
+S = 200 mL
+L = 500 mL
+
+ORDER V1 (Coordinator backward compatibility):
 orderId|productCount|productId,A%,B%,quantity;...
 
 ORDER_COMPLETE:
 orderId|COMPLETED|completionTimeSeconds
 ```
 
-The order protocol, product batching logic, `START_ORDER`, `FILL_A_RATIO` and
-`FILL_B_RATIO` remain unchanged by the machine-architecture correction.
+`OrderV1` remains frozen. A V1 product defaults to S/200 mL inside the
+Coordinator; V2 carries the explicit product size. `START_ORDER`,
+`FILL_A_RATIO` and `FILL_B_RATIO` retain their existing semantics.
+
+The POS also sends a bounded String-valued `SYSTEM_RESET_REQUEST` identity.
+Coordinator clears M1-owned state and fans the identity out as
+`M2_SYSTEM_RESET`, `M3_SYSTEM_RESET`, `M4_SYSTEM_RESET` and
+`VIZ_SYSTEM_RESET`. It reports `SYSTEM_RESET_COMPLETE` only after matching
+M2/M3/M4 ACKs. The production teammate receivers are a pending integration
+contract; until they are implemented the state intentionally remains
+`RESET_PENDING_EXTERNAL_ACK`.
 
 ## Local Clock Domains and ports
 

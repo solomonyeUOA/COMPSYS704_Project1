@@ -1,11 +1,14 @@
-// COMPSYS704 Project 1 - POS Integration V1 with Swing Visualisation
+// COMPSYS704 Project 1 - POS size-aware integration with Swing visualisation
 //
-// ORDER V1:          orderId|productCount|productId,A%,B%,quantity;...
+// ORDER V2:          orderId|productCount|productId,sizeCode,A%,B%,quantity;...
 // ORDER_COMPLETE V1: orderId|COMPLETED|completionTimeSeconds
+// RESET:             RSTnnnn / RSTnnnn|RESET_COMPLETE
 
 POS(
     input String signal ORDER_COMPLETE;
+    input String signal SYSTEM_RESET_COMPLETE;
     output String signal ORDER;
+    output String signal SYSTEM_RESET_REQUEST;
 )
 ->{
     POSVisualisation.start();
@@ -16,7 +19,8 @@ POS(
         if (submittedOrder != null) {
             // POS validates again at the SystemJ boundary. The Coordinator
             // performs its own independent validation after receiving ORDER.
-            if (OrderV1.parse(submittedOrder) != null) {
+            if (OrderV2.parse(submittedOrder) != null ||
+                OrderV1.parse(submittedOrder) != null) {
                 emit ORDER(submittedOrder);
                 if (POSVisualisation.isOrderTransmissionStart()) {
                     POSVisualisation.showSubmitted(submittedOrder);
@@ -35,11 +39,31 @@ POS(
             }
         }
 
+        String resetRequest = POSVisualisation.pollSystemResetRequest();
+        if (resetRequest != null) {
+            emit SYSTEM_RESET_REQUEST(resetRequest);
+            if (POSVisualisation.isSystemResetTransmissionStart()) {
+                System.out.println(
+                    "POS sent SYSTEM_RESET_REQUEST: " + resetRequest
+                );
+            }
+        }
+
         present(ORDER_COMPLETE) {
             String completionResult =
                 POSVisualisation.handleCompletion(#ORDER_COMPLETE);
             if (completionResult != null) {
                 System.out.println(completionResult);
+            }
+        }
+
+
+        present(SYSTEM_RESET_COMPLETE) {
+            String resetResult = POSVisualisation.handleSystemResetComplete(
+                #SYSTEM_RESET_COMPLETE
+            );
+            if (resetResult != null) {
+                System.out.println(resetResult);
             }
         }
 

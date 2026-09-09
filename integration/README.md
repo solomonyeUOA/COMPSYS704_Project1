@@ -41,7 +41,7 @@ FillerAPlantCD / FillerBPlantCD (12004 / 12005)    [M4 implemented]
 CapperPlantCD (12007)                              [M4 implemented]
 
 RecognitionSimulatorCD (11014)                    [simulation only]
-  receives M1 M4_SIM_BATCH_REQUEST:String as batchId|quantity
+  pending update: M1 M4_SIM_BATCH_REQUEST:String is batchId|quantity|sizeCode
 ```
 
 `LabellerControllerCD:11013`, the four M2 Plant Clock Domains and
@@ -55,7 +55,9 @@ require a physical end-to-end acceptance run.
 The six-runtime simulation uses `xuqi_coordinator/coordinator.xml` and
 `machines/filling_capping/member4_simulation.xml`. For every product batch,
 M1 derives a stable identity such as `PO0001-P01` and publishes
-`PO0001-P01|10` on `M4_SIM_BATCH_REQUEST`. M4 de-duplicates retries and emits
+`PO0001-P01|10|S` on `M4_SIM_BATCH_REQUEST`. Member 4 must update
+`RecognitionSimulatorCD` to validate the third field and map S/L to its
+GEOM_S/GEOM_L profiles. After that update M4 will de-duplicate retries and emit
 exactly `PO0001-P01-B001` through `PO0001-P01-B010`, then waits in `FINISHED`
 for a different batch ID. A batch that stops on a context-distribution timeout
 also releases the simulator, so the next batch ID is still accepted. A second product uses `PO0001-P02` and restarts its

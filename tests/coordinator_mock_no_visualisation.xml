@@ -8,6 +8,18 @@
         <ClockDomain Name="CoordinatorCD" Class="Coordinator">
             <iSignal Name="ORDER" Class="com.systemj.ipc.SimpleServer"
                      IP="127.0.0.1" Port="11001" />
+            <iSignal Name="SYSTEM_RESET_REQUEST"
+                     Class="com.systemj.ipc.SimpleServer"
+                     IP="127.0.0.1" Port="11001" />
+            <iSignal Name="M2_SYSTEM_RESET_ACK"
+                     Class="com.systemj.ipc.SimpleServer"
+                     IP="127.0.0.1" Port="11001" />
+            <iSignal Name="M3_SYSTEM_RESET_ACK"
+                     Class="com.systemj.ipc.SimpleServer"
+                     IP="127.0.0.1" Port="11001" />
+            <iSignal Name="M4_SYSTEM_RESET_ACK"
+                     Class="com.systemj.ipc.SimpleServer"
+                     IP="127.0.0.1" Port="11001" />
             <iSignal Name="LOADER_STATUS" Class="com.systemj.ipc.SimpleServer"
                      IP="127.0.0.1" Port="11001" />
             <iSignal Name="CONVEYOR_STATUS" Class="com.systemj.ipc.SimpleServer"
@@ -42,6 +54,22 @@
             <oSignal Name="ORDER_COMPLETE" To="POSCD.ORDER_COMPLETE"
                      Class="com.systemj.ipc.SimpleClient"
                      IP="127.0.0.1" Port="11000" />
+            <oSignal Name="SYSTEM_RESET_COMPLETE"
+                     To="POSCD.SYSTEM_RESET_COMPLETE"
+                     Class="com.systemj.ipc.SimpleClient"
+                     IP="127.0.0.1" Port="11000" />
+            <oSignal Name="M2_SYSTEM_RESET"
+                     To="MockControllerCD.M2_SYSTEM_RESET"
+                     Class="com.systemj.ipc.SimpleClient"
+                     IP="127.0.0.1" Port="11002" />
+            <oSignal Name="M3_SYSTEM_RESET"
+                     To="MockControllerCD.M3_SYSTEM_RESET"
+                     Class="com.systemj.ipc.SimpleClient"
+                     IP="127.0.0.1" Port="11002" />
+            <oSignal Name="M4_SYSTEM_RESET"
+                     To="MockControllerCD.M4_SYSTEM_RESET"
+                     Class="com.systemj.ipc.SimpleClient"
+                     IP="127.0.0.1" Port="11002" />
             <oSignal Name="FT_SAFE_STOP_ACK"
                      To="FaultSupervisorCD.FT_SAFE_STOP_ACK"
                      Class="OptionalSimpleClient"
@@ -92,6 +120,10 @@
                      To="MockControllerCD.UNLOADER_STATUS_REQUEST"
                      Class="com.systemj.ipc.SimpleClient"
                      IP="127.0.0.1" Port="11002" />
+            <oSignal Name="VIZ_SYSTEM_RESET"
+                     To="ABSVisualisationPlantCD.VIZ_SYSTEM_RESET"
+                     Class="OptionalSimpleClient"
+                     IP="127.0.0.1" Port="11008" />
         </ClockDomain>
     </SubSystem>
 </System>
