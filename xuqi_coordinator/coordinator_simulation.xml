@@ -168,6 +168,10 @@
                      To="ABSVisualisationPlantCD.VIZ_COMPLETED_BOTTLES"
                      Class="com.systemj.ipc.SimpleClient"
                      IP="127.0.0.1" Port="11008" />
+            <oSignal Name="VIZ_FT_EVIDENCE"
+                     To="ABSVisualisationPlantCD.VIZ_FT_EVIDENCE"
+                     Class="OptionalSimpleClient"
+                     IP="127.0.0.1" Port="11008" />
         </ClockDomain>
     </SubSystem>
 </System>
