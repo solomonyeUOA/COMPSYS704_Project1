@@ -14,8 +14,9 @@ agreed and applied consistently to source, XML and tests.
 
 ## Current integration status
 
-- M1 POS, Coordinator, transport-tolerance handling, display-only
-  Visualisation and the current six-signal M1/M3 safety boundary are preserved.
+- M1 remains three top-level components: POS, Coordinator and the display-only
+  Visualisation IP. Bottle-size selection is a POS feature; the Coordinator
+  retains that order data and owns whole-system reset orchestration.
 - Conveyor and Rotary are independent Controllers. The current M1 production
   mapping uses `ConveyorControllerCD:11009` and
   `RotaryTableControllerCD:11003` with separate `CONVEYOR_*` and `ROTARY_*`
@@ -45,30 +46,54 @@ agreed and applied consistently to source, XML and tests.
 3. Read [`machines/rotary_lid/README.md`](machines/rotary_lid/README.md) for
    the implemented M3 Controller/Plant and self-test details.
 
-## Architecture
+## M1 GP architecture
 
 ```text
-POS
- |
- v
-Coordinator
- |
- +-- Bottle Loader
- +-- Conveyor
- +-- Rotary Turntable
- +-- Filler A
- +-- Filler B
- +-- Lid Loader
- +-- Capper
- +-- Bottle Unloader
- |
- +-- ABS Visualisation
- `-- M4 Recognition Simulator [simulation only]
+M1 GP
+|-- POS
+|-- Coordinator
+`-- Visualisation (IP)
 ```
 
-The Coordinator handles orders, recipes, status supervision and completion
-counts. It does not control Plant valves, motors or actuators. Mechanical flow
-is owned by the relevant Machine Controllers.
+### POS
+
+The Swing POS owns order entry, automatic order IDs, multiple product rows,
+the S/L bottle-size selector (`Small — 200 mL`, `Large — 500 mL`), liquid A/B
+validation, submission of ORDER V1/V2-compatible payloads and
+`ORDER_COMPLETE` display. Its **Reset System** button and confirmation dialog
+are only the user entry point: POS sends `SYSTEM_RESET_REQUEST` and displays
+reset progress/completion, but it does not reset M2, M3, M4, Visualisation or
+Controller state directly.
+
+### Coordinator
+
+The Coordinator parses and validates orders, retains each product's recipe,
+`sizeCode` and `capacityMl`, dispatches product batches, publishes the
+simulation-only M4 batch request, polls Controller status, counts
+`BOTTLE_DONE`, coordinates fault tolerance and sends `ORDER_COMPLETE`.
+Whole-system reset orchestration remains inside this same Coordinator: it
+clears M1-owned state, fans out the reset identity, waits at the M2/M3/M4 ACK
+barrier and then sends `SYSTEM_RESET_COMPLETE`.
+
+The Coordinator does not control Plant valves, motors or actuators. Mechanical
+flow is owned by the relevant Machine Controllers. Bottle size is retained
+order data, not a separate M1 subsystem, and reset orchestration is a
+Coordinator responsibility, not a separate Reset Controller.
+
+### Visualisation (IP)
+
+The hierarchical Visualisation is an asynchronous, display-only observer. It
+receives Coordinator telemetry, including `VIZ_SYSTEM_RESET`, but does not
+issue machine commands or own reset orchestration.
+
+The runtime relationship is:
+
+```text
+POS -> Coordinator -> Bottle Loader / Conveyor / Rotary Turntable
+                  -> Filler A / Filler B / Lid Loader / Capper / Unloader
+                  -> ABS Visualisation
+                  -> M4 Recognition Simulator [simulation only]
+```
 
 `BOTTLE_DONE` is sent by Bottle Unloader after one finished bottle reaches the
 collection stage. Capper completion alone does not complete the production
@@ -80,8 +105,8 @@ simulation-only signal `M4_SIM_BATCH_REQUEST:String` as
 sends three identical bounded copies about 600 ms apart with an `ABSENT`
 reaction between copies. This does not replace `START_ORDER` or change
 Controller ownership. Member 4 must update `RecognitionSimulatorCD` to consume
-the third field before POS-selected S/L profiles work in the full team runtime. Use
-`xuqi_coordinator/coordinator.xml` together with
+the third field before POS-selected S/L profiles work in the full team runtime.
+Use `xuqi_coordinator/coordinator.xml` together with
 `machines/filling_capping/member4_simulation.xml`. With the canonical
 `member4_system.xml`, the optional simulation output remains disconnected.
 
@@ -128,8 +153,9 @@ orderId|COMPLETED|completionTimeSeconds
 Coordinator; V2 carries the explicit product size. `START_ORDER`,
 `FILL_A_RATIO` and `FILL_B_RATIO` retain their existing semantics.
 
-The POS also sends a bounded String-valued `SYSTEM_RESET_REQUEST` identity.
-Coordinator clears M1-owned state and fans the identity out as
+The POS Reset System control sends a bounded String-valued
+`SYSTEM_RESET_REQUEST` identity; it is only the user trigger. Coordinator
+clears M1-owned state and fans the identity out as
 `M2_SYSTEM_RESET`, `M3_SYSTEM_RESET`, `M4_SYSTEM_RESET` and
 `VIZ_SYSTEM_RESET`. It reports `SYSTEM_RESET_COMPLETE` only after matching
 M2/M3/M4 ACKs. The production teammate receivers are a pending integration

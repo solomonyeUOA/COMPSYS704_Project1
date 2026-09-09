@@ -6,6 +6,49 @@ This directory records the current production integration topology. M1, M2,
 M3 and M4 production XML is registered in `system-manifest.json`; physical
 cross-member acceptance remains an end-to-end integration task.
 
+## M1 GP component ownership
+
+### POS
+
+POS owns Swing order entry, automatic order IDs, multiple product rows, the
+S/L bottle-size selector, recipe validation, ORDER transport and
+`ORDER_COMPLETE` display. The Reset System button is a user trigger only: POS
+sends `SYSTEM_RESET_REQUEST` and displays the matching completion result.
+
+### Coordinator
+
+Coordinator owns order validation, recipe and bottle-specification retention,
+batch dispatch, status polling, `BOTTLE_DONE` counting, FT coordination and
+order completion. It also owns whole-system reset orchestration: M1 state
+reset, M2/M3/M4/Visualisation fan-out, the external ACK barrier and
+`SYSTEM_RESET_COMPLETE`. Bottle size remains order data carried through the
+Coordinator; reset and size are not separate M1 subsystems.
+
+### Visualisation (IP)
+
+Visualisation is a read-only hierarchical observer. It consumes Coordinator
+telemetry and reset notification without owning machine control or reset
+orchestration. Reusable protocol/state/transport helpers remain in `common/`.
+
+## M1 extension interfaces
+
+These are extensions on the existing POS and Coordinator boundaries, not a
+separate reset subsystem.
+
+| Boundary | Signal | Ownership / purpose |
+| --- | --- | --- |
+| POS -> Coordinator | `ORDER` (V1/V2 payload) | POS selects S/L; Coordinator retains `sizeCode` and `capacityMl` |
+| POS -> Coordinator | `SYSTEM_RESET_REQUEST` | POS user trigger; Coordinator begins orchestration |
+| Coordinator -> POS | `SYSTEM_RESET_COMPLETE` | Sent only after the reset ACK barrier completes |
+| Coordinator -> M2 | `M2_SYSTEM_RESET` | Coordinator reset fan-out |
+| M2 -> Coordinator | `M2_SYSTEM_RESET_ACK` | Matching safe-state acknowledgement |
+| Coordinator -> M3 | `M3_SYSTEM_RESET` | Coordinator reset fan-out |
+| M3 -> Coordinator | `M3_SYSTEM_RESET_ACK` | Matching safe-state acknowledgement |
+| Coordinator -> M4 | `M4_SYSTEM_RESET` | Coordinator reset fan-out |
+| M4 -> Coordinator | `M4_SYSTEM_RESET_ACK` | Matching safe-state acknowledgement |
+| Coordinator -> Visualisation | `VIZ_SYSTEM_RESET` | Display-state reset notification |
+| Coordinator -> M4 simulator | `M4_SIM_BATCH_REQUEST` | Simulation-only `batchId|quantity|sizeCode` publication |
+
 ## Runtime topology
 
 ```text

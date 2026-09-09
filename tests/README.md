@@ -210,14 +210,25 @@ Coordinator/Visualisation communication. It does not validate real Machine
 Controllers, physical Plants, M3 `FaultSupervisorCD`, independent safe-stop
 evidence, or the still-undefined M1 FT String payload field order.
 
-## Size-aware order and whole-system reset contract
+## M1 POS and Coordinator extension coverage
+
+### POS coverage
 
 New POS submissions use ORDER V2:
 `orderId|productCount|productId,sizeCode,A%,B%,quantity;...`, where `S` is
 200 mL and `L` is 500 mL. `OrderV1` remains accepted by the Coordinator and
 defaults to the S/200 mL profile. The simulation-only M4 payload is now
-`batchId|quantity|sizeCode`. M4's `RecognitionSimulatorCD` must be updated by
-Member 4 before a POS-selected size is consumed in the full team runtime.
+`batchId|quantity|sizeCode`. The Reset System button is the POS user entry
+point; POS does not reset downstream components directly.
+
+### Coordinator coverage
+
+Coordinator retains the selected size/capacity as part of the active order,
+publishes the size-aware M4 simulation batch, and owns the complete reset
+fan-out/ACK barrier. These are responsibilities of the existing Coordinator,
+not separate size or reset subsystems.
+
+### Shared protocol and regression coverage
 
 `SystemResetSelfTest` covers reset while idle/active, duplicate reset copies,
 stale completion isolation, pending ORDER/completion/M4 retry cancellation,
