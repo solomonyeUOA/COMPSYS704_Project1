@@ -19,17 +19,19 @@ public final class RecognitionSimulatorSelfTest {
         batchQuantityMatrixQ10AndQ20();
         batchCaseKLegacyPropertiesStillWork();
         batchCaseLTimeoutReleasesTheSimulator();
+        batchCaseMRequestedSizeDrivesTheBatch();
+        batchCaseNPayloadCarriesTheSizeCode();
         invalidConfigurationAndTransportRegression();
         System.out.println(
             "RecognitionSimulatorSelfTest PASSED " +
-            "(M4 batch cases D-L; legacy compatibility)"
+            "(M4 batch cases D-N; legacy compatibility)"
         );
     }
 
     private static void batchCaseDQ1ProducesExactlyOneProfile() {
         RecognitionSimulatorStateV1 simulator = batchDriven();
         List<String> profiles = generateBatch(
-            simulator, "PO0001-P01", 1, 0L
+            simulator, "PO0001-P01", 1, M4BottleContextV1.SMALL, 0L
         );
         require(profiles.size() == 1,
             "M4-D q1 must produce exactly one profile");
@@ -40,7 +42,7 @@ public final class RecognitionSimulatorSelfTest {
     private static void batchCaseEQ3ProducesExactlyThreeProfiles() {
         RecognitionSimulatorStateV1 simulator = batchDriven();
         List<String> profiles = generateBatch(
-            simulator, "PO0001-P01", 3, 0L
+            simulator, "PO0001-P01", 3, M4BottleContextV1.SMALL, 0L
         );
         require(profiles.size() == 3,
             "M4-E q3 must produce exactly three profiles");
@@ -90,7 +92,9 @@ public final class RecognitionSimulatorSelfTest {
 
     private static void batchCaseHNewBatchAfterFinishIsAccepted() {
         RecognitionSimulatorStateV1 simulator = batchDriven();
-        generateBatch(simulator, "PO0004-P01", 1, 0L);
+        generateBatch(
+            simulator, "PO0004-P01", 1, M4BottleContextV1.SMALL, 0L
+        );
         require(simulator.startBatch("PO0004-P02", 2, 20L) ==
             RecognitionSimulatorStateV1.BatchStartResult.ACCEPTED,
             "M4-H next product accepted after finish");
@@ -114,7 +118,7 @@ public final class RecognitionSimulatorSelfTest {
     private static void batchCaseJBottleIdsUseBatchPrefix() {
         RecognitionSimulatorStateV1 simulator = batchDriven();
         List<String> profiles = generateBatch(
-            simulator, "PO0042-P02", 3, 0L
+            simulator, "PO0042-P02", 3, M4BottleContextV1.SMALL, 0L
         );
         for (int index = 0; index < profiles.size(); index++) {
             String expected = "PO0042-P02-B" +
@@ -131,10 +135,10 @@ public final class RecognitionSimulatorSelfTest {
     private static void multiProductOrderUsesIndependentBatches() {
         RecognitionSimulatorStateV1 simulator = batchDriven();
         List<String> productOne = generateBatch(
-            simulator, "PO0001-P01", 10, 0L
+            simulator, "PO0001-P01", 10, M4BottleContextV1.SMALL, 0L
         );
         List<String> productTwo = generateBatch(
-            simulator, "PO0001-P02", 5, 200L
+            simulator, "PO0001-P02", 5, M4BottleContextV1.SMALL, 200L
         );
         require(productOne.size() == 10 && productTwo.size() == 5,
             "multi-product quantities remain independent");
@@ -176,6 +180,82 @@ public final class RecognitionSimulatorSelfTest {
             "M4-L next batch finishes normally");
     }
 
+    private static void batchCaseMRequestedSizeDrivesTheBatch() {
+        RecognitionSimulatorStateV1 simulator = batchDriven();
+        List<String> large = generateBatch(
+            simulator, "PO0008-P01", 2, M4BottleContextV1.LARGE, 0L
+        );
+        require("PO0008-P01-B001|L|500".equals(large.get(0)) &&
+            "PO0008-P01-B002|L|500".equals(large.get(1)),
+            "M4-M L batch carries the 500 mL profile");
+
+        // The receiver is no longer parameterised by one global size, so the
+        // next batch of the same run may be the other bottle type.
+        List<String> small = generateBatch(
+            simulator, "PO0008-P02", 1, M4BottleContextV1.SMALL, 100L
+        );
+        require("PO0008-P02-B001|S|200".equals(small.get(0)),
+            "M4-M next batch switches back to the 200 mL profile");
+
+        require(simulator.startBatch("PO0008-P03", 1, "XL", 200L) ==
+            RecognitionSimulatorStateV1.BatchStartResult.INVALID,
+            "M4-M unsupported size rejected");
+        require(simulator.startBatch("PO0008-P03", 1, null, 200L) ==
+            RecognitionSimulatorStateV1.BatchStartResult.INVALID,
+            "M4-M missing size rejected");
+    }
+
+    private static void batchCaseNPayloadCarriesTheSizeCode() {
+        RecognitionSimulatorStateV1 simulator = batchDriven();
+        require(simulator.startBatchPayload("PO0001-P01|3|S", 0L) ==
+            RecognitionSimulatorStateV1.BatchStartResult.ACCEPTED,
+            "M4-N canonical three-field request accepted");
+        require(simulator.batchQuantity() == 3 &&
+            M4BottleContextV1.SMALL.equals(simulator.batchSizeCode()),
+            "M4-N contract stores quantity and size");
+        require("PO0001-P01-B001|S".equals(simulator.tick(0L, false)),
+            "M4-N recognition request carries the requested size");
+
+        // Same ID + same quantity + same size is an M1 retry.
+        require(simulator.startBatchPayload("PO0001-P01|3|S", 1L) ==
+            RecognitionSimulatorStateV1.BatchStartResult.DUPLICATE,
+            "M4-N identical request is idempotent");
+        require(simulator.distributedCount() == 0 &&
+            "PO0001-P01-B001".equals(simulator.currentBottleId()),
+            "M4-N duplicate must not restart the batch");
+
+        // Same ID with either field changed is a protocol conflict.
+        require(simulator.startBatchPayload("PO0001-P01|3|L", 2L) ==
+            RecognitionSimulatorStateV1.BatchStartResult.CONFLICT,
+            "M4-N same ID with a different size conflicts");
+        require(simulator.startBatchPayload("PO0001-P01|4|S", 3L) ==
+            RecognitionSimulatorStateV1.BatchStartResult.CONFLICT,
+            "M4-N same ID with a different quantity conflicts");
+        require(simulator.batchQuantity() == 3 &&
+            M4BottleContextV1.SMALL.equals(simulator.batchSizeCode()) &&
+            "PO0001-P01".equals(simulator.activeBatchId()),
+            "M4-N conflict must not mutate the active contract");
+
+        require(simulator.startBatchPayload("PO0001-P01|3|XL", 4L) ==
+            RecognitionSimulatorStateV1.BatchStartResult.INVALID,
+            "M4-N unsupported size code rejected");
+        require(simulator.startBatchPayload("PO0001-P01|3|s", 4L) ==
+            RecognitionSimulatorStateV1.BatchStartResult.INVALID,
+            "M4-N lower-case size code rejected");
+        require(simulator.startBatchPayload("PO0001-P01|3|S|extra", 4L) ==
+            RecognitionSimulatorStateV1.BatchStartResult.INVALID,
+            "M4-N four-field request rejected");
+
+        // A Coordinator build that does not publish a size yet still works
+        // and takes the default profile.
+        RecognitionSimulatorStateV1 sizeless = batchDriven();
+        require(sizeless.startBatchPayload("PO0009-P01|2", 0L) ==
+            RecognitionSimulatorStateV1.BatchStartResult.ACCEPTED,
+            "M4-N legacy two-field request still accepted");
+        require(M4BottleContextV1.SMALL.equals(sizeless.batchSizeCode()),
+            "M4-N legacy request takes the default size");
+    }
+
     private static void batchCaseKLegacyPropertiesStillWork() {
         Properties properties = legacySettings("2", "L");
         RecognitionSimulatorStateV1 simulator =
@@ -206,14 +286,28 @@ public final class RecognitionSimulatorSelfTest {
             simulator.startBatch("PO0006-P01", 1, 0L) ==
                 RecognitionSimulatorStateV1.BatchStartResult.ACCEPTED,
             "M4-K integrated mode ignores legacy quantity property");
+
+        // The integrated receiver must not be wired to one global size:
+        // an unusable m4.sim.size cannot stop an M1-driven L batch.
+        Properties hostileSize = batchSettings();
+        hostileSize.setProperty("m4.sim.size", "XL");
+        RecognitionSimulatorStateV1 unparameterised =
+            RecognitionSimulatorStateV1.batchDrivenFromProperties(
+                hostileSize, 0L
+            );
+        require(unparameterised.startBatchPayload("PO0006-P02|1|L", 0L) ==
+            RecognitionSimulatorStateV1.BatchStartResult.ACCEPTED &&
+            M4BottleContextV1.LARGE.equals(
+                unparameterised.batchSizeCode()),
+            "M4-K integrated mode ignores the legacy size property");
     }
 
     private static void batchQuantityMatrixQ10AndQ20() {
         List<String> q10 = generateBatch(
-            batchDriven(), "PO0010-P01", 10, 0L
+            batchDriven(), "PO0010-P01", 10, M4BottleContextV1.SMALL, 0L
         );
         List<String> q20 = generateBatch(
-            batchDriven(), "PO0020-P01", 20, 0L
+            batchDriven(), "PO0020-P01", 20, M4BottleContextV1.SMALL, 0L
         );
         require(q10.size() == 10,
             "integrated quantity matrix q10 profile count");
@@ -231,11 +325,15 @@ public final class RecognitionSimulatorSelfTest {
         RecognitionSimulatorStateV1 simulator,
         String batchId,
         int quantity,
+        String sizeCode,
         long startMillis
     ) {
-        require(simulator.startBatch(batchId, quantity, startMillis) ==
+        require(simulator.startBatch(
+            batchId, quantity, sizeCode, startMillis) ==
             RecognitionSimulatorStateV1.BatchStartResult.ACCEPTED,
             "batch must be accepted: " + batchId);
+        require(sizeCode.equals(simulator.batchSizeCode()),
+            "batch must retain its own size: " + batchId);
         List<String> profiles = new ArrayList<String>();
         long now = startMillis;
         for (int bottle = 1; bottle <= quantity; bottle++) {
@@ -276,7 +374,6 @@ public final class RecognitionSimulatorSelfTest {
 
     private static Properties batchSettings() {
         Properties properties = new Properties();
-        properties.setProperty("m4.sim.size", "S");
         properties.setProperty("m4.sim.intervalMillis", "10");
         properties.setProperty("m4.sim.requestGapMillis", "1");
         properties.setProperty("m4.sim.timeoutMillis", "1000");
@@ -309,9 +406,15 @@ public final class RecognitionSimulatorSelfTest {
         require(simulator.startBatchPayload("missing-quantity", 0L) ==
             RecognitionSimulatorStateV1.BatchStartResult.INVALID,
             "invalid batch payload rejected");
-        require(simulator.startBatchPayload("PO-P01|0", 0L) ==
+        require(simulator.startBatchPayload("PO-P01|0|S", 0L) ==
             RecognitionSimulatorStateV1.BatchStartResult.INVALID,
             "zero batch quantity rejected");
+        require(simulator.startBatchPayload("PO-P01|3|", 0L) ==
+            RecognitionSimulatorStateV1.BatchStartResult.INVALID,
+            "empty size code rejected");
+        require(simulator.startBatchPayload(null, 0L) ==
+            RecognitionSimulatorStateV1.BatchStartResult.INVALID,
+            "null batch payload rejected");
 
         M4BoundedEventV1 event = new M4BoundedEventV1(2, 50L);
         require(!event.isPending(), "empty event is drained");

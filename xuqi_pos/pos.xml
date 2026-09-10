@@ -5,9 +5,16 @@
             <iSignal Name="ORDER_COMPLETE"
                      Class="com.systemj.ipc.SimpleServer"
                      IP="127.0.0.1" Port="11000" />
+            <iSignal Name="SYSTEM_RESET_COMPLETE"
+                     Class="com.systemj.ipc.SimpleServer"
+                     IP="127.0.0.1" Port="11000" />
 
             <oSignal Name="ORDER"
                      To="CoordinatorCD.ORDER"
+                     Class="com.systemj.ipc.SimpleClient"
+                     IP="127.0.0.1" Port="11001" />
+            <oSignal Name="SYSTEM_RESET_REQUEST"
+                     To="CoordinatorCD.SYSTEM_RESET_REQUEST"
                      Class="com.systemj.ipc.SimpleClient"
                      IP="127.0.0.1" Port="11001" />
         </ClockDomain>

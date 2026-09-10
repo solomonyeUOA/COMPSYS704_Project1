@@ -176,54 +176,69 @@ has no automatic source. `RECOGNITION_REQUEST` remains internal to M4.
 Use these two simulation mappings together:
 
 ```text
-xuqi_coordinator/coordinator_simulation.xml
+xuqi_coordinator/coordinator.xml
 machines/filling_capping/member4_simulation.xml
 ```
 
-When POS submits a product quantity, M1 publishes
+When POS submits a product quantity and bottle size, M1 publishes
 `M4_SIM_BATCH_REQUEST:String` on simulation-only port 11014:
 
 ```text
-<orderId>-P<two-digit product index>|<quantity>
-PO0001-P01|3
+<orderId>-P<two-digit product index>|<quantity>|<sizeCode>
+PO0001-P01|3|S
+PO0002-P01|2|L
 ```
+
+`sizeCode` is `S` or `L` only. Every batch owns its own size, so one run may
+mix both bottle types, and the recognition request M4 generates for that
+batch carries it as `<bottleId>|S` or `<bottleId>|L`.
 
 M1 sends at most three identical copies about 600 ms apart and inserts an
 `ABSENT` reaction after every pulse. M4 accepts one logical batch
 idempotently, generates `PO0001-P01-B001` through `PO0001-P01-B003`, then
-waits for a different batch. The same ID and quantity never restarts; the same
-ID with a different quantity is a protocol conflict; a different ID cannot
-interleave while a batch is active.
+waits for a different batch. The same ID with the same quantity and the same
+size never restarts; the same ID with a different quantity **or** a different
+size is a protocol conflict; a different ID cannot interleave while a batch is
+active. A request whose size code is neither `S` nor `L` is `INVALID`.
 
-Launch M4 integrated simulation without a quantity VM argument:
+A two-field `batchId|quantity` request from a Coordinator build that does not
+publish a size yet is still parsed and takes the default `S` profile, logged
+as a legacy request. This is transitional only; M1's canonical simulation
+payload is three fields.
+
+Launch M4 integrated simulation without quantity or size VM arguments:
 
 ```sh
-java -Djava.awt.headless=true -Dm4.sim.size=S \
+java -Djava.awt.headless=true \
   -cp "build/member4-classes:/path/to/COMPSYS704_Project1_SystemJ_lib/*" \
   com.systemj.SystemJRunner machines/filling_capping/member4_simulation.xml
 ```
 
 | VM property | Default | Integrated meaning |
 | --- | --- | --- |
-| `m4.sim.size` | `S` | Environmental profile: `S` = 200 mL, `L` = 500 mL |
 | `m4.sim.intervalMillis` | `1000` | Gap after one context's local copies drain |
 | `m4.sim.requestGapMillis` | `100` | Minimum interval between request copies |
 | `m4.sim.timeoutMillis` | `10000` | Maximum wait for local context distribution |
 
-`m4.sim.quantity`, `m4.sim.bottleIdPrefix`, and
+`m4.sim.size`, `m4.sim.quantity`, `m4.sim.bottleIdPrefix`, and
 `m4.sim.startDelayMillis` are retained only by the standalone legacy Java
-state-model entry point. Integrated `RecognitionSimulatorCD` starts in `IDLE`,
-ignores `m4.sim.quantity`, and waits for M1's batch trigger.
+state-model entry point, where `m4.sim.size` still fixes one environmental
+profile (`S` = 200 mL, `L` = 500 mL). Integrated `RecognitionSimulatorCD`
+starts in `IDLE`, ignores all four, and takes the size from M1's batch
+trigger.
 
-Expected evidence for `PO0001-P01|3`:
+Expected evidence for `PO0001-P01|3|S`:
 
 ```text
-[M4-SIM] batch accepted id=PO0001-P01 quantity=3
+[M4-SIM] batch accepted id=PO0001-P01 quantity=3 size=S
 [M4-SIM] recognising PO0001-P01-B001|S
 [M4-SIM] context dispatched PO0001-P01-B001 1/3
 ...
 [M4-SIM] FINISHED batch=PO0001-P01 quantity=3
 ```
+
+The same order with `PO0002-P01|2|L` produces `PO0002-P01-B001|L` and the
+500 mL geometry/packaging profiles instead.
 
 `FINISHED` means the requested recognition contexts have been dispatched
 locally. It is not an M2/M3 delivery acknowledgment or order-completion claim.

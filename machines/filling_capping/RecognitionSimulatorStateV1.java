@@ -15,11 +15,12 @@ public final class RecognitionSimulatorStateV1 {
     private static String lastLoggedBottle;
     private static boolean terminalLogged;
 
-    private final String sizeCode;
+    private final String legacySizeCode;
     private final long intervalMillis;
     private final long timeoutMillis;
     private final long requestGapMillis;
     private String activeBatchId;
+    private String activeSizeCode;
     private int quantity;
     private int distributed;
     private boolean batchActive;
@@ -31,11 +32,26 @@ public final class RecognitionSimulatorStateV1 {
     private long nextRequestMillis;
     private String failure;
 
-    private RecognitionSimulatorStateV1(Properties properties) {
-        sizeCode = properties.getProperty("m4.sim.size", "S");
-        if (!M4BottleContextV1.SMALL.equals(sizeCode) &&
-            !M4BottleContextV1.LARGE.equals(sizeCode)) {
-            throw new IllegalArgumentException("m4.sim.size must be S or L");
+    /**
+     * A legacy standalone run fixes one environmental size through
+     * m4.sim.size. The integrated receiver takes the size from every M1
+     * batch request instead, so it never reads that property.
+     */
+    private RecognitionSimulatorStateV1(
+        Properties properties,
+        boolean legacyMode
+    ) {
+        if (legacyMode) {
+            legacySizeCode = properties.getProperty("m4.sim.size", "S");
+            if (!M4BottleContextV1.SMALL.equals(legacySizeCode) &&
+                !M4BottleContextV1.LARGE.equals(legacySizeCode)) {
+                throw new IllegalArgumentException(
+                    "m4.sim.size must be S or L"
+                );
+            }
+        }
+        else {
+            legacySizeCode = null;
         }
         intervalMillis = millis(
             properties, "m4.sim.intervalMillis", 1000L, 0L
@@ -60,7 +76,7 @@ public final class RecognitionSimulatorStateV1 {
         long nowMillis
     ) {
         RecognitionSimulatorStateV1 result =
-            new RecognitionSimulatorStateV1(properties);
+            new RecognitionSimulatorStateV1(properties, true);
         int configuredQuantity = M4ProtocolV1.unsignedInteger(
             properties.getProperty("m4.sim.quantity", "1"),
             "m4.sim.quantity"
@@ -85,12 +101,15 @@ public final class RecognitionSimulatorStateV1 {
         return result;
     }
 
-    /** Preferred integrated mode: starts idle and ignores m4.sim.quantity. */
+    /**
+     * Preferred integrated mode: starts idle, ignores m4.sim.quantity, and
+     * ignores m4.sim.size because every batch carries its own size code.
+     */
     public static RecognitionSimulatorStateV1 batchDrivenFromProperties(
         Properties properties,
         long nowMillis
     ) {
-        return new RecognitionSimulatorStateV1(properties);
+        return new RecognitionSimulatorStateV1(properties, false);
     }
 
     public BatchStartResult startBatch(String batchId, int requestedQuantity) {
@@ -101,9 +120,24 @@ public final class RecognitionSimulatorStateV1 {
         );
     }
 
+    /** Size-less entry point kept for callers that use the default size. */
     public BatchStartResult startBatch(
         String batchId,
         int requestedQuantity,
+        long nowMillis
+    ) {
+        return startBatch(
+            batchId,
+            requestedQuantity,
+            defaultSizeCode(),
+            nowMillis
+        );
+    }
+
+    public BatchStartResult startBatch(
+        String batchId,
+        int requestedQuantity,
+        String requestedSizeCode,
         long nowMillis
     ) {
         try {
@@ -112,12 +146,16 @@ public final class RecognitionSimulatorStateV1 {
         catch (IllegalArgumentException invalid) {
             return BatchStartResult.INVALID;
         }
-        if (requestedQuantity < 1) {
+        if (requestedQuantity < 1 || !isSupportedSize(requestedSizeCode)) {
             return BatchStartResult.INVALID;
         }
 
+        // One batch identity owns one quantity and one size. Retrying the
+        // same contract is idempotent; changing either field under the same
+        // ID is a protocol conflict, never a silent re-parameterisation.
         if (batchId.equals(activeBatchId)) {
-            return requestedQuantity == quantity ?
+            return requestedQuantity == quantity &&
+                requestedSizeCode.equals(activeSizeCode) ?
                 BatchStartResult.DUPLICATE : BatchStartResult.CONFLICT;
         }
         // Only a batch that is still running may block the next one. A
@@ -128,6 +166,7 @@ public final class RecognitionSimulatorStateV1 {
         }
 
         activeBatchId = batchId;
+        activeSizeCode = requestedSizeCode;
         quantity = requestedQuantity;
         distributed = 0;
         batchActive = true;
@@ -141,16 +180,27 @@ public final class RecognitionSimulatorStateV1 {
         return BatchStartResult.ACCEPTED;
     }
 
+    /** Accepts batchId|quantity|sizeCode, M1's canonical batch request. */
     public BatchStartResult startBatchPayload(
         String payload,
         long nowMillis
     ) {
+        String[] fields = requestFields(payload);
+        if (fields == null) {
+            return BatchStartResult.INVALID;
+        }
         try {
-            String[] fields = M4ProtocolV1.fields(payload, 2);
             int requestedQuantity = M4ProtocolV1.unsignedInteger(
                 fields[1], "quantity"
             );
-            return startBatch(fields[0], requestedQuantity, nowMillis);
+            String requestedSizeCode = fields.length == 3 ?
+                fields[2] : defaultSizeCode();
+            return startBatch(
+                fields[0],
+                requestedQuantity,
+                requestedSizeCode,
+                nowMillis
+            );
         }
         catch (IllegalArgumentException invalid) {
             return BatchStartResult.INVALID;
@@ -192,7 +242,7 @@ public final class RecognitionSimulatorStateV1 {
             return null;
         }
         nextRequestMillis = nowMillis + requestGapMillis;
-        return currentBottleId() + "|" + sizeCode;
+        return currentBottleId() + "|" + activeSizeCode;
     }
 
     public String currentBottleId() {
@@ -225,6 +275,11 @@ public final class RecognitionSimulatorStateV1 {
         return quantity;
     }
 
+    /** Size code of the current batch, null before the first one. */
+    public String batchSizeCode() {
+        return activeSizeCode;
+    }
+
     public int distributedCount() {
         return distributed;
     }
@@ -241,8 +296,8 @@ public final class RecognitionSimulatorStateV1 {
         resetRuntimeLogging();
         System.out.println(
             "[M4-SIM] standalone legacy mode quantity=" +
-            runtime.quantity + " size=" + runtime.sizeCode + " prefix=" +
-            runtime.legacyBottleIdPrefix
+            runtime.quantity + " size=" + runtime.activeSizeCode +
+            " prefix=" + runtime.legacyBottleIdPrefix
         );
     }
 
@@ -254,7 +309,8 @@ public final class RecognitionSimulatorStateV1 {
         resetRuntimeLogging();
         System.out.println(
             "[M4-SIM] batch-driven mode IDLE; awaiting " +
-            "M4_SIM_BATCH_REQUEST (m4.sim.quantity ignored)"
+            "M4_SIM_BATCH_REQUEST batchId|quantity|sizeCode " +
+            "(m4.sim.quantity and m4.sim.size ignored)"
         );
     }
 
@@ -268,7 +324,8 @@ public final class RecognitionSimulatorStateV1 {
             terminalLogged = false;
             System.out.println(
                 "[M4-SIM] batch accepted id=" + runtime.activeBatchId +
-                " quantity=" + runtime.quantity
+                " quantity=" + runtime.quantity +
+                " size=" + runtime.activeSizeCode + legacyNote(payload)
             );
             return true;
         }
@@ -281,8 +338,9 @@ public final class RecognitionSimulatorStateV1 {
         if (result == BatchStartResult.CONFLICT) {
             System.out.println(
                 "[M4-SIM] CONFLICT batch=" + runtime.activeBatchId +
-                " existing=" + runtime.quantity + " received=" +
-                receivedQuantity(payload)
+                " existing=" + runtime.quantity + "/" +
+                runtime.activeSizeCode + " received=" +
+                requestSummary(payload)
             );
             return false;
         }
@@ -302,7 +360,7 @@ public final class RecognitionSimulatorStateV1 {
         int before = runtime.distributedCount();
         boolean distributed = bottleId != null &&
             Member4MachineStateV1.isContextDistributionComplete(
-                bottleId, runtime.sizeCode
+                bottleId, runtime.activeSizeCode
             );
         String request = runtime.tick(
             System.currentTimeMillis(), distributed
@@ -335,6 +393,7 @@ public final class RecognitionSimulatorStateV1 {
         long firstBottleMillis
     ) {
         activeBatchId = prefix;
+        activeSizeCode = legacySizeCode;
         quantity = configuredQuantity;
         distributed = 0;
         batchActive = true;
@@ -350,12 +409,43 @@ public final class RecognitionSimulatorStateV1 {
         terminalLogged = false;
     }
 
-    private static String receivedQuantity(String payload) {
+    private String defaultSizeCode() {
+        return legacySizeCode == null ?
+            M4BottleContextV1.SMALL : legacySizeCode;
+    }
+
+    private static boolean isSupportedSize(String value) {
+        return M4BottleContextV1.SMALL.equals(value) ||
+            M4BottleContextV1.LARGE.equals(value);
+    }
+
+    /**
+     * Splits M1's canonical batchId|quantity|sizeCode request. The old
+     * two-field form is still parsed so a Coordinator build that does not
+     * publish a size yet keeps working; it takes the default size. Returns
+     * null when the payload is neither shape.
+     */
+    private static String[] requestFields(String payload) {
         if (payload == null) {
+            return null;
+        }
+        String[] fields = payload.split("\\|", -1);
+        return fields.length == 3 || fields.length == 2 ? fields : null;
+    }
+
+    private static String legacyNote(String payload) {
+        String[] fields = requestFields(payload);
+        return fields != null && fields.length == 2 ?
+            " (legacy request without a size code)" : "";
+    }
+
+    private static String requestSummary(String payload) {
+        String[] fields = requestFields(payload);
+        if (fields == null) {
             return "?";
         }
-        int separator = payload.lastIndexOf('|');
-        return separator < 0 ? "?" : payload.substring(separator + 1);
+        return fields[1] + "/" + (fields.length == 3 ?
+            fields[2] : runtime.defaultSizeCode());
     }
 
     private static long millis(
