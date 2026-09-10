@@ -6,18 +6,36 @@ FaultSupervisor(
     input String signal TRANSFER_RECOVERY_RESULT;
     input String signal FT_SAFE_STOP_ACK;
     input String signal FT_RESUME_DECISION;
+    input String signal M3_SYSTEM_RESET;
 
     output String signal TRANSFER_RECOVERY_REQUEST;
     output String signal FT_FAULT_ALERT;
     output String signal FT_SAFE_STOP_REQUEST;
     output String signal FT_RECOVERY_READY;
     output String signal FT_RECOVERY_FAILED;
+    output String signal M3_SYSTEM_RESET_ACK;
 )
 ->{
     FaultManagementGUI.start();
     System.out.println("M3 FaultSupervisorCD started on V2.1 boundary");
 
     {loop {
+        present(M3_SYSTEM_RESET) {
+            M3SystemResetStateV1.accept(#M3_SYSTEM_RESET);
+        }
+        pause;
+    }}
+    ||
+    {loop {
+        String resetAck = M3SystemResetStateV1.takeAck();
+        if (resetAck != null) {
+            emit M3_SYSTEM_RESET_ACK(resetAck);
+        }
+        pause;
+    }}
+    ||
+    {loop {
+        if (!M3SystemResetStateV1.isQuarantined()) {
         present(TRANSFER_FAULT_EVENT) {
             FaultSupervisorStateV2_1.onTransferFault(
                 #TRANSFER_FAULT_EVENT
@@ -43,46 +61,57 @@ FaultSupervisor(
                 #FT_RESUME_DECISION
             );
         }
+        }
 
         pause;
     }}
     ||
     {loop {
+        if (!M3SystemResetStateV1.isQuarantined()) {
         String request = FaultSupervisorStateV2_1.takeRecoveryRequest();
         if (request != null) {
             emit TRANSFER_RECOVERY_REQUEST(request);
         }
+        }
         pause;
     }}
     ||
     {loop {
+        if (!M3SystemResetStateV1.isQuarantined()) {
         String alert = FaultSupervisorStateV2_1.takeFaultAlert();
         if (alert != null) {
             emit FT_FAULT_ALERT(alert);
         }
+        }
         pause;
     }}
     ||
     {loop {
+        if (!M3SystemResetStateV1.isQuarantined()) {
         String safeStop = FaultSupervisorStateV2_1.takeSafeStopRequest();
         if (safeStop != null) {
             emit FT_SAFE_STOP_REQUEST(safeStop);
         }
-        pause;
-    }}
-    ||
-    {loop {
-        String ready = FaultSupervisorStateV2_1.takeRecoveryReady();
-        if (ready != null) {
-            emit FT_RECOVERY_READY(ready);
         }
         pause;
     }}
     ||
     {loop {
+        if (!M3SystemResetStateV1.isQuarantined()) {
+        String ready = FaultSupervisorStateV2_1.takeRecoveryReady();
+        if (ready != null) {
+            emit FT_RECOVERY_READY(ready);
+        }
+        }
+        pause;
+    }}
+    ||
+    {loop {
+        if (!M3SystemResetStateV1.isQuarantined()) {
         String failed = FaultSupervisorStateV2_1.takeRecoveryFailed();
         if (failed != null) {
             emit FT_RECOVERY_FAILED(failed);
+        }
         }
         pause;
     }}

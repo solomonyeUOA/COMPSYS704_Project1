@@ -77,6 +77,7 @@
         </ClockDomain>
 
         <ClockDomain Name="FaultSupervisorCD" Class="FaultSupervisor">
+            <iSignal Name="M3_SYSTEM_RESET" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="13003" />
             <iSignal Name="TRANSFER_FAULT_EVENT" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="13003" />
             <iSignal Name="TRANSFER_RECOVERY_ACK" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="13003" />
             <iSignal Name="TRANSFER_RECOVERY_RESULT" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="13003" />
@@ -87,6 +88,7 @@
             <oSignal Name="FT_SAFE_STOP_REQUEST" To="CoordinatorCD.FT_SAFE_STOP_REQUEST" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="11001" />
             <oSignal Name="FT_RECOVERY_READY" To="CoordinatorCD.FT_RECOVERY_READY" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="11001" />
             <oSignal Name="FT_RECOVERY_FAILED" To="CoordinatorCD.FT_RECOVERY_FAILED" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="11001" />
+            <oSignal Name="M3_SYSTEM_RESET_ACK" To="CoordinatorCD.M3_SYSTEM_RESET_ACK" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="11001" />
         </ClockDomain>
     </SubSystem>
 </System>
