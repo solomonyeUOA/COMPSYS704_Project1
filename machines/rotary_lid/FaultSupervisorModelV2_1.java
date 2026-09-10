@@ -5,6 +5,10 @@ import java.util.Map;
 
 /** Deterministic policy, correlation and evidence model for the M3 IP. */
 public final class FaultSupervisorModelV2_1 {
+    static final long SAFE_STOP_TIMEOUT_MS = 10000L;
+    static final long ACK_TIMEOUT_MS = 10000L;
+    static final long RESULT_TIMEOUT_MS = 10000L;
+
     public enum State {
         IDLE,
         WAITING_SAFE_STOP,
@@ -40,6 +44,7 @@ public final class FaultSupervisorModelV2_1 {
     private boolean manualEvidenceRecorded;
     private String decision = "IDLE";
     private String latestEvidence = "NONE";
+    private long stateEnteredAtMs = System.currentTimeMillis();
 
     private String pendingRecoveryRequest;
     private String pendingFaultAlert;
@@ -126,7 +131,7 @@ public final class FaultSupervisorModelV2_1 {
         if (policy.disposition ==
             FaultPolicyV2_1.Disposition.AUTOMATIC_RETRY) {
             if (policy.requiresSafeStop) {
-                state = State.WAITING_SAFE_STOP;
+                transition(State.WAITING_SAFE_STOP);
                 decision = "WAITING_FOR_M1_SAFE_STOP";
                 pendingSafeStopRequest = safeStopRequest(event);
             }
@@ -136,12 +141,12 @@ public final class FaultSupervisorModelV2_1 {
         }
         else if (policy.disposition ==
             FaultPolicyV2_1.Disposition.RESOURCE_WAIT) {
-            state = State.RESOURCE_WAIT;
+            transition(State.RESOURCE_WAIT);
             decision = "WAIT_RESOURCE_NO_RETRY_BUDGET";
             resourceWaits++;
         }
         else {
-            state = State.WAITING_SAFE_STOP;
+            transition(State.WAITING_SAFE_STOP);
             decision = "NO_BLIND_RETRY_WAITING_SAFE_STOP";
             pendingSafeStopRequest = safeStopRequest(event);
             manualEscalations++;
@@ -190,7 +195,7 @@ public final class FaultSupervisorModelV2_1 {
             issueRecoveryRequest();
         }
         else {
-            state = State.LOCKED_OUT;
+            transition(State.LOCKED_OUT);
             decision = "MANUAL_RECONCILIATION_REQUIRED";
             queueRecoveryFailed("NO_AUTOMATIC_ACTION");
         }
@@ -243,7 +248,7 @@ public final class FaultSupervisorModelV2_1 {
             failRecovery("RECOVERY_REJECTED " + ack.reason);
             return false;
         }
-        state = State.WAITING_RESULT;
+        transition(State.WAITING_RESULT);
         decision = "RECOVERY_IN_PROGRESS";
         latestEvidence = "CONTROLLER_ACK " + ack.reason;
         record("ACK " + key + " " + ack.reason);
@@ -292,7 +297,7 @@ public final class FaultSupervisorModelV2_1 {
             return false;
         }
         latestStateVersion = result.resultingStateVersion;
-        state = State.RECOVERY_READY;
+        transition(State.RECOVERY_READY);
         decision = "VERIFIED_READY_AWAIT_M1";
         latestEvidence = result.safeEvidence + ";" +
             result.serviceEvidence;
@@ -344,7 +349,7 @@ public final class FaultSupervisorModelV2_1 {
             return false;
         }
         latestStateVersion = resultingStateVersion;
-        state = State.RECOVERY_READY;
+        transition(State.RECOVERY_READY);
         decision = "VERIFIED_READY_AWAIT_M1";
         latestEvidence = safeEvidence + ";" + serviceEvidence;
         verifiedRecoveries++;
@@ -365,7 +370,7 @@ public final class FaultSupervisorModelV2_1 {
             return false;
         }
         latestStateVersion = resultingStateVersion;
-        state = State.RECOVERY_READY;
+        transition(State.RECOVERY_READY);
         decision = "RESOURCE_RESTORED_AWAIT_M1";
         latestEvidence = "lid_available";
         verifiedRecoveries++;
@@ -407,6 +412,22 @@ public final class FaultSupervisorModelV2_1 {
     public synchronized void reportAckTimeout() {
         if (state == State.WAITING_ACK) {
             failRecovery("ACK_TIMEOUT_NO_RESEND");
+        }
+    }
+
+    /** Runtime watchdog for coordination states that require a response. */
+    public synchronized void tick(long nowMs) {
+        long elapsed = Math.max(0L, nowMs - stateEnteredAtMs);
+        if (state == State.WAITING_SAFE_STOP &&
+            elapsed >= SAFE_STOP_TIMEOUT_MS) {
+            failRecovery("SAFE_STOP_ACK_TIMEOUT");
+        }
+        else if (state == State.WAITING_ACK && elapsed >= ACK_TIMEOUT_MS) {
+            failRecovery("ACK_TIMEOUT_NO_RESEND");
+        }
+        else if (state == State.WAITING_RESULT &&
+            elapsed >= RESULT_TIMEOUT_MS) {
+            failRecovery("RESULT_TIMEOUT");
         }
     }
 
@@ -577,6 +598,14 @@ public final class FaultSupervisorModelV2_1 {
         return activeAttempt;
     }
 
+    public synchronized int getMaximumAttempts() {
+        return activePolicy == null ? 0 : activePolicy.maxAttempts;
+    }
+
+    public synchronized long getStateEnteredAtMs() {
+        return stateEnteredAtMs;
+    }
+
     public synchronized String getPolicySummary() {
         return activePolicy == null ? "NONE" : activePolicy.summary();
     }
@@ -633,6 +662,17 @@ public final class FaultSupervisorModelV2_1 {
         clearOutputs();
     }
 
+    /** Clears active recovery while retaining correlation tombstones. */
+    public synchronized void systemReset() {
+        localActiveEvents.clear();
+        localDecisions.clear();
+        localRetryCounts.clear();
+        clearActiveRecovery();
+        clearOutputs();
+        latestEvidence = "NONE";
+        record("SYSTEM_RESET");
+    }
+
     private void issueRecoveryRequest() {
         if (activePolicy == null || activePolicy.maxAttempts != 1 ||
             activeAttempt >= activePolicy.maxAttempts) {
@@ -649,7 +689,7 @@ public final class FaultSupervisorModelV2_1 {
             pendingRecoveryRequest = request;
         }
         automaticAttempts++;
-        state = State.WAITING_ACK;
+        transition(State.WAITING_ACK);
         decision = activePolicy.action + "_ATTEMPT_" + activeAttempt;
         record("REQUEST " + request);
     }
@@ -710,7 +750,7 @@ public final class FaultSupervisorModelV2_1 {
     }
 
     private void failRecovery(String reason) {
-        state = State.LOCKED_OUT;
+        transition(State.LOCKED_OUT);
         decision = reason;
         pendingRecoveryRequest = null;
         recoveryFailures++;
@@ -777,7 +817,7 @@ public final class FaultSupervisorModelV2_1 {
         activePolicy = null;
         activeAttempt = 0;
         manualEvidenceRecorded = false;
-        state = State.IDLE;
+        transition(State.IDLE);
         decision = "IDLE";
         latestEvidence = "NONE";
         pendingRecoveryRequest = null;
@@ -796,5 +836,10 @@ public final class FaultSupervisorModelV2_1 {
         if (history.size() > 300) {
             history.remove(0);
         }
+    }
+
+    private void transition(State nextState) {
+        state = nextState;
+        stateEnteredAtMs = System.currentTimeMillis();
     }
 }

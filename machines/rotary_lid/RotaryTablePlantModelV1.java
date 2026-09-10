@@ -1,5 +1,7 @@
 import java.util.HashMap;
 import java.util.Map;
+import java.util.HashSet;
+import java.util.Set;
 
 /** Six-position Plant model with bottle-correlated station barriers. */
 public final class RotaryTablePlantModelV1 {
@@ -282,6 +284,32 @@ public final class RotaryTablePlantModelV1 {
                 .append(positionLabel(i));
         }
         return result.toString();
+    }
+
+    public Set<String> activeBottleIds() {
+        Set<String> result = new HashSet<String>();
+        for (BottleStateV1 bottle : positions) {
+            if (bottle != null) {
+                result.add(bottle.getId());
+            }
+        }
+        result.addAll(contexts.keySet());
+        return result;
+    }
+
+    public void safeStopAndClear() {
+        moving = false;
+        movementComplete = false;
+        aligned = true;
+        alignmentFault = false;
+        triggerLatched = false;
+        movementStartMs = 0L;
+        pendingCycleId = 0L;
+        for (int index = 0; index < positions.length; index++) {
+            positions[index] = null;
+        }
+        contexts.clear();
+        clearOfferLatches();
     }
 
     private BottleStateV1 matchingBottle(int position, String bottleId) {
