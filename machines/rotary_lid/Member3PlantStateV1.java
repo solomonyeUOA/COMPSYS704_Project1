@@ -44,13 +44,17 @@ public final class Member3PlantStateV1 {
     }
 
     public static synchronized boolean loadBottle(String id) {
-        if (retiredBottleIds.contains(id)) {
+        if (M3SystemResetStateV1.isQuarantined() ||
+            retiredBottleIds.contains(id)) {
             return false;
         }
         return rotary.loadBottle(id);
     }
 
     public static synchronized boolean registerBottleContext(String payload) {
+        if (M3SystemResetStateV1.isQuarantined()) {
+            return false;
+        }
         String bottleId = payload == null ? null : payload.split("\\|", -1)[0];
         if (retiredBottleIds.contains(bottleId)) {
             return false;
@@ -62,6 +66,10 @@ public final class Member3PlantStateV1 {
         boolean enabled,
         long cycleId
     ) {
+        if (M3SystemResetStateV1.isQuarantined()) {
+            enabled = false;
+            cycleId = 0L;
+        }
         rotary.setMotorCommand(enabled, cycleId, java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(System.nanoTime()));
     }
 
@@ -78,10 +86,16 @@ public final class Member3PlantStateV1 {
     }
 
     public static synchronized boolean commitRotation(long cycleId) {
+        if (M3SystemResetStateV1.isQuarantined()) {
+            return false;
+        }
         return rotary.commitRotation(cycleId);
     }
 
     public static synchronized boolean markFilled(String bottleId) {
+        if (M3SystemResetStateV1.isQuarantined()) {
+            return false;
+        }
         boolean accepted = rotary.markFilled(bottleId);
         if (accepted) {
             fillOffer.acknowledge(bottleId);
@@ -90,10 +104,16 @@ public final class Member3PlantStateV1 {
     }
 
     public static synchronized boolean markLidPlaced(String bottleId) {
+        if (M3SystemResetStateV1.isQuarantined()) {
+            return false;
+        }
         return rotary.markLidPlaced(bottleId);
     }
 
     public static synchronized boolean markCapped(String bottleId) {
+        if (M3SystemResetStateV1.isQuarantined()) {
+            return false;
+        }
         boolean accepted = rotary.markCapped(bottleId);
         if (accepted) {
             capOffer.acknowledge(bottleId);
@@ -102,6 +122,9 @@ public final class Member3PlantStateV1 {
     }
 
     public static synchronized boolean markLabelled(String bottleId) {
+        if (M3SystemResetStateV1.isQuarantined()) {
+            return false;
+        }
         boolean accepted = rotary.markLabelled(bottleId);
         if (accepted) {
             labelOffer.acknowledge(bottleId);
@@ -110,10 +133,16 @@ public final class Member3PlantStateV1 {
     }
 
     public static synchronized boolean clearP6(String bottleId) {
+        if (M3SystemResetStateV1.isQuarantined()) {
+            return false;
+        }
         return rotary.clearP6(bottleId);
     }
 
     public static synchronized void setAlignmentFault(boolean active) {
+        if (M3SystemResetStateV1.isQuarantined()) {
+            return;
+        }
         rotary.setAlignmentFault(active);
     }
 
@@ -122,18 +151,27 @@ public final class Member3PlantStateV1 {
     }
 
     public static synchronized boolean canRotate() {
-        return rotary.canRotate();
+        return !M3SystemResetStateV1.isQuarantined() && rotary.canRotate();
     }
 
     public static synchronized String getBottleWaitingForLidId() {
+        if (M3SystemResetStateV1.isQuarantined()) {
+            return null;
+        }
         return rotary.getBottleWaitingForLidId();
     }
 
     public static synchronized String takeFillOffer() {
+        if (M3SystemResetStateV1.isQuarantined()) {
+            return null;
+        }
         return rotary.takeFillOffer();
     }
 
     public static synchronized String nextFillOfferWindow() {
+        if (M3SystemResetStateV1.isQuarantined()) {
+            return null;
+        }
         if (!fillOffer.isActive()) {
             String payload = rotary.takeFillOffer();
             if (payload != null) {
@@ -144,10 +182,16 @@ public final class Member3PlantStateV1 {
     }
 
     public static synchronized String takeCapOffer() {
+        if (M3SystemResetStateV1.isQuarantined()) {
+            return null;
+        }
         return rotary.takeCapOffer();
     }
 
     public static synchronized String nextCapOfferWindow() {
+        if (M3SystemResetStateV1.isQuarantined()) {
+            return null;
+        }
         if (!capOffer.isActive()) {
             String payload = rotary.takeCapOffer();
             if (payload != null) {
@@ -158,10 +202,16 @@ public final class Member3PlantStateV1 {
     }
 
     public static synchronized String takeLabelOffer() {
+        if (M3SystemResetStateV1.isQuarantined()) {
+            return null;
+        }
         return rotary.takeLabelOffer();
     }
 
     public static synchronized String nextLabelOfferWindow() {
+        if (M3SystemResetStateV1.isQuarantined()) {
+            return null;
+        }
         if (!labelOffer.isActive()) {
             String payload = rotary.takeLabelOffer();
             if (payload != null) {
@@ -180,10 +230,16 @@ public final class Member3PlantStateV1 {
     }
 
     public static synchronized void setPickCommand(boolean enabled) {
+        if (M3SystemResetStateV1.isQuarantined()) {
+            enabled = false;
+        }
         lid.setPickCommand(enabled, java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(System.nanoTime()));
     }
 
     public static synchronized void setPlaceCommand(boolean enabled) {
+        if (M3SystemResetStateV1.isQuarantined()) {
+            enabled = false;
+        }
         lid.setPlaceCommand(enabled, java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(System.nanoTime()));
     }
 
@@ -233,14 +289,23 @@ public final class Member3PlantStateV1 {
     }
 
     public static synchronized int refillLids(int count) {
+        if (M3SystemResetStateV1.isQuarantined()) {
+            return lid.getMagazineCount();
+        }
         return lid.refill(count);
     }
 
     public static synchronized void setPickFault(boolean active) {
+        if (M3SystemResetStateV1.isQuarantined()) {
+            return;
+        }
         lid.setPickFault(active);
     }
 
     public static synchronized void setPlaceFault(boolean active) {
+        if (M3SystemResetStateV1.isQuarantined()) {
+            return;
+        }
         lid.setPlaceFault(active);
     }
 

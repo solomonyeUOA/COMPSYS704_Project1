@@ -14,6 +14,8 @@ public final class Member3MachineStateV1 {
     private static long lastLidTickMs = java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(System.nanoTime());
     private static boolean rotationDonePublished;
     private static boolean lidDonePublished;
+    private static BoundedSignalOfferV1 lidDoneOffer =
+        new BoundedSignalOfferV1(3);
     private static long nextCycleId = 1;
 
     private Member3MachineStateV1() {
@@ -37,6 +39,9 @@ public final class Member3MachineStateV1 {
     public static synchronized boolean requestRotation(
         boolean stationBarrierSatisfied
     ) {
+        if (M3SystemResetStateV1.isQuarantined()) {
+            return false;
+        }
         boolean started = rotary.requestRotation(
             nextCycleId,
             stationBarrierSatisfied
@@ -87,6 +92,9 @@ public final class Member3MachineStateV1 {
     public static synchronized boolean resetRotaryFault(
         RotaryRecoveryEvidenceV1 evidence
     ) {
+        if (M3SystemResetStateV1.isQuarantined()) {
+            return false;
+        }
         String eventId = rotary.getFaultEventId();
         if (!FaultSupervisorStateV2_1.authorizeRotaryReset(
             eventId,
@@ -109,6 +117,9 @@ public final class Member3MachineStateV1 {
         String bottleId,
         boolean lidAvailable
     ) {
+        if (M3SystemResetStateV1.isQuarantined()) {
+            return false;
+        }
         if (lidLoader.getStatus() == DONE) {
             return false;
         }
@@ -150,14 +161,17 @@ public final class Member3MachineStateV1 {
     }
 
     public static synchronized String takeLidDoneBottleId() {
-        if (lidLoader.getStatus() != DONE || lidDonePublished) {
+        if (lidLoader.getStatus() != DONE) {
             return null;
         }
-        String bottleId = lidLoader.takeCompletedBottleId();
-        if (bottleId != null) {
-            lidDonePublished = true;
+        if (!lidDonePublished) {
+            String bottleId = lidLoader.takeCompletedBottleId();
+            if (bottleId != null) {
+                lidDoneOffer.arm(bottleId, bottleId);
+                lidDonePublished = true;
+            }
         }
-        return bottleId;
+        return lidDoneOffer.nextReactionValue();
     }
 
     public static synchronized boolean isLidPickEnabled() {
@@ -172,6 +186,7 @@ public final class Member3MachineStateV1 {
         boolean acknowledged = lidLoader.acknowledgeDone();
         if (acknowledged) {
             lidDonePublished = false;
+            lidDoneOffer = new BoundedSignalOfferV1(3);
         }
         return acknowledged;
     }
@@ -179,6 +194,9 @@ public final class Member3MachineStateV1 {
     public static synchronized boolean resetLidFault(
         LidRecoveryEvidenceV1 evidence
     ) {
+        if (M3SystemResetStateV1.isQuarantined()) {
+            return false;
+        }
         String eventId = lidLoader.getFaultEventId();
         LidLoaderControllerModelV1.Fault fault = lidLoader.getFault();
         if (!FaultSupervisorStateV2_1.authorizeLidReset(
@@ -203,6 +221,7 @@ public final class Member3MachineStateV1 {
         lastLidTickMs = java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(System.nanoTime());
         rotationDonePublished = false;
         lidDonePublished = false;
+        lidDoneOffer = new BoundedSignalOfferV1(3);
         nextCycleId = 1;
         FaultSupervisorStateV2_1.reset();
     }
@@ -220,6 +239,7 @@ public final class Member3MachineStateV1 {
         lastLidTickMs = now;
         rotationDonePublished = false;
         lidDonePublished = false;
+        lidDoneOffer = new BoundedSignalOfferV1(3);
         FaultSupervisorStateV2_1.systemReset();
     }
 

@@ -103,6 +103,7 @@ RotaryTablePlant(
     }}
     ||
     {loop {
+        if (!M3SystemResetStateV1.isQuarantined()) {
         if (Member3PlantStateV1.canRotate()) {
             emit ROTATION_READY;
         }
@@ -130,6 +131,7 @@ RotaryTablePlant(
         String labelOffer = Member3PlantStateV1.nextLabelOfferWindow();
         if (labelOffer != null) {
             emit BOTTLE_AT_LABEL(labelOffer);
+        }
         }
         pause;
     }}

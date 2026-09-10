@@ -13,6 +13,9 @@ public final class FaultSupervisorSelfTest {
         testInvalidRecoveryEvidence();
         testTimeoutEscalation();
         testRuntimeWatchdog();
+        testLateMessagesAfterSystemReset();
+        testSystemResetFromReachableStates();
+        testBoundedFacadeTransportAndReset();
         testLocalGpRecoveryBoundary();
         testConcurrentFaultHold();
         testMalformedAndUnknownEvents();
@@ -244,6 +247,147 @@ public final class FaultSupervisorSelfTest {
         require(result.getState() ==
             FaultSupervisorModelV2_1.State.LOCKED_OUT,
             "runtime watchdog detects missing recovery result");
+    }
+
+    private static void testLateMessagesAfterSystemReset() {
+        FaultSupervisorModelV2_1 model = new FaultSupervisorModelV2_1();
+        require(model.onTransferFault(event(
+            "RST-LATE", "A", "TRANSFER", "ARRIVAL_TIMEOUT", "WARNING", 1
+        )), "pre-reset event accepted");
+        require(model.takeRecoveryRequest() != null,
+            "pre-reset recovery request emitted");
+        model.systemReset();
+
+        require(!model.onRecoveryAck(
+            "V2|RST-LATE|A|1|ACCEPTED|OK|1"
+        ), "late ACK is rejected after reset");
+        require(model.getState() == FaultSupervisorModelV2_1.State.IDLE,
+            "late ACK cannot lock out an idle reset system");
+        require(!model.onRecoveryResult(
+            "V2|RST-LATE|A|1|SUCCESS|motor_off+occupancy_consistent|" +
+            "arrival_confirmed|2"
+        ), "late result is rejected after reset");
+        require(model.getState() == FaultSupervisorModelV2_1.State.IDLE,
+            "late result cannot lock out an idle reset system");
+        require(model.onTransferFault(event(
+            "RST-NEXT", "A", "TRANSFER", "ARRIVAL_TIMEOUT", "WARNING", 2
+        )), "newer work is accepted after stale reset traffic");
+    }
+
+    private static void testSystemResetFromReachableStates() {
+        FaultSupervisorModelV2_1 idle = new FaultSupervisorModelV2_1();
+        assertSystemReset(idle, "IDLE");
+
+        FaultSupervisorModelV2_1 waitingAck = transferRetry("RST-ACK");
+        require(waitingAck.getState() ==
+            FaultSupervisorModelV2_1.State.WAITING_ACK,
+            "precondition reaches WAITING_ACK");
+        assertSystemReset(waitingAck, "WAITING_ACK");
+
+        FaultSupervisorModelV2_1 waitingResult =
+            transferRetry("RST-RESULT");
+        waitingResult.takeRecoveryRequest();
+        require(waitingResult.onRecoveryAck(
+            "V2|RST-RESULT|A|1|ACCEPTED|route_clear|1"
+        ), "precondition ACK reaches WAITING_RESULT");
+        assertSystemReset(waitingResult, "WAITING_RESULT");
+
+        FaultSupervisorModelV2_1 resourceWait =
+            new FaultSupervisorModelV2_1();
+        require(resourceWait.onFaultEvent(event(
+            "RST-RESOURCE", "A", "LID", "MAGAZINE_EMPTY", "RESOURCE", 1
+        )), "precondition reaches RESOURCE_WAIT");
+        assertSystemReset(resourceWait, "RESOURCE_WAIT");
+
+        FaultSupervisorModelV2_1 recoveryReady =
+            transferRetry("RST-READY");
+        recoveryReady.takeRecoveryRequest();
+        require(recoveryReady.onRecoveryAck(
+            "V2|RST-READY|A|1|ACCEPTED|route_clear|1"
+        ), "precondition ready ACK accepted");
+        require(recoveryReady.onRecoveryResult(
+            "V2|RST-READY|A|1|SUCCESS|" +
+            "motor_off+occupancy_consistent|arrival_confirmed|2"
+        ), "precondition reaches RECOVERY_READY");
+        assertSystemReset(recoveryReady, "RECOVERY_READY");
+
+        FaultSupervisorModelV2_1 waitingSafeStop =
+            new FaultSupervisorModelV2_1();
+        require(waitingSafeStop.onFaultEvent(event(
+            "RST-STOP", "A", "ROTARY", "MOTOR_STALL", "CRITICAL", 1
+        )), "precondition reaches WAITING_SAFE_STOP");
+        assertSystemReset(waitingSafeStop, "WAITING_SAFE_STOP");
+
+        FaultSupervisorModelV2_1 lockedOut =
+            new FaultSupervisorModelV2_1();
+        require(lockedOut.onFaultEvent(event(
+            "RST-LOCK", "A", "ROTARY", "MOTOR_STALL", "CRITICAL", 1
+        )), "precondition lockout fault accepted");
+        require(lockedOut.onSafeStopAck(
+            "V2|RST-LOCK|A|SAFE_STOPPED|1"
+        ), "precondition reaches LOCKED_OUT");
+        assertSystemReset(lockedOut, "LOCKED_OUT");
+
+        FaultSupervisorModelV2_1 local = new FaultSupervisorModelV2_1();
+        local.observeRotaryFault("RST-LOCAL-R", "alignment timeout");
+        local.observeLidFault(
+            "RST-LOCAL-L", LidLoaderControllerModelV1.Fault.PICK_TIMEOUT
+        );
+        local.systemReset();
+        require("ROTARY=READY; LID=READY".equals(local.getLocalSummary()),
+            "system reset clears local GP fault decisions");
+    }
+
+    private static FaultSupervisorModelV2_1 transferRetry(String eventId) {
+        FaultSupervisorModelV2_1 model = new FaultSupervisorModelV2_1();
+        require(model.onTransferFault(event(
+            eventId, "A", "TRANSFER", "ARRIVAL_TIMEOUT", "WARNING", 1
+        )), "transfer retry precondition accepted");
+        return model;
+    }
+
+    private static void assertSystemReset(
+        FaultSupervisorModelV2_1 model,
+        String sourceState
+    ) {
+        model.systemReset();
+        require(model.getState() == FaultSupervisorModelV2_1.State.IDLE,
+            "system reset clears " + sourceState);
+        require("-".equals(model.getActiveEventId()) &&
+            model.getActiveAttempt() == 0,
+            "system reset clears active correlation from " + sourceState);
+        require(model.takeRecoveryRequest() == null &&
+            model.takeFaultAlert() == null &&
+            model.takeSafeStopRequest() == null &&
+            model.takeRecoveryReady() == null &&
+            model.takeRecoveryFailed() == null,
+            "system reset clears pending outputs from " + sourceState);
+    }
+
+    private static void testBoundedFacadeTransportAndReset() {
+        FaultSupervisorStateV2_1.reset();
+        require(FaultSupervisorStateV2_1.onTransferFault(event(
+            "FAC-1", "A", "TRANSFER", "ARRIVAL_TIMEOUT", "WARNING", 1
+        )), "facade event accepted");
+        String request = FaultSupervisorStateV2_1.takeRecoveryRequest();
+        require("V2|FAC-1|A|RETRY_TRANSFER|1|1".equals(request),
+            "facade emits the correlated recovery request");
+        require(request.equals(
+            FaultSupervisorStateV2_1.takeRecoveryRequest()
+        ), "recovery request remains PRESENT during its hold window");
+        require(FaultSupervisorStateV2_1.onRecoveryAck(
+            "V2|FAC-1|A|1|ACCEPTED|route_clear|1"
+        ), "facade accepts the matching ACK");
+        require(FaultSupervisorStateV2_1.takeRecoveryRequest() == null,
+            "matching ACK cancels remaining request copies");
+
+        FaultSupervisorStateV2_1.systemReset();
+        require(FaultSupervisorStateV2_1.takeRecoveryRequest() == null &&
+            FaultSupervisorStateV2_1.takeFaultAlert() == null &&
+            FaultSupervisorStateV2_1.takeSafeStopRequest() == null &&
+            FaultSupervisorStateV2_1.takeRecoveryReady() == null &&
+            FaultSupervisorStateV2_1.takeRecoveryFailed() == null,
+            "system reset discards every active facade offer");
     }
 
     private static void testLocalGpRecoveryBoundary() {
