@@ -1,0 +1,33 @@
+// High-level M2 Bottle Unloader Plant with empty-P6 confirmation.
+
+BottleUnloaderPlant(
+    input String signal UNLOAD_CMD;
+    input signal INJECT_REMOVAL_FAULT;
+    input signal CLEAR_REMOVAL_FAULT;
+
+    output String signal REMOVAL_CONFIRMED;
+)
+->{
+    System.out.println("M2 BottleUnloaderPlantCD started");
+
+    {loop {
+        present(UNLOAD_CMD) {
+            M2PlantStateV1.commandUnload(
+                #UNLOAD_CMD,
+                System.currentTimeMillis()
+            );
+        }
+        present(INJECT_REMOVAL_FAULT) {
+            M2PlantStateV1.setRemovalFault(true);
+        }
+        present(CLEAR_REMOVAL_FAULT) {
+            M2PlantStateV1.setRemovalFault(false);
+        }
+        M2PlantStateV1.tickUnloader(System.currentTimeMillis());
+        String confirmation = M2PlantStateV1.takeRemovalConfirmed();
+        if (confirmation != null) {
+            emit REMOVAL_CONFIRMED(confirmation);
+        }
+        pause;
+    }}
+}

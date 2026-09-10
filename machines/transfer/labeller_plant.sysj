@@ -1,0 +1,33 @@
+// M2 Labeller Plant with independent PASS/FAIL verification evidence.
+
+LabellerPlant(
+    input String signal LABEL_CMD;
+    input signal INJECT_LABEL_VERIFY_FAULT;
+    input signal CLEAR_LABEL_VERIFY_FAULT;
+
+    output String signal LABEL_VERIFIED;
+)
+->{
+    System.out.println("M2 LabellerPlantCD started");
+
+    {loop {
+        present(LABEL_CMD) {
+            M2PlantStateV1.commandLabel(
+                #LABEL_CMD,
+                System.currentTimeMillis()
+            );
+        }
+        present(INJECT_LABEL_VERIFY_FAULT) {
+            M2PlantStateV1.setLabelVerificationFault(true);
+        }
+        present(CLEAR_LABEL_VERIFY_FAULT) {
+            M2PlantStateV1.setLabelVerificationFault(false);
+        }
+        M2PlantStateV1.tickLabeller(System.currentTimeMillis());
+        String verification = M2PlantStateV1.takeLabelVerification();
+        if (verification != null) {
+            emit LABEL_VERIFIED(verification);
+        }
+        pause;
+    }}
+}

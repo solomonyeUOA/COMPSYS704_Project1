@@ -1,0 +1,61 @@
+// TEST ONLY: drives the complete V2.1 fault recovery exchange.
+
+FaultToleranceDemoDriver(
+    input String signal LOCAL_RECOVERY_INTENT;
+    input String signal FT_FAULT_ALERT;
+    input String signal FT_SAFE_STOP_REQUEST;
+    input String signal FT_RECOVERY_READY;
+    input String signal FT_RECOVERY_FAILED;
+
+    output String signal LOCAL_TRANSFER_FAULT;
+    output String signal LOCAL_RECOVERY_EVIDENCE;
+    output String signal FT_SAFE_STOP_ACK;
+    output String signal FT_RESUME_DECISION;
+)
+->{
+    FaultToleranceDemoStateV2_1.reset();
+    System.out.println("M3 fault-tolerance SystemJ demo started");
+
+    {loop {
+        int action = FaultToleranceDemoStateV2_1.nextAction();
+        if (action == FaultToleranceDemoStateV2_1.SEND_FAULT) {
+            emit LOCAL_TRANSFER_FAULT(
+                "V2|IP-DEMO-01|IP-DEMO|TRANSFER|ARRIVAL_TIMEOUT|" +
+                "WARNING|B-IP-001|1"
+            );
+        }
+        else if (action == FaultToleranceDemoStateV2_1.SEND_RESULT) {
+            emit LOCAL_RECOVERY_EVIDENCE(
+                "V2|IP-DEMO-01|IP-DEMO|1|SUCCESS|" +
+                "motor_off+occupancy_consistent|arrival_confirmed|2"
+            );
+        }
+        else if (action == FaultToleranceDemoStateV2_1.SEND_RESUME) {
+            emit FT_RESUME_DECISION(
+                "V2|IP-DEMO-01|IP-DEMO|RESUME|DEMO_APPROVAL|2"
+            );
+        }
+        else if (action == FaultToleranceDemoStateV2_1.PASS) {
+            System.out.println("FAULT_TOLERANCE_SYSTEMJ_DEMO PASSED");
+            System.out.println(
+                FaultSupervisorStateV2_1.metricsSnapshot().summary()
+            );
+        }
+        pause;
+    }}
+    ||
+    {loop {
+        present(LOCAL_RECOVERY_INTENT) {
+            FaultToleranceDemoStateV2_1.onIntent(
+                #LOCAL_RECOVERY_INTENT
+            );
+        }
+        present(FT_RECOVERY_READY) {
+            FaultToleranceDemoStateV2_1.onReady(#FT_RECOVERY_READY);
+        }
+        present(FT_RECOVERY_FAILED) {
+            System.out.println("Demo failed: " + #FT_RECOVERY_FAILED);
+        }
+        pause;
+    }}
+}

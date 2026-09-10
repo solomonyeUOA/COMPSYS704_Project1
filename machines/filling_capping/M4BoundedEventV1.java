@@ -38,4 +38,9 @@ public final class M4BoundedEventV1 {
         }
         return result;
     }
+
+    /** Read-only check; does not consume or reschedule a transport copy. */
+    public boolean isPending() {
+        return remaining > 0;
+    }
 }

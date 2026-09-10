@@ -31,7 +31,13 @@ FillerAController(
     ||
     {loop {
         present(BOTTLE_AT_FILL) {
-            Member4MachineStateV1.acceptBottleAtFill(#BOTTLE_AT_FILL);
+            String context = #BOTTLE_AT_FILL;
+            if (Member4MachineStateV1.acceptBottleAtFill(context)) {
+                System.out.println(
+                    "M4 FillerA accepted BOTTLE_AT_FILL: " +
+                    M4BottleContextV1.parse(context).getBottleId()
+                );
+            }
         }
         pause;
     }}

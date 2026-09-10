@@ -39,15 +39,26 @@ RotaryTableController(
         pause;
     }}
     ||
-    {loop {
+    {boolean plantNotReadyObserved = false;
+    loop {
         present(ROTATION_READY) {
             if (Member3MachineStateV1.getRotaryStatus() ==
-                Member3MachineStateV1.DONE) {
+                Member3MachineStateV1.DONE && plantNotReadyObserved) {
                 Member3MachineStateV1.acknowledgeRotationDone();
             }
             if (Member3MachineStateV1.getRotaryStatus() ==
                 Member3MachineStateV1.READY) {
-                Member3MachineStateV1.requestRotation(true);
+                if (Member3MachineStateV1.requestRotation(true)) {
+                    plantNotReadyObserved = false;
+                }
+            }
+        }
+        else {
+            if (Member3MachineStateV1.getRotaryStatus() ==
+                Member3MachineStateV1.BUSY ||
+                Member3MachineStateV1.getRotaryStatus() ==
+                Member3MachineStateV1.DONE) {
+                plantNotReadyObserved = true;
             }
         }
 
@@ -80,9 +91,13 @@ RotaryTableController(
             emit ROTARY_TABLE_TRIGGER((int)
                 Member3MachineStateV1.getActiveCycleId());
         }
-        if (Member3MachineStateV1.takeRotationDoneEvent()) {
+        // Keep the cycle-correlated commit visible until the Plant barrier reopens.
+        if (Member3MachineStateV1.getRotaryStatus() ==
+            Member3MachineStateV1.DONE) {
             emit ROTATION_DONE((int)
                 Member3MachineStateV1.getLastCompletedCycleId());
+        }
+        if (Member3MachineStateV1.takeRotationDoneEvent()) {
             System.out.println(
                 "Rotary completed cycle " +
                 Member3MachineStateV1.getLastCompletedCycleId()

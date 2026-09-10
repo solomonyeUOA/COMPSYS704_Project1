@@ -1,0 +1,123 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Canonical M2 runtime: four Controllers/Plants, FT adapter and Twin IP. -->
+<System xmlns="http://systemjtechnology.com">
+    <SubSystem Name="MEMBER2_SS" Local="true">
+        <ClockDomain Name="BottleLoaderControllerCD" Class="BottleLoaderController">
+            <iSignal Name="START_ORDER" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="11002" />
+            <iSignal Name="LOAD_PROFILE" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="11002" />
+            <iSignal Name="LOADER_STATUS_REQUEST" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="11002" />
+            <iSignal Name="LOAD_CONFIRMED" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="11002" />
+            <iSignal Name="CONVEYOR_ENTRY_AVAILABLE" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="11002" />
+            <oSignal Name="LOADER_STATUS" To="CoordinatorCD.LOADER_STATUS" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="11001" />
+            <oSignal Name="LOAD_CMD" To="BottleLoaderPlantCD.LOAD_CMD" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="12002" />
+            <oSignal Name="BOTTLE_AT_CONVEYOR" To="ConveyorControllerCD.BOTTLE_AT_CONVEYOR" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="11009" />
+            <oSignal Name="WORKPIECE_TWIN_UPDATE" To="DigitalTwinCD.LOADER_WORKPIECE_TWIN_UPDATE" Class="OptionalSimpleClient" IP="127.0.0.1" Port="14002" />
+            <oSignal Name="RESOURCE_TWIN_UPDATE" To="DigitalTwinCD.LOADER_RESOURCE_TWIN_UPDATE" Class="OptionalSimpleClient" IP="127.0.0.1" Port="14002" />
+        </ClockDomain>
+
+        <ClockDomain Name="BottleLoaderPlantCD" Class="BottleLoaderPlant">
+            <iSignal Name="LOAD_CMD" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="12002" />
+            <oSignal Name="LOAD_CONFIRMED" To="BottleLoaderControllerCD.LOAD_CONFIRMED" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="11002" />
+        </ClockDomain>
+
+        <ClockDomain Name="ConveyorControllerCD" Class="ConveyorController">
+            <iSignal Name="CONVEYOR_STATUS_REQUEST" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="11009" />
+            <iSignal Name="BOTTLE_AT_CONVEYOR" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="11009" />
+            <iSignal Name="P1_FEEDBACK" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="11009" />
+            <iSignal Name="LOCAL_RECOVERY_INTENT" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="11009" />
+            <oSignal Name="CONVEYOR_STATUS" To="CoordinatorCD.CONVEYOR_STATUS" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="11001" />
+            <oSignal Name="CONVEYOR_ENTRY_AVAILABLE" To="BottleLoaderControllerCD.CONVEYOR_ENTRY_AVAILABLE" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="11002" />
+            <oSignal Name="CONVEYOR_TRANSFER" To="ConveyorPlantCD.CONVEYOR_TRANSFER" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="12009" />
+            <oSignal Name="MOTOR_CMD" To="ConveyorPlantCD.MOTOR_CMD" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="12009" />
+            <oSignal Name="HANDOFF_COMMITTED" To="ConveyorPlantCD.HANDOFF_COMMITTED" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="12009" />
+            <oSignal Name="LOAD_BOTTLE" To="RotaryTablePlantCD.LOAD_BOTTLE" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="12003" />
+            <oSignal Name="LOCAL_TRANSFER_FAULT" To="M2TransferFaultAdapterCD.LOCAL_TRANSFER_FAULT" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="13002" />
+            <oSignal Name="LOCAL_RECOVERY_EVIDENCE" To="M2TransferFaultAdapterCD.LOCAL_RECOVERY_EVIDENCE" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="13002" />
+            <oSignal Name="WORKPIECE_TWIN_UPDATE" To="DigitalTwinCD.CONVEYOR_WORKPIECE_TWIN_UPDATE" Class="OptionalSimpleClient" IP="127.0.0.1" Port="14002" />
+            <oSignal Name="RESOURCE_TWIN_UPDATE" To="DigitalTwinCD.CONVEYOR_RESOURCE_TWIN_UPDATE" Class="OptionalSimpleClient" IP="127.0.0.1" Port="14002" />
+        </ClockDomain>
+
+        <ClockDomain Name="ConveyorPlantCD" Class="ConveyorPlant">
+            <iSignal Name="CONVEYOR_TRANSFER" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="12009" />
+            <iSignal Name="MOTOR_CMD" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="12009" />
+            <iSignal Name="HANDOFF_COMMITTED" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="12009" />
+            <iSignal Name="INJECT_ARRIVAL_FAULT" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="12009" />
+            <iSignal Name="CLEAR_ARRIVAL_FAULT" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="12009" />
+            <oSignal Name="P1_FEEDBACK" To="ConveyorControllerCD.P1_FEEDBACK" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="11009" />
+        </ClockDomain>
+
+        <ClockDomain Name="LabellerControllerCD" Class="LabellerController">
+            <iSignal Name="LABELLER_STATUS_REQUEST" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="11013" />
+            <iSignal Name="BOTTLE_AT_LABEL" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="11013" />
+            <iSignal Name="LABEL_VERIFIED" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="11013" />
+            <iSignal Name="LABEL_FAULT_RESET" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="11013" />
+            <iSignal Name="LABEL_PATH_CLEAR" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="11013" />
+            <iSignal Name="LABEL_VERIFIER_HEALTHY" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="11013" />
+            <oSignal Name="LABELLER_STATUS" To="CoordinatorCD.LABELLER_STATUS" Class="OptionalSimpleClient" IP="127.0.0.1" Port="11001" />
+            <oSignal Name="LABEL_CMD" To="LabellerPlantCD.LABEL_CMD" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="12013" />
+            <oSignal Name="MARK_LABELLED" To="RotaryTablePlantCD.MARK_LABELLED" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="12003" />
+            <oSignal Name="UNLOAD_READY" To="BottleUnloaderControllerCD.UNLOAD_READY" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="11010" />
+            <oSignal Name="WORKPIECE_TWIN_UPDATE" To="DigitalTwinCD.LABELLER_WORKPIECE_TWIN_UPDATE" Class="OptionalSimpleClient" IP="127.0.0.1" Port="14002" />
+            <oSignal Name="RESOURCE_TWIN_UPDATE" To="DigitalTwinCD.LABELLER_RESOURCE_TWIN_UPDATE" Class="OptionalSimpleClient" IP="127.0.0.1" Port="14002" />
+        </ClockDomain>
+
+        <ClockDomain Name="LabellerPlantCD" Class="LabellerPlant">
+            <iSignal Name="LABEL_CMD" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="12013" />
+            <iSignal Name="INJECT_LABEL_VERIFY_FAULT" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="12013" />
+            <iSignal Name="CLEAR_LABEL_VERIFY_FAULT" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="12013" />
+            <oSignal Name="LABEL_VERIFIED" To="LabellerControllerCD.LABEL_VERIFIED" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="11013" />
+        </ClockDomain>
+
+        <ClockDomain Name="BottleUnloaderControllerCD" Class="BottleUnloaderController">
+            <iSignal Name="UNLOADER_STATUS_REQUEST" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="11010" />
+            <iSignal Name="UNLOAD_READY" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="11010" />
+            <iSignal Name="UNLOAD_PROFILE" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="11010" />
+            <iSignal Name="REMOVAL_CONFIRMED" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="11010" />
+            <oSignal Name="UNLOADER_STATUS" To="CoordinatorCD.UNLOADER_STATUS" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="11001" />
+            <oSignal Name="UNLOAD_CMD" To="BottleUnloaderPlantCD.UNLOAD_CMD" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="12010" />
+            <oSignal Name="P6_CLEAR" To="RotaryTablePlantCD.P6_CLEAR" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="12003" />
+            <oSignal Name="BOTTLE_DONE" To="CoordinatorCD.BOTTLE_DONE" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="11001" />
+            <oSignal Name="BOTTLE_READY_FOR_SORT" To="SortPackControllerCD.BOTTLE_READY_FOR_SORT" Class="OptionalSimpleClient" IP="127.0.0.1" Port="11012" />
+            <oSignal Name="WORKPIECE_TWIN_UPDATE" To="DigitalTwinCD.UNLOADER_WORKPIECE_TWIN_UPDATE" Class="OptionalSimpleClient" IP="127.0.0.1" Port="14002" />
+            <oSignal Name="RESOURCE_TWIN_UPDATE" To="DigitalTwinCD.UNLOADER_RESOURCE_TWIN_UPDATE" Class="OptionalSimpleClient" IP="127.0.0.1" Port="14002" />
+        </ClockDomain>
+
+        <ClockDomain Name="BottleUnloaderPlantCD" Class="BottleUnloaderPlant">
+            <iSignal Name="UNLOAD_CMD" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="12010" />
+            <iSignal Name="INJECT_REMOVAL_FAULT" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="12010" />
+            <iSignal Name="CLEAR_REMOVAL_FAULT" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="12010" />
+            <oSignal Name="REMOVAL_CONFIRMED" To="BottleUnloaderControllerCD.REMOVAL_CONFIRMED" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="11010" />
+        </ClockDomain>
+
+        <ClockDomain Name="M2TransferFaultAdapterCD" Class="M2TransferFaultAdapter">
+            <iSignal Name="LOCAL_TRANSFER_FAULT" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="13002" />
+            <iSignal Name="TRANSFER_RECOVERY_REQUEST" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="13002" />
+            <iSignal Name="LOCAL_RECOVERY_EVIDENCE" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="13002" />
+            <oSignal Name="TRANSFER_FAULT_EVENT" To="FaultSupervisorCD.TRANSFER_FAULT_EVENT" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="13003" />
+            <oSignal Name="TRANSFER_RECOVERY_ACK" To="FaultSupervisorCD.TRANSFER_RECOVERY_ACK" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="13003" />
+            <oSignal Name="TRANSFER_RECOVERY_RESULT" To="FaultSupervisorCD.TRANSFER_RECOVERY_RESULT" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="13003" />
+            <oSignal Name="LOCAL_RECOVERY_INTENT" To="ConveyorControllerCD.LOCAL_RECOVERY_INTENT" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="11009" />
+        </ClockDomain>
+
+        <ClockDomain Name="DigitalTwinCD" Class="DigitalTwin">
+            <iSignal Name="TWIN_BATCH_CONTEXT" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="14002" />
+            <iSignal Name="LOADER_WORKPIECE_TWIN_UPDATE" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="14002" />
+            <iSignal Name="LOADER_RESOURCE_TWIN_UPDATE" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="14002" />
+            <iSignal Name="CONVEYOR_WORKPIECE_TWIN_UPDATE" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="14002" />
+            <iSignal Name="CONVEYOR_RESOURCE_TWIN_UPDATE" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="14002" />
+            <iSignal Name="LABELLER_WORKPIECE_TWIN_UPDATE" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="14002" />
+            <iSignal Name="LABELLER_RESOURCE_TWIN_UPDATE" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="14002" />
+            <iSignal Name="UNLOADER_WORKPIECE_TWIN_UPDATE" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="14002" />
+            <iSignal Name="UNLOADER_RESOURCE_TWIN_UPDATE" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="14002" />
+            <iSignal Name="WORKPIECE_TWIN_UPDATE" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="14002" />
+            <iSignal Name="RESOURCE_TWIN_UPDATE" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="14002" />
+            <iSignal Name="TWIN_CONTEXT_REQUEST" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="14002" />
+            <oSignal Name="TWIN_CONTEXT_SNAPSHOT" To="DigitalTwinViewerCD.TWIN_CONTEXT_SNAPSHOT" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="14003" />
+        </ClockDomain>
+
+        <ClockDomain Name="DigitalTwinViewerCD" Class="DigitalTwinViewer">
+            <iSignal Name="TWIN_CONTEXT_SNAPSHOT" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="14003" />
+            <oSignal Name="TWIN_CONTEXT_REQUEST" To="DigitalTwinCD.TWIN_CONTEXT_REQUEST" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="14002" />
+        </ClockDomain>
+    </SubSystem>
+</System>

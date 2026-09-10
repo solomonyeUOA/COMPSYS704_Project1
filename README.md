@@ -2,10 +2,10 @@
 
 This repository is the current development-stage integration baseline for the
 Automated Bottling System (ABS). It contains M1's Swing POS, Coordinator and
-display-only Visualisation, M3's Rotary Table, Lid Loader and Fault Supervisor,
-and M4's two-size Filling, Capping and Sort/Pack Controller/Plant modules. The
-unified Mock Controller is test-only; real M2 Controller/Plant modules remain
-owned by Member 2.
+display-only Visualisation; M2's Loader, Conveyor, Labeller, Unloader,
+Transfer Fault Adapter and Digital Twin; and M3's Rotary Table, Lid Loader and
+Fault Supervisor; and M4's two-size Filling, Capping and Sort/Pack
+Controller/Plant modules. The unified Mock Controller is test-only.
 
 The executable integration topology and receiver allocation are maintained in
 [`integration/`](integration/), with the actual `.sysj`, `.xml` and Java
@@ -14,8 +14,9 @@ agreed and applied consistently to source, XML and tests.
 
 ## Current integration status
 
-- M1 POS, Coordinator, transport-tolerance handling, display-only
-  Visualisation and the current six-signal M1/M3 safety boundary are preserved.
+- M1 remains three top-level components: POS, Coordinator and the display-only
+  Visualisation IP. Bottle-size selection is a POS feature; the Coordinator
+  retains that order data and owns whole-system reset orchestration.
 - Conveyor and Rotary are independent Controllers. The current M1 production
   mapping uses `ConveyorControllerCD:11009` and
   `RotaryTableControllerCD:11003` with separate `CONVEYOR_*` and `ROTARY_*`
@@ -25,11 +26,12 @@ agreed and applied consistently to source, XML and tests.
 - M3 owns `RotaryTableControllerCD:11003`, `LidLoaderControllerCD:11006`,
   `RotaryTablePlantCD:12003`, `LidLoaderPlantCD:12006` and
   `FaultSupervisorCD:13003`.
+- M2 owns implemented Loader, Conveyor, Labeller, Unloader, Transfer Fault
+  Adapter and Digital Twin modules. Its canonical production mapping is
+  `machines/transfer/member2_system.xml`.
 - M4 owns implemented Filler A/B, Capper, Bottle Context Registry,
   Recognition Plant and Sort/Pack modules. Its canonical production mapping
   is `machines/filling_capping/member4_system.xml`.
-- M2 transfer, loading, labelling and unloading modules remain pending peer
-  dependencies; this also blocks the full physical end-to-end group run.
 - `ABSVisualisationPlantCD` is display-only. It does not control machines,
   actuators or physical Plant state.
 - The obsolete combined `TransportControllerCD` / `TRANSPORT_*` status
@@ -44,33 +46,70 @@ agreed and applied consistently to source, XML and tests.
 3. Read [`machines/rotary_lid/README.md`](machines/rotary_lid/README.md) for
    the implemented M3 Controller/Plant and self-test details.
 
-## Architecture
+## M1 GP architecture
 
 ```text
-POS
- |
- v
-Coordinator
- |
- +-- Bottle Loader
- +-- Conveyor
- +-- Rotary Turntable
- +-- Filler A
- +-- Filler B
- +-- Lid Loader
- +-- Capper
- +-- Bottle Unloader
- |
- +-- ABS Visualisation
+M1 GP
+|-- POS
+|-- Coordinator
+`-- Visualisation (IP)
 ```
 
-The Coordinator handles orders, recipes, status supervision and completion
-counts. It does not control Plant valves, motors or actuators. Mechanical flow
-is owned by the relevant Machine Controllers.
+### POS
+
+The Swing POS owns order entry, automatic order IDs, multiple product rows,
+the S/L bottle-size selector (`Small — 200 mL`, `Large — 500 mL`), liquid A/B
+validation, submission of ORDER V1/V2-compatible payloads and
+`ORDER_COMPLETE` display. Its **Reset System** button and confirmation dialog
+are only the user entry point: POS sends `SYSTEM_RESET_REQUEST` and displays
+reset progress/completion, but it does not reset M2, M3, M4, Visualisation or
+Controller state directly.
+
+### Coordinator
+
+The Coordinator parses and validates orders, retains each product's recipe,
+`sizeCode` and `capacityMl`, dispatches product batches, publishes the
+simulation-only M4 batch request, polls Controller status, counts
+`BOTTLE_DONE`, coordinates fault tolerance and sends `ORDER_COMPLETE`.
+Whole-system reset orchestration remains inside this same Coordinator: it
+clears M1-owned state, fans out the reset identity, waits at the M2/M3/M4 ACK
+barrier and then sends `SYSTEM_RESET_COMPLETE`.
+
+The Coordinator does not control Plant valves, motors or actuators. Mechanical
+flow is owned by the relevant Machine Controllers. Bottle size is retained
+order data, not a separate M1 subsystem, and reset orchestration is a
+Coordinator responsibility, not a separate Reset Controller.
+
+### Visualisation (IP)
+
+The hierarchical Visualisation is an asynchronous, display-only observer. It
+receives Coordinator telemetry, including `VIZ_SYSTEM_RESET`, but does not
+issue machine commands or own reset orchestration.
+
+The runtime relationship is:
+
+```text
+POS -> Coordinator -> Bottle Loader / Conveyor / Rotary Turntable
+                  -> Filler A / Filler B / Lid Loader / Capper / Unloader
+                  -> ABS Visualisation
+                  -> M4 Recognition Simulator [simulation only]
+```
 
 `BOTTLE_DONE` is sent by Bottle Unloader after one finished bottle reaches the
 collection stage. Capper completion alone does not complete the production
 cycle.
+
+For integrated simulation, each accepted product batch also publishes the
+simulation-only signal `M4_SIM_BATCH_REQUEST:String` as
+`<orderId>-P<two-digit product index>|<quantity>|<sizeCode>`. The Coordinator
+sends three identical bounded copies about 600 ms apart with an `ABSENT`
+reaction between copies. This does not replace `START_ORDER` or change
+Controller ownership. The current M4 `RecognitionSimulatorCD` consumes the
+third field, de-duplicates identical retries, rejects reuse of a batch ID with
+a different quantity or size, and emits bottles at the batch-specific size.
+Use `xuqi_coordinator/coordinator.xml` together with
+`machines/filling_capping/member4_simulation.xml`. With the canonical
+`member4_system.xml`, the optional simulation output remains disconnected.
 
 ## Design basis
 
@@ -88,25 +127,41 @@ xuqi_coordinator/  ABS Coordinator
 common/            shared order/state helpers
 visualisation/     display-only hierarchical Visualisation IP
 tests/             regression-only tests and Mock
-machines/transfer/          M2 integration slot (pending peer source)
+machines/transfer/          M2 production modules, tests and Digital Twin IP
 machines/rotary_lid/        M3 production modules and self-tests
 machines/filling_capping/   M4 production modules, models and self-tests
 integration/                topology, port manifest and merge checklist
 tools/                      structural integration validation
 ```
 
-## POS V1 protocol
+## POS order protocols
 
 ```text
-ORDER:
+ORDER V2 (new POS submissions):
+orderId|productCount|productId,sizeCode,A%,B%,quantity;...
+
+S = 200 mL
+L = 500 mL
+
+ORDER V1 (Coordinator backward compatibility):
 orderId|productCount|productId,A%,B%,quantity;...
 
 ORDER_COMPLETE:
 orderId|COMPLETED|completionTimeSeconds
 ```
 
-The order protocol, product batching logic, `START_ORDER`, `FILL_A_RATIO` and
-`FILL_B_RATIO` remain unchanged by the machine-architecture correction.
+`OrderV1` remains frozen. A V1 product defaults to S/200 mL inside the
+Coordinator; V2 carries the explicit product size. `START_ORDER`,
+`FILL_A_RATIO` and `FILL_B_RATIO` retain their existing semantics.
+
+The POS Reset System control sends a bounded String-valued
+`SYSTEM_RESET_REQUEST` identity; it is only the user trigger. Coordinator
+clears M1-owned state and fans the identity out as
+`M2_SYSTEM_RESET`, `M3_SYSTEM_RESET`, `M4_SYSTEM_RESET` and
+`VIZ_SYSTEM_RESET`. It reports `SYSTEM_RESET_COMPLETE` only after matching
+M2/M3/M4 ACKs. The production teammate receivers are a pending integration
+contract; until they are implemented the state intentionally remains
+`RESET_PENDING_EXTERNAL_ACK`.
 
 ## Local Clock Domains and ports
 
@@ -126,6 +181,7 @@ The order protocol, product batching logic, `START_ORDER`, `FILL_A_RATIO` and
 | Bottle Context Registry | `BottleContextRegistryCD` | 11011 |
 | Sort / Pack | `SortPackControllerCD` | 11012 |
 | Labeller | `LabellerControllerCD` | 11013 |
+| Recognition Simulator (simulation only) | `RecognitionSimulatorCD` | 11014 |
 | Rotary Table Plant | `RotaryTablePlantCD` | 12003 |
 | Filler A Plant | `FillerAPlantCD` | 12004 |
 | Filler B Plant | `FillerBPlantCD` | 12005 |
@@ -156,9 +212,9 @@ headless execution and expected regression evidence. This path validates M1
 transport and state handling against the test-only Mock; real Controller/Plant
 acceptance remains a separate cross-member integration activity.
 
-Before a merge, run `python3 tools/validate_integration.py`. The structural
-validator includes M1, M3 and M4 production XML and reports only unresolved M2
-receivers as peer implementation warnings.
+Before a merge, run `python tools/validate_integration.py`. The structural
+validator includes the canonical M1, M2, M3 and M4 production XML and checks
+their registered receivers and required inputs.
 
 ## Prerequisite
 

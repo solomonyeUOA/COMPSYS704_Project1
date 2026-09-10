@@ -9,6 +9,9 @@ public final class Member3PlantSelfTest {
         testIdentityAndP6Interlocks();
         testRotaryAlignmentFault();
         testLidPlantSequence();
+        testBoundedSignalWindows();
+        testCapOfferCompletionCorrelation();
+        testDelayedAndDuplicateRotationCommit();
         System.out.println("Member3PlantSelfTest PASSED");
     }
 
@@ -41,6 +44,29 @@ public final class Member3PlantSelfTest {
         require(!table.clearP6("WRONG"), "wrong clear identity is rejected");
         require(table.clearP6("B001"),
             "matching labelled bottle can be physically cleared");
+    }
+
+    private static void testDelayedAndDuplicateRotationCommit() {
+        RotaryTablePlantModelV1 table = new RotaryTablePlantModelV1();
+        require(table.registerContext(context("DELAY")), "delayed context accepted");
+        require(table.loadBottle("DELAY"), "delayed bottle loaded");
+        require(table.setMotorCommand(true, 1, 0), "movement starts");
+        require(!table.commitRotation(1), "early completion cannot shift slots");
+        table.tick(500);
+        require(table.takeFillOffer() == null, "no fill before commit arrives");
+        require(!table.canRotate(), "missing commit holds the Plant barrier");
+        table.tick(2500);
+        require(!table.commitRotation(2), "wrong cycle cannot release stalled commit");
+        require(table.commitRotation(1), "delayed repeated DONE commits pending cycle");
+        require(context("DELAY").equals(table.takeFillOffer()),
+            "delayed commit produces the missing pre-fill offer");
+        for (int i = 0; i < 100; i++) {
+            require(table.commitRotation(1), "repeated DONE is idempotent");
+        }
+        require(table.getCompletedSteps() == 1, "repeated DONE shifts slots once");
+        require(table.getBottleAt(1) != null, "bottle remains at fill station");
+        require(table.takeFillOffer() == null, "duplicate commit cannot rearm fill latch");
+        require(!table.canRotate(), "unfilled bottle continues to hold barrier");
     }
 
     private static void testMultipleBottlePipeline() {
@@ -98,7 +124,15 @@ public final class Member3PlantSelfTest {
 
     private static void testLidPlantSequence() {
         LidLoaderPlantModelV1 lid = new LidLoaderPlantModelV1();
-        require(lid.getMagazineCount() == 5, "magazine starts with five lids");
+        int expectedCapacity = (int) Math.floor(
+            LidLoaderPlantModelV1.USABLE_MAGAZINE_HEIGHT_MM
+                / LidLoaderPlantModelV1.STACKED_LID_THICKNESS_MM
+        );
+        require(lid.getMagazineCapacity() == expectedCapacity,
+            "capacity is derived from the documented Plant geometry");
+        require(expectedCapacity == 30, "documented geometry provides 30 lids");
+        require(lid.getMagazineCount() == lid.getMagazineCapacity(),
+            "magazine starts at its physical capacity");
         require(lid.setPickCommand(true, 0), "pick starts on rising command");
         lid.tick(299);
         require(!lid.isLidPicked(), "pick is not early");
@@ -108,7 +142,112 @@ public final class Member3PlantSelfTest {
         require(lid.setPlaceCommand(true, 300), "place starts after pick");
         lid.tick(600);
         require(lid.isLidPlacedSensorActive(600), "placement sensor activates");
-        require(lid.getMagazineCount() == 4, "one lid is consumed");
+        require(lid.getMagazineCount() == lid.getMagazineCapacity() - 1,
+            "one lid is consumed after completed placement");
+        require(lid.refill(10) == 1,
+            "refill accepts only the one lid that physically fits");
+        require(lid.refill(10) == 0, "a full magazine rejects excess lids");
+        require(lid.getMagazineCount() == lid.getMagazineCapacity(),
+            "refill cannot exceed physical capacity");
+
+        drainLidMagazine(lid, 1000);
+        require(lid.getMagazineCount() == 0, "all finite inventory can be consumed");
+        require(!lid.isLidAvailable(), "empty magazine removes LID_AVAILABLE");
+        require(!lid.setPickCommand(true, 100000),
+            "empty magazine rejects a new pick command");
+        require(lid.refill(4) == 4, "REFILL_LIDS restores available inventory");
+        require(lid.isLidAvailable(), "refilled magazine restores LID_AVAILABLE");
+    }
+
+    private static void drainLidMagazine(LidLoaderPlantModelV1 lid, long startMs) {
+        long nowMs = startMs;
+        while (lid.getMagazineCount() > 0) {
+            lid.setPickCommand(false, nowMs);
+            require(lid.setPickCommand(true, nowMs), "drain pick starts");
+            nowMs += LidLoaderPlantModelV1.PICK_TIME_MS;
+            lid.tick(nowMs);
+            lid.setPickCommand(false, nowMs);
+            lid.setPlaceCommand(false, nowMs);
+            require(lid.setPlaceCommand(true, nowMs), "drain placement starts");
+            nowMs += LidLoaderPlantModelV1.PLACE_TIME_MS;
+            lid.tick(nowMs);
+            lid.setPlaceCommand(false, nowMs);
+        }
+    }
+
+    private static void testBoundedSignalWindows() {
+        BoundedSignalOfferV1 offer = new BoundedSignalOfferV1(3, 500, 100);
+        require(offer.arm("B900", "B900|S|200|GEOM_S|PACK_S", 0),
+            "offer is armed with stable bottle context");
+        require(offer.nextReactionValue(0) != null,
+            "first PRESENT window is emitted");
+        require(offer.nextReactionValue(499) != null,
+            "first payload remains PRESENT for its bounded window");
+        require(offer.nextReactionValue(500) == null,
+            "first PRESENT is followed by an ABSENT reaction");
+        require(offer.nextReactionValue(599) == null,
+            "the configured ABSENT gap is retained");
+        require(offer.nextReactionValue(600) != null,
+            "second bounded copy is emitted");
+        require(offer.nextReactionValue(1100) == null,
+            "second PRESENT is followed by an ABSENT reaction");
+        require(offer.nextReactionValue(1200) != null,
+            "third bounded copy is emitted");
+        require(offer.nextReactionValue(1700) == null,
+            "third PRESENT is followed by an ABSENT reaction");
+        require(offer.nextReactionValue(1800) == null && !offer.isActive(),
+            "no fourth copy is emitted");
+
+        require(offer.arm("B901", "B901", 2000), "second offer is armed");
+        require(offer.nextReactionValue(2000) != null,
+            "second offer emits its first window");
+        require(!offer.acknowledge("WRONG"),
+            "wrong-bottle completion cannot clear the offer");
+        require(offer.acknowledge("B901"),
+            "matching completion clears remaining retry copies");
+        require(offer.nextReactionValue(2001) == null,
+            "acknowledged offer emits no further copy");
+    }
+
+    private static void testCapOfferCompletionCorrelation() {
+        Member3PlantStateV1.reset();
+        require(Member3PlantStateV1.registerBottleContext(context("CAP1")),
+            "cap test context accepted");
+        require(Member3PlantStateV1.loadBottle("CAP1"), "cap test bottle loaded");
+        advancePlantFacade(1);
+        require(Member3PlantStateV1.markFilled("CAP1"), "cap test filled");
+        advancePlantFacade(2);
+        require(Member3PlantStateV1.markLidPlaced("CAP1"), "cap test lid placed");
+        advancePlantFacade(3);
+        String payload = Member3PlantStateV1.nextCapOfferWindow();
+        require(context("CAP1").equals(payload), "cap offer retains full context");
+        require(!Member3PlantStateV1.markCapped("WRONG"),
+            "wrong completion cannot acknowledge cap offer");
+        require(payload.equals(Member3PlantStateV1.nextCapOfferWindow()),
+            "cap offer remains PRESENT after wrong completion");
+        require(!Member3PlantStateV1.canRotate(), "uncapped bottle holds barrier");
+        require(Member3PlantStateV1.markCapped("CAP1"), "matching completion accepted");
+        require(Member3PlantStateV1.nextCapOfferWindow() == null,
+            "matching completion cancels cap retransmission");
+        require(!Member3PlantStateV1.markCapped("CAP1"), "duplicate completion is rejected");
+        require(Member3PlantStateV1.canRotate(), "capped bottle releases barrier");
+        Member3PlantStateV1.reset();
+        require(Member3PlantStateV1.nextCapOfferWindow() == null,
+            "reset clears pending cap context");
+    }
+
+    private static void advancePlantFacade(long cycle) {
+        Member3PlantStateV1.setRotaryMotor(false, 0);
+        Member3PlantStateV1.setRotaryMotor(true, cycle);
+        try {
+            Thread.sleep(RotaryControllerModelV1.ROTATION_TIME_MS + 20);
+        }
+        catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            throw new AssertionError("plant test interrupted", exception);
+        }
+        Member3PlantStateV1.updateRotary();
+        require(Member3PlantStateV1.commitRotation(cycle), "facade rotation commits");
     }
 
     private static void rotate(

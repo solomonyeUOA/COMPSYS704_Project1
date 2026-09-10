@@ -21,6 +21,14 @@ public final class RotaryControllerModelV1 {
     private long faultSequence;
     private String faultEventId;
 
+    public RotaryControllerModelV1() {
+        this(0L);
+    }
+
+    public RotaryControllerModelV1(long initialFaultSequence) {
+        faultSequence = Math.max(0L, initialFaultSequence);
+    }
+
     /** Starts one M3-sequenced step after the Plant station barrier passes. */
     public boolean requestRotation(long cycleId, boolean barrierSatisfied) {
         if (state != State.READY || !barrierSatisfied || cycleId <= 0 ||
@@ -125,6 +133,10 @@ public final class RotaryControllerModelV1 {
 
     public String getFaultEventId() {
         return faultEventId;
+    }
+
+    public long getFaultSequence() {
+        return faultSequence;
     }
 
     private void fail(String reason) {
