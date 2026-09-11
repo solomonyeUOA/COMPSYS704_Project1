@@ -25,6 +25,9 @@ public final class M2MachineStateV1 {
     private static boolean requireFreshProfile;
     private static boolean startOrderArmed = true;
     private static int pendingBatchQuantity;
+    private static String pendingTransferTestRequestId;
+    private static String pendingTransferTestFault;
+    private static String lastTransferTestRequestId;
 
     private static final Queue<String> loaderWorkpieceUpdates =
         new ArrayDeque<String>();
@@ -74,6 +77,9 @@ public final class M2MachineStateV1 {
         requireFreshProfile = false;
         startOrderArmed = true;
         pendingBatchQuantity = 0;
+        pendingTransferTestRequestId = null;
+        pendingTransferTestFault = null;
+        lastTransferTestRequestId = null;
         loaderWorkpieceUpdates.clear();
         loaderResourceUpdates.clear();
         conveyorWorkpieceUpdates.clear();
@@ -295,6 +301,10 @@ public final class M2MachineStateV1 {
                 "CONVEYOR-1", "CONVEYOR", conveyor.getActiveBottleId(),
                 M2StatusV1.BUSY, "MOVE_TO_P1", "-"
             ));
+            if ("ARRIVAL_TIMEOUT".equals(pendingTransferTestFault) &&
+                conveyor.injectFault(pendingTransferTestFault, getSourceEpoch())) {
+                consumeTransferTestFault();
+            }
         }
         return accepted;
     }
@@ -533,8 +543,69 @@ public final class M2MachineStateV1 {
                 "UNLOADER-1", "UNLOADER", bottleId, M2StatusV1.BUSY,
                 "REMOVE_FROM_P6", "-"
             ));
+            if (isUnloaderTestFault(pendingTransferTestFault) &&
+                unloader.injectFault(pendingTransferTestFault, getSourceEpoch())) {
+                consumeTransferTestFault();
+                return null;
+            }
         }
         return bottleId;
+    }
+
+    public static synchronized boolean armTransferTestFault(String payload) {
+        String[] fields = payload == null ? new String[0] :
+            payload.split("\\|", -1);
+        if (fields.length != 2 || fields[0].isEmpty() ||
+            !isTransferTestFault(fields[1])) {
+            return false;
+        }
+        if (fields[0].equals(lastTransferTestRequestId) ||
+            fields[0].equals(pendingTransferTestRequestId)) {
+            return true;
+        }
+        if (pendingTransferTestFault != null) {
+            return false;
+        }
+        pendingTransferTestRequestId = fields[0];
+        pendingTransferTestFault = fields[1];
+        if ("ARRIVAL_TIMEOUT".equals(fields[1]) &&
+            conveyor.injectFault(fields[1], getSourceEpoch())) {
+            consumeTransferTestFault();
+        }
+        else if (isUnloaderTestFault(fields[1]) &&
+            unloader.injectFault(fields[1], getSourceEpoch())) {
+            consumeTransferTestFault();
+        }
+        return true;
+    }
+
+    public static synchronized String takeUnloaderFault() {
+        String payload = unloader.takeFaultPayload();
+        if (payload != null) {
+            String[] fields = payload.split("\\|", -1);
+            unloaderResourceUpdates.add(resourceUpdate(
+                "UNLOADER-1", "UNLOADER", fields[6], M2StatusV1.FAULT,
+                "STOPPED", fields[4]
+            ));
+        }
+        return payload;
+    }
+
+    public static synchronized long recoverTransferTestFault(
+        String faultCode,
+        long expectedStateVersion
+    ) {
+        long version = unloader.recoverInjectedFault(
+            faultCode,
+            expectedStateVersion
+        );
+        if (version >= 0L) {
+            unloaderResourceUpdates.add(resourceUpdate(
+                "UNLOADER-1", "UNLOADER", "-", M2StatusV1.READY,
+                "RECOVERED_AFTER_EVIDENCE", "-"
+            ));
+        }
+        return version;
     }
 
     public static synchronized String nextUnloadCommandOffer() {
@@ -728,5 +799,22 @@ public final class M2MachineStateV1 {
         }
         int separator = payload.indexOf('|');
         return separator < 0 ? payload : payload.substring(0, separator);
+    }
+
+    private static boolean isTransferTestFault(String faultCode) {
+        return "ARRIVAL_TIMEOUT".equals(faultCode) ||
+            isUnloaderTestFault(faultCode);
+    }
+
+    private static boolean isUnloaderTestFault(String faultCode) {
+        return "DEPARTURE_TIMEOUT".equals(faultCode) ||
+            "PHOTO_EYE_FAILURE".equals(faultCode) ||
+            "POSITION_CONFLICT".equals(faultCode);
+    }
+
+    private static void consumeTransferTestFault() {
+        lastTransferTestRequestId = pendingTransferTestRequestId;
+        pendingTransferTestRequestId = null;
+        pendingTransferTestFault = null;
     }
 }

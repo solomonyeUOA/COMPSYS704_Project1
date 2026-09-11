@@ -160,8 +160,11 @@ public final class FaultMonitoringStateV2_1 {
             FaultSupervisorStateV2_1.localSummary(),
             metrics, warnings, errors, faults, components,
             watchdog.active, watchdog.faultComponent, watchdog.faultReason,
-            watchdog.action, watchdog.resetCount, watchdog.lastResetMs,
-            watchdog.lastFaultMs
+            watchdog.action, watchdog.resetCount, watchdog.recoveryAttempt,
+            watchdog.lastResetMs, watchdog.lastFaultMs,
+            watchdog.manualInterventionRequired,
+            watchdog.notificationSequence, watchdog.notificationTitle,
+            watchdog.notificationMessage
         );
     }
 
@@ -355,8 +358,13 @@ public final class FaultMonitoringStateV2_1 {
         public final String watchdogFaultReason;
         public final String watchdogAction;
         public final int watchdogResetCount;
+        public final int watchdogRecoveryAttempt;
         public final long watchdogLastResetMs;
         public final long watchdogLastFaultMs;
+        public final boolean watchdogManualInterventionRequired;
+        public final long watchdogNotificationSequence;
+        public final String watchdogNotificationTitle;
+        public final String watchdogNotificationMessage;
 
         Snapshot(
             long capturedAtMs, String systemHealth, String visibility,
@@ -371,8 +379,12 @@ public final class FaultMonitoringStateV2_1 {
             int faults, ComponentSnapshot[] components,
             boolean watchdogActive, String watchdogFaultComponent,
             String watchdogFaultReason, String watchdogAction,
-            int watchdogResetCount, long watchdogLastResetMs,
-            long watchdogLastFaultMs
+            int watchdogResetCount, int watchdogRecoveryAttempt,
+            long watchdogLastResetMs, long watchdogLastFaultMs,
+            boolean watchdogManualInterventionRequired,
+            long watchdogNotificationSequence,
+            String watchdogNotificationTitle,
+            String watchdogNotificationMessage
         ) {
             this.capturedAtMs = capturedAtMs;
             this.systemHealth = systemHealth;
@@ -405,8 +417,14 @@ public final class FaultMonitoringStateV2_1 {
             this.watchdogFaultReason = watchdogFaultReason;
             this.watchdogAction = watchdogAction;
             this.watchdogResetCount = watchdogResetCount;
+            this.watchdogRecoveryAttempt = watchdogRecoveryAttempt;
             this.watchdogLastResetMs = watchdogLastResetMs;
             this.watchdogLastFaultMs = watchdogLastFaultMs;
+            this.watchdogManualInterventionRequired =
+                watchdogManualInterventionRequired;
+            this.watchdogNotificationSequence = watchdogNotificationSequence;
+            this.watchdogNotificationTitle = watchdogNotificationTitle;
+            this.watchdogNotificationMessage = watchdogNotificationMessage;
         }
     }
 }

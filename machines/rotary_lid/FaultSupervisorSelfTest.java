@@ -21,6 +21,8 @@ public final class FaultSupervisorSelfTest {
         testMalformedAndUnknownEvents();
         testGuiEnablementRules();
         testGuiHotModeSwitch();
+        testGuiM1RecoveryRoundTrip();
+        testGuiTransferRecoveryRoundTrip();
         testMonitoringSnapshot();
         System.out.println("FaultSupervisorSelfTest PASSED");
     }
@@ -483,6 +485,133 @@ public final class FaultSupervisorSelfTest {
             "switching back to live immediately blocks test actions");
         require(FaultGuiActionsV2_1.perform("reset", null),
             "reset remains available in live mode");
+    }
+
+    private static void testGuiM1RecoveryRoundTrip() {
+        FaultSupervisorStateV2_1.reset();
+        Member3MachineStateV1.reset();
+        CoordinatorStateV1.resetForTest();
+        FaultGuiActionsV2_1.setTestMode(true);
+
+        String fault = event(
+            "GUI-RECOVERY-1", "M3-E01", "LID", "LID_SENSOR_FAULT",
+            "CRITICAL", 1
+        );
+        require(FaultSupervisorStateV2_1.onFaultEvent(fault),
+            "GUI recovery fault accepted");
+        require(CoordinatorStateV1.recordFtFaultAlert(
+            FaultSupervisorStateV2_1.takeFaultAlert()
+        ), "M1 records the GUI test fault");
+        require(CoordinatorStateV1.recordFtSafeStopRequest(
+            FaultSupervisorStateV2_1.takeSafeStopRequest()
+        ), "M1 establishes the fault hold");
+
+        require(FaultGuiActionsV2_1.perform("safe-stop", null),
+            "safe-stop button queues a real M1 request");
+        String safeStopAck = CoordinatorStateV1.acceptFtTestControl(
+            FaultTestControlStateV2_1.nextRequest()
+        );
+        require(safeStopAck != null &&
+            FaultSupervisorStateV2_1.onSafeStopAck(safeStopAck),
+            "M1 safe-stop acknowledgement returns to M3");
+        require("LOCKED_OUT".equals(FaultSupervisorStateV2_1.stateName()),
+            "critical lid fault remains locked until evidence exists");
+
+        require(FaultGuiActionsV2_1.perform("manual-evidence", null),
+            "operator reconciliation is recorded");
+        require(FaultGuiActionsV2_1.perform("controller-evidence", null),
+            "controller evidence completes recovery verification");
+        require("RECOVERY_READY".equals(
+            FaultSupervisorStateV2_1.stateName()),
+            "verified recovery waits for M1 resume");
+        require(CoordinatorStateV1.recordFtRecoveryReady(
+            FaultSupervisorStateV2_1.takeRecoveryReady()
+        ), "M1 records recovery-ready evidence");
+
+        require(FaultGuiActionsV2_1.perform("resume", null),
+            "resume button queues a real M1 request");
+        String resumeDecision = CoordinatorStateV1.acceptFtTestControl(
+            FaultTestControlStateV2_1.nextRequest()
+        );
+        require(resumeDecision != null &&
+            FaultSupervisorStateV2_1.onResumeDecision(resumeDecision),
+            "M1 resume decision returns to M3");
+        require("IDLE".equals(FaultSupervisorStateV2_1.stateName()),
+            "M3 returns to idle after the M1 decision");
+        require(!CoordinatorStateV1.ftCoordinationHold,
+            "M1 releases the order hold after verified recovery");
+
+        FaultGuiActionsV2_1.setTestMode(false);
+        FaultSupervisorStateV2_1.reset();
+        CoordinatorStateV1.resetForTest();
+    }
+
+    private static void testGuiTransferRecoveryRoundTrip() {
+        FaultSupervisorStateV2_1.reset();
+        M2MachineStateV1.reset();
+        M2TransferFaultAdapterStateV2_1.reset();
+        CoordinatorStateV1.resetForTest();
+        FaultGuiActionsV2_1.setTestMode(true);
+
+        require(M2TransferFaultAdapterStateV2_1.armTestFault(
+            "GUI-TRANSFER|POSITION_CONFLICT"
+        ), "M2 accepts the transfer fault request");
+        require(M2MachineStateV1.acceptUnloadProfile(
+            "GUI-TRANSFER-B001|S|200|GEOM_S|PACK_S"
+        ), "M2 accepts the transfer bottle profile");
+        require(M2MachineStateV1.acceptUnloadReady("GUI-TRANSFER-B001"),
+            "M2 accepts unload-ready evidence");
+        require(M2MachineStateV1.takeUnloadCommand() == null,
+            "physical transfer fault suppresses the unload command");
+        String event = M2MachineStateV1.takeUnloaderFault();
+        require(M2TransferFaultAdapterStateV2_1.onLocalFault(event),
+            "M2 adapter accepts the physical fault");
+        require(FaultSupervisorStateV2_1.onTransferFault(
+            M2TransferFaultAdapterStateV2_1.takeFaultEvent()
+        ), "M3 receives the physical transfer fault");
+
+        require(CoordinatorStateV1.recordFtFaultAlert(
+            FaultSupervisorStateV2_1.takeFaultAlert()
+        ), "M1 records the transfer fault");
+        require(CoordinatorStateV1.recordFtSafeStopRequest(
+            FaultSupervisorStateV2_1.takeSafeStopRequest()
+        ), "M1 holds the transfer workflow");
+        require(FaultGuiActionsV2_1.perform("safe-stop", null),
+            "transfer safe-stop action is queued");
+        require(FaultSupervisorStateV2_1.onSafeStopAck(
+            CoordinatorStateV1.acceptFtTestControl(
+                FaultTestControlStateV2_1.nextRequest()
+            )
+        ), "M1 confirms transfer safe stop");
+        require(FaultGuiActionsV2_1.perform("manual-evidence", null),
+            "operator records transfer reconciliation");
+        require(FaultGuiActionsV2_1.perform("controller-evidence", null),
+            "controller evidence requests physical M2 recovery");
+        require(M2TransferFaultAdapterStateV2_1.recoverTestFault(
+            FaultTestControlStateV2_1.nextTransferRequest()
+        ), "M2 exits physical isolation after reconciliation");
+        require(FaultSupervisorStateV2_1.onRecoveryResult(
+            M2TransferFaultAdapterStateV2_1.takeResult()
+        ), "M3 validates the real M2 controller evidence");
+        require("RECOVERY_READY".equals(
+            FaultSupervisorStateV2_1.stateName()),
+            "transfer recovery waits for M1 resume");
+        require(CoordinatorStateV1.recordFtRecoveryReady(
+            FaultSupervisorStateV2_1.takeRecoveryReady()
+        ), "M1 records transfer recovery readiness");
+        require(FaultGuiActionsV2_1.perform("resume", null),
+            "transfer resume action is queued");
+        require(FaultSupervisorStateV2_1.onResumeDecision(
+            CoordinatorStateV1.acceptFtTestControl(
+                FaultTestControlStateV2_1.nextRequest()
+            )
+        ), "M1 releases the transfer workflow");
+        require(M2MachineStateV1.nextUnloadCommandOffer() != null,
+            "M2 retries the interrupted physical unload command");
+
+        FaultGuiActionsV2_1.setTestMode(false);
+        FaultSupervisorStateV2_1.reset();
+        CoordinatorStateV1.resetForTest();
     }
 
     private static void testMonitoringSnapshot() {

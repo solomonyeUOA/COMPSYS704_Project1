@@ -19,6 +19,9 @@ FaultSupervisor(
     output String signal FT_RECOVERY_FAILED;
     output String signal M3_SYSTEM_RESET_ACK;
     output String signal SYSTEM_RESET_REQUEST;
+    output String signal TEST_TRANSFER_FAULT;
+    output String signal TEST_TRANSFER_RECOVERY;
+    output String signal FT_TEST_CONTROL;
 )
 ->{
     FaultManagementGUI.start();
@@ -28,6 +31,29 @@ FaultSupervisor(
         present(M3_SYSTEM_RESET) {
             if (M3SystemResetStateV1.accept(#M3_SYSTEM_RESET)) {
                 SystemWatchdogV1.onSystemResetAccepted(#M3_SYSTEM_RESET);
+            }
+        }
+        pause;
+    }}
+    ||
+    {loop {
+        String testControl = FaultTestControlStateV2_1.nextRequest();
+        if (testControl != null) {
+            emit FT_TEST_CONTROL(testControl);
+        }
+        String transferRecovery =
+            FaultTestControlStateV2_1.nextTransferRequest();
+        if (transferRecovery != null) {
+            emit TEST_TRANSFER_RECOVERY(transferRecovery);
+        }
+        pause;
+    }}
+    ||
+    {loop {
+        if (!M3SystemResetStateV1.isQuarantined()) {
+            String testFault = FaultInjectionStateV2_1.nextTransferRequest();
+            if (testFault != null) {
+                emit TEST_TRANSFER_FAULT(testFault);
             }
         }
         pause;

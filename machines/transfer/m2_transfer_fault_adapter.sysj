@@ -3,6 +3,8 @@
 M2TransferFaultAdapter(
     input String signal M2_SYSTEM_RESET;
     input String signal LOCAL_TRANSFER_FAULT;
+    input String signal TEST_TRANSFER_FAULT;
+    input String signal TEST_TRANSFER_RECOVERY;
     input String signal TRANSFER_RECOVERY_REQUEST;
     input String signal LOCAL_RECOVERY_EVIDENCE;
 
@@ -22,6 +24,16 @@ M2TransferFaultAdapter(
         present(LOCAL_TRANSFER_FAULT) {
             M2TransferFaultAdapterStateV2_1.onLocalFault(
                 #LOCAL_TRANSFER_FAULT
+            );
+        }
+        present(TEST_TRANSFER_FAULT) {
+            M2TransferFaultAdapterStateV2_1.armTestFault(
+                #TEST_TRANSFER_FAULT
+            );
+        }
+        present(TEST_TRANSFER_RECOVERY) {
+            M2TransferFaultAdapterStateV2_1.recoverTestFault(
+                #TEST_TRANSFER_RECOVERY
             );
         }
         present(TRANSFER_RECOVERY_REQUEST) {

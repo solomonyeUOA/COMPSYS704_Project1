@@ -144,14 +144,23 @@ public final class ConveyorControllerModelV1 {
             nowMillis - transferStartedAtMillis < arrivalTimeoutMillis) {
             return;
         }
+        injectFault("ARRIVAL_TIMEOUT", sourceEpoch);
+    }
+
+    public boolean injectFault(String code, String sourceEpoch) {
+        if (status != M2StatusV1.BUSY || active == null ||
+            !"ARRIVAL_TIMEOUT".equals(code)) {
+            return false;
+        }
         motorEnabled = false;
         status = M2StatusV1.FAULT;
-        faultCode = "ARRIVAL_TIMEOUT";
+        faultCode = code;
         stateVersion++;
         String eventId = "M2-TRANSFER-" + stateVersion;
         faultPayload = "V2|" + eventId + "|" + sourceEpoch +
-            "|TRANSFER|ARRIVAL_TIMEOUT|WARNING|" +
+            "|TRANSFER|" + code + "|WARNING|" +
             active.getBottleId() + "|" + stateVersion;
+        return true;
     }
 
     public String takeFaultPayload() {

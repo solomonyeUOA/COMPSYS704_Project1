@@ -24,8 +24,10 @@ import javax.swing.BoxLayout;
 import javax.swing.JButton;
 import javax.swing.JComboBox;
 import javax.swing.JFrame;
+import javax.swing.JDialog;
 import javax.swing.JComponent;
 import javax.swing.JLabel;
+import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JProgressBar;
 import javax.swing.JScrollPane;
@@ -98,6 +100,8 @@ public final class FaultManagementGUI {
         private final ActivityIndicator activity = new ActivityIndicator();
         private final JLabel health = statusLabel("STARTING", BLUE);
         private final JLabel clock = valueLabel("--:--:--");
+        private final JToggleButton watchdogMode =
+            new JToggleButton("WATCHDOG ON");
         private final JToggleButton mode = new JToggleButton("LIVE");
         private final JLabel workingStatus = statusLabel("STARTING", BLUE);
         private final JLabel watchdogStatus = statusLabel("ACTIVE", GREEN);
@@ -131,13 +135,14 @@ public final class FaultManagementGUI {
             "LID_SENSOR_FAULT", "ARRIVAL_TIMEOUT", "DEPARTURE_TIMEOUT",
             "PHOTO_EYE_FAILURE", "POSITION_CONFLICT"
         });
-        private final JButton inject = new JButton("Inject fault");
+        private final JButton inject = new JButton("Arm fault for next order");
         private final JButton safeStop = new JButton("Confirm safe stop");
         private final JButton controllerEvidence = new JButton("Submit controller evidence");
         private final JButton manualEvidence = new JButton("Record reconciliation");
-        private final JButton resume = new JButton("Simulate M1 resume");
+        private final JButton resume = new JButton("Approve resume through M1");
         private final JButton reset = new JButton("Reset");
         private final JButton language = new JButton("中文");
+        private final JLabel testNote = new JLabel();
         private final Timer refreshTimer;
 
         private boolean chinese;
@@ -145,6 +150,7 @@ public final class FaultManagementGUI {
         private String runningAction = "";
         private String actionFeedback = "";
         private boolean actionFailed;
+        private long lastWatchdogNotificationSequence;
 
         DashboardFrame() {
             super("M3 Fault-Tolerance Monitor");
@@ -155,6 +161,11 @@ public final class FaultManagementGUI {
             mode.setFocusPainted(false);
             mode.setOpaque(true);
             mode.setBorder(BorderFactory.createEmptyBorder(5, 10, 5, 10));
+            watchdogMode.setFocusPainted(false);
+            watchdogMode.setOpaque(true);
+            watchdogMode.setBorder(
+                BorderFactory.createEmptyBorder(5, 10, 5, 10)
+            );
             setContentPane(buildContent());
             wireActions();
             refreshTimer = new Timer(250, event -> refresh());
@@ -192,6 +203,7 @@ public final class FaultManagementGUI {
             JPanel controls = new JPanel(new FlowLayout(FlowLayout.RIGHT, 7, 0));
             controls.setOpaque(false);
             controls.add(clock);
+            controls.add(watchdogMode);
             controls.add(mode);
             controls.add(language);
             controls.add(reset);
@@ -305,11 +317,8 @@ public final class FaultManagementGUI {
             actions.add(manualEvidence);
             actions.add(resume);
             content.add(actions, BorderLayout.CENTER);
-            JLabel note = new JLabel(
-                "Enable TEST MODE in the header to use controlled fault injection."
-            );
-            note.setForeground(MUTED);
-            content.add(note, BorderLayout.SOUTH);
+            testNote.setForeground(MUTED);
+            content.add(testNote, BorderLayout.SOUTH);
             return content;
         }
 
@@ -320,6 +329,14 @@ public final class FaultManagementGUI {
             manualEvidence.addActionListener(event -> runAction("manual-evidence"));
             resume.addActionListener(event -> runAction("resume"));
             reset.addActionListener(event -> runAction("reset"));
+            watchdogMode.addActionListener(event -> {
+                SystemWatchdogV1.setActive(watchdogMode.isSelected());
+                actionFailed = false;
+                actionFeedback = watchdogMode.isSelected() ?
+                    t("Watchdog monitoring enabled", "看门狗监控已开启") :
+                    t("Watchdog monitoring disabled", "看门狗监控已关闭");
+                refresh();
+            });
             mode.addActionListener(event -> {
                 FaultGuiActionsV2_1.setTestMode(mode.isSelected());
                 actionFailed = false;
@@ -399,8 +416,14 @@ public final class FaultManagementGUI {
             workingStatus.setText(viewState);
             workingStatus.setBackground(statusColor(snapshot.supervisorState));
             backendState.setText(snapshot.supervisorState);
-            watchdogStatus.setText(snapshot.watchdogActive ? "ACTIVE" : "INACTIVE");
-            watchdogStatus.setBackground(snapshot.watchdogActive ? GREEN : MUTED);
+            watchdogStatus.setText(snapshot.watchdogActive ?
+                (snapshot.watchdogManualInterventionRequired ?
+                    "ON / SAFE_ERROR" : "ON / ACTIVE") :
+                "OFF / DISABLED");
+            watchdogStatus.setBackground(
+                snapshot.watchdogManualInterventionRequired ? RED :
+                    snapshot.watchdogActive ? GREEN : MUTED
+            );
             watchdogFault.setText(snapshot.watchdogFaultComponent);
             watchdogReason.setText(snapshot.watchdogFaultReason);
             watchdogReset.setText(snapshot.watchdogResetCount + " / " +
@@ -418,6 +441,32 @@ public final class FaultManagementGUI {
             details.setText(detailsText(snapshot, viewState));
             history.setText(historyText());
             updateButtons(snapshot);
+            showWatchdogNotification(snapshot);
+        }
+
+        private void showWatchdogNotification(
+            FaultMonitoringStateV2_1.Snapshot snapshot
+        ) {
+            if (snapshot.watchdogNotificationSequence <=
+                lastWatchdogNotificationSequence) {
+                return;
+            }
+            lastWatchdogNotificationSequence =
+                snapshot.watchdogNotificationSequence;
+            int type = snapshot.watchdogNotificationTitle.contains("Failed") ?
+                JOptionPane.ERROR_MESSAGE :
+                snapshot.watchdogNotificationTitle.contains("Successful") ?
+                    JOptionPane.INFORMATION_MESSAGE :
+                    JOptionPane.WARNING_MESSAGE;
+            JOptionPane pane = new JOptionPane(
+                snapshot.watchdogNotificationMessage, type
+            );
+            JDialog dialog = pane.createDialog(
+                this, snapshot.watchdogNotificationTitle
+            );
+            dialog.setModal(false);
+            dialog.setAlwaysOnTop(true);
+            dialog.setVisible(true);
         }
 
         private void updateMessages(FaultMonitoringStateV2_1.Snapshot snapshot) {
@@ -460,8 +509,17 @@ public final class FaultManagementGUI {
             mode.setBackground(testMode ? AMBER : GREEN);
             mode.setForeground(Color.WHITE);
             mode.setEnabled(!actionRunning);
+            watchdogMode.setSelected(snapshot.watchdogActive);
+            watchdogMode.setText(snapshot.watchdogActive ?
+                t("WATCHDOG ON", "看门狗 开") :
+                t("WATCHDOG OFF", "看门狗 关"));
+            watchdogMode.setBackground(snapshot.watchdogActive ? GREEN : MUTED);
+            watchdogMode.setForeground(Color.WHITE);
+            watchdogMode.setEnabled(!actionRunning);
             String state = snapshot.supervisorState;
-            inject.setEnabled(!actionRunning && testMode && FaultGuiPolicyV2_1.canInject(state));
+            inject.setEnabled(!actionRunning && testMode &&
+                "-".equals(FaultInjectionStateV2_1.armedFault()) &&
+                FaultGuiPolicyV2_1.canInject(state));
             safeStop.setEnabled(!actionRunning && testMode && FaultGuiPolicyV2_1.canConfirmSafeStop(state));
             controllerEvidence.setEnabled(!actionRunning && testMode &&
                 FaultGuiPolicyV2_1.canReturnControllerEvidence(state, snapshot.decision));
@@ -471,6 +529,31 @@ public final class FaultManagementGUI {
             reset.setEnabled(!actionRunning);
             language.setEnabled(!actionRunning);
             faults.setEnabled(inject.isEnabled());
+            String armed = FaultInjectionStateV2_1.armedFault();
+            if (!testMode) {
+                testNote.setText(t(
+                    "Enable TEST MODE to use controlled fault injection.",
+                    "开启测试模式后可使用受控故障注入。"
+                ));
+            }
+            else if (!"-".equals(armed)) {
+                testNote.setText(t(
+                    "Fault armed for the next matching machine stage. Submit an order; recovery controls enable after it triggers.",
+                    "故障已布置，将在下一次匹配的机器阶段触发。请提交订单；触发后恢复按钮会按顺序启用。"
+                ));
+            }
+            else if ("IDLE".equals(state)) {
+                testNote.setText(t(
+                    "Select a fault and arm it for the next order.",
+                    "选择故障，然后为下一订单布置。"
+                ));
+            }
+            else {
+                testNote.setText(t(
+                    "Follow the enabled recovery control; each step updates the real supervisor and M1 state.",
+                    "按当前启用的恢复按钮操作；每一步都会更新真实 Supervisor 与 M1 状态。"
+                ));
+            }
         }
 
         private String detailsText(
@@ -479,10 +562,16 @@ public final class FaultManagementGUI {
         ) {
             long inState = Math.max(0L, snapshot.capturedAtMs - snapshot.stateEnteredAtMs);
             return line("System health", snapshot.systemHealth) +
-                line("Watchdog", snapshot.watchdogActive ? "ACTIVE" : "INACTIVE") +
+                line("Watchdog", snapshot.watchdogActive ? "ON" : "OFF") +
+                line("Monitoring", snapshot.watchdogActive ? "ACTIVE" : "DISABLED") +
                 line("Watchdog fault component", snapshot.watchdogFaultComponent) +
                 line("Watchdog fault reason", snapshot.watchdogFaultReason) +
                 line("Watchdog action", snapshot.watchdogAction) +
+                line("Watchdog recovery attempt",
+                    snapshot.watchdogRecoveryAttempt + " / " +
+                        SystemWatchdogV1.MAX_AUTOMATIC_RESETS) +
+                line("Manual intervention required",
+                    String.valueOf(snapshot.watchdogManualInterventionRequired)) +
                 line("Watchdog reset count", String.valueOf(snapshot.watchdogResetCount)) +
                 line("Last reset", formatTimestamp(snapshot.watchdogLastResetMs)) +
                 line("Last fault", formatTimestamp(snapshot.watchdogLastFaultMs)) +
@@ -526,10 +615,15 @@ public final class FaultManagementGUI {
 
         private String historyText() {
             String[] events = FaultSupervisorStateV2_1.historySnapshot();
-            if (events.length == 0) {
+            String[] watchdogEvents = SystemWatchdogV1.historySnapshot();
+            if (events.length == 0 && watchdogEvents.length == 0) {
                 return t("No protocol events recorded.", "尚无协议事件。");
             }
             StringBuilder text = new StringBuilder();
+            for (int index = watchdogEvents.length - 1; index >= 0; index--) {
+                text.append("[WATCHDOG] ").append(watchdogEvents[index])
+                    .append('\n');
+            }
             for (int index = events.length - 1; index >= 0; index--) {
                 text.append(events[index]).append('\n');
             }
@@ -549,6 +643,11 @@ public final class FaultManagementGUI {
 
         private String currentTask(FaultMonitoringStateV2_1.Snapshot snapshot) {
             String state = snapshot.supervisorState;
+            if ("IDLE".equals(state) &&
+                !"-".equals(FaultInjectionStateV2_1.armedFault())) {
+                return t("Fault armed; waiting for matching machine stage",
+                    "故障已布置，等待对应机器工序");
+            }
             if ("WAITING_SAFE_STOP".equals(state)) return t("Isolating fault and awaiting M1 safe stop", "隔离故障并等待 M1 安全停机");
             if ("WAITING_ACK".equals(state)) return t("Sending bounded recovery request", "发送有限次数恢复请求");
             if ("WAITING_RESULT".equals(state)) return t("Controller recovery in progress", "控制器正在恢复");
@@ -560,6 +659,11 @@ public final class FaultManagementGUI {
         }
 
         private String currentStage(FaultMonitoringStateV2_1.Snapshot snapshot) {
+            if ("-".equals(snapshot.subsystem) &&
+                !"-".equals(FaultInjectionStateV2_1.armedFault())) {
+                return t("Armed / ", "已布置 / ") +
+                    FaultInjectionStateV2_1.armedFault();
+            }
             if ("-".equals(snapshot.subsystem)) return t("Monitoring", "监控");
             return snapshot.subsystem + " / " + value(snapshot.faultCode, "-");
         }
@@ -573,12 +677,25 @@ public final class FaultManagementGUI {
                     snapshot.watchdogFaultReason;
             }
             String state = snapshot.supervisorState;
+            if ("IDLE".equals(state) &&
+                !"-".equals(FaultInjectionStateV2_1.armedFault())) {
+                return t("Test fault armed: ", "测试故障已布置：") +
+                    FaultInjectionStateV2_1.armedFault() +
+                    t(". Submit an order; it will trigger at the matching real machine stage.",
+                        "。提交订单后，将在对应的真实机器工序触发。");
+            }
             String source = "-".equals(snapshot.subsystem) ? "" :
                 snapshot.subsystem + " / " + snapshot.faultCode + ": ";
             if ("WAITING_SAFE_STOP".equals(state)) return source + t("fault detected and isolated; waiting for M1 safe-stop confirmation.", "检测并隔离故障，等待 M1 确认安全停机。");
             if ("WAITING_ACK".equals(state)) return source + t("waiting for controller acknowledgement.", "等待控制器确认恢复请求。");
             if ("WAITING_RESULT".equals(state)) return source + t("recovering; waiting for newer controller evidence.", "正在恢复，等待控制器返回更新证据。");
             if ("RESOURCE_WAIT".equals(state)) return source + t("replenish the resource and submit controller evidence.", "补充资源并提交控制器证据。");
+            if ("LOCKED_OUT".equals(state) &&
+                "TRANSFER".equals(snapshot.subsystem)) {
+                return source + t(
+                    "record reconciliation, then submit controller evidence to recover the isolated transfer.",
+                    "先记录人工核对，再提交控制器证据以恢复被隔离的传输设备。");
+            }
             if ("LOCKED_OUT".equals(state)) return source + t("automatic recovery stopped. " + snapshot.decision, "自动恢复已停止。" + snapshot.decision);
             if ("RECOVERY_READY".equals(state)) return source + t("recovery verified; M1 retains the resume decision.", "恢复已验证，恢复运行仍由 M1 决定。");
             if ("FAILED".equals(state)) return source + t("recovery failed: ", "恢复失败：") + snapshot.decision + " | " + snapshot.latestEvidence;
@@ -617,23 +734,26 @@ public final class FaultManagementGUI {
         }
 
         private String actionName(String action) {
-            if ("inject".equals(action)) return t("Inject fault", "注入故障");
+            if ("inject".equals(action)) return t("Arm fault for next order", "为下一订单布置故障");
             if ("safe-stop".equals(action)) return t("Confirm safe stop", "确认安全停机");
             if ("controller-evidence".equals(action)) return t("Submit controller evidence", "提交控制器证据");
             if ("manual-evidence".equals(action)) return t("Record reconciliation", "记录人工核对");
-            if ("resume".equals(action)) return t("Simulate M1 resume", "模拟 M1 恢复授权");
+            if ("resume".equals(action)) return t("Approve resume through M1", "通过 M1 批准恢复");
             return t("Reset", "重置");
         }
 
         private void applyLanguage() {
             title.setText(t("M3 Fault-Tolerance Monitor", "M3 容错监控系统"));
+            watchdogMode.setText(SystemWatchdogV1.snapshot().active ?
+                t("WATCHDOG ON", "看门狗 开") :
+                t("WATCHDOG OFF", "看门狗 关"));
             language.setText(chinese ? "EN" : "中文");
             reset.setText(t("Reset", "重置"));
-            inject.setText(t("Inject fault", "注入故障"));
+            inject.setText(t("Arm fault for next order", "为下一订单布置故障"));
             safeStop.setText(t("Confirm safe stop", "确认安全停机"));
             controllerEvidence.setText(t("Submit controller evidence", "提交控制器证据"));
             manualEvidence.setText(t("Record reconciliation", "记录人工核对"));
-            resume.setText(t("Simulate M1 resume", "模拟 M1 恢复授权"));
+            resume.setText(t("Approve resume through M1", "通过 M1 批准恢复"));
             tabs.setTitleAt(0, t("Dynamic monitoring", "动态监控"));
             tabs.setTitleAt(1, t("Fault details", "故障详情"));
             tabs.setTitleAt(2, t("Event log", "事件日志"));

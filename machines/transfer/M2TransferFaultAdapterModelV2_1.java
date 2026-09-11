@@ -94,6 +94,19 @@ public final class M2TransferFaultAdapterModelV2_1 {
         return true;
     }
 
+    public boolean matchesActive(
+        String eventId,
+        String sourceEpoch,
+        String faultCode,
+        long stateVersion
+    ) {
+        return activeEvent != null &&
+            activeEvent.eventId.equals(eventId) &&
+            activeEvent.sourceEpoch.equals(sourceEpoch) &&
+            activeEvent.faultCode.equals(faultCode) &&
+            activeEvent.stateVersion == stateVersion;
+    }
+
     public String takeFaultEvent() {
         String result = pendingFaultEvent;
         pendingFaultEvent = null;

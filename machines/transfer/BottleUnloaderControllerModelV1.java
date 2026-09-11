@@ -30,6 +30,9 @@ public final class BottleUnloaderControllerModelV1 {
     private boolean sortContextPending;
     private DoneWindow doneWindow = DoneWindow.READY;
     private long doneWindowUntilMillis;
+    private long stateVersion;
+    private String faultCode;
+    private String faultPayload;
 
     public BottleUnloaderControllerModelV1() {
         this(500L);
@@ -47,6 +50,51 @@ public final class BottleUnloaderControllerModelV1 {
     /** Status access is observational and never advances unloading. */
     public int getStatus() {
         return status;
+    }
+
+    public String getActiveBottleId() {
+        return active == null ? null : active.getBottleId();
+    }
+
+    public boolean injectFault(String code, String sourceEpoch) {
+        if (status != M2StatusV1.BUSY || active == null ||
+            (!"DEPARTURE_TIMEOUT".equals(code) &&
+            !"PHOTO_EYE_FAILURE".equals(code) &&
+            !"POSITION_CONFLICT".equals(code))) {
+            return false;
+        }
+        status = M2StatusV1.FAULT;
+        faultCode = code;
+        stateVersion++;
+        faultPayload = "V2|M2-UNLOADER-" + stateVersion + "|" +
+            sourceEpoch + "|TRANSFER|" + code + "|CRITICAL|" +
+            active.getBottleId() + "|" + stateVersion;
+        return true;
+    }
+
+    public String takeFaultPayload() {
+        String result = faultPayload;
+        faultPayload = null;
+        return result;
+    }
+
+    public String getFaultCode() {
+        return faultCode;
+    }
+
+    public long recoverInjectedFault(String code, long expectedStateVersion) {
+        if (status != M2StatusV1.FAULT || active == null ||
+            faultCode == null || !faultCode.equals(code) ||
+            stateVersion != expectedStateVersion) {
+            return -1L;
+        }
+        readyBottleIds.add(active.getBottleId());
+        active = null;
+        status = M2StatusV1.READY;
+        faultCode = null;
+        faultPayload = null;
+        stateVersion++;
+        return stateVersion;
     }
 
     public boolean acceptProfile(String payload) {
