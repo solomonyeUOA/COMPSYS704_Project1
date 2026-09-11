@@ -11,6 +11,8 @@ public final class FaultMonitoringStateV2_1 {
     public static final String GUI_WORKER = "GUI Worker";
     public static final String M1_LINK = "M1 Coordinator Link";
     public static final String M2_LINK = "M2 Transfer Link";
+    public static final String M4_LINK = "M4 Process Link";
+    public static final String POS_LINK = "POS Link";
 
     private static final long LATE_AFTER_MS = 1500L;
     private static final long UNRESPONSIVE_AFTER_MS = 4000L;
@@ -36,14 +38,51 @@ public final class FaultMonitoringStateV2_1 {
             HEARTBEATS.put(component, heartbeat);
         }
         heartbeat.lastSeenMs = now;
+        heartbeat.healthy = healthy;
         heartbeat.detail = detail;
         if (healthy) {
             heartbeat.lastHealthyMs = now;
         }
+        SystemWatchdogV1.observe(component, healthy, detail);
     }
 
     public static synchronized void peerTraffic(String component, String detail) {
-        heartbeat(component, true, detail);
+        recordHeartbeat(component, true, detail, false);
+    }
+
+    /** Records an optional external heartbeat and arms timeout monitoring. */
+    public static synchronized void externalHeartbeat(
+        String component,
+        String payload
+    ) {
+        if (payload == null || payload.trim().length() == 0) {
+            return;
+        }
+        recordHeartbeat(component, true, payload.trim(), false);
+        SystemWatchdogV1.observeExternal(component, payload);
+    }
+
+    private static void recordHeartbeat(
+        String component,
+        boolean healthy,
+        String detail,
+        boolean watchdogEligible
+    ) {
+        long now = System.currentTimeMillis();
+        Heartbeat heartbeat = HEARTBEATS.get(component);
+        if (heartbeat == null) {
+            heartbeat = new Heartbeat();
+            HEARTBEATS.put(component, heartbeat);
+        }
+        heartbeat.lastSeenMs = now;
+        heartbeat.healthy = healthy;
+        heartbeat.detail = detail;
+        if (healthy) {
+            heartbeat.lastHealthyMs = now;
+        }
+        if (watchdogEligible) {
+            SystemWatchdogV1.observe(component, healthy, detail);
+        }
     }
 
     public static Snapshot snapshot() {
@@ -83,7 +122,8 @@ public final class FaultMonitoringStateV2_1 {
                     Member3PlantStateV1.getLidMagazineCapacity(), now),
             peer(M2_LINK, "M2", heartbeats.get(M2_LINK), now),
             peer(M1_LINK, "M1", heartbeats.get(M1_LINK), now),
-            external("Filler A / B and Capper", "M4"),
+            peer(M4_LINK, "M4", heartbeats.get(M4_LINK), now),
+            peer(POS_LINK, "M1", heartbeats.get(POS_LINK), now),
             local(GUI_WORKER, "M3", "RUNNING",
                 healthOf(GUI_WORKER, heartbeats, now),
                 heartbeats.get(GUI_WORKER), "Swing refresh worker", now)
@@ -91,10 +131,12 @@ public final class FaultMonitoringStateV2_1 {
 
         FaultSupervisorMetricsV2_1 metrics =
             FaultSupervisorStateV2_1.metricsSnapshot();
-        String health = systemHealth(
+        String monitoredHealth = systemHealth(
             supervisorState, subsystem, rotaryStatus, lidStatus,
             components
         );
+        SystemWatchdogV1.Snapshot watchdog = SystemWatchdogV1.snapshot();
+        String health = combinedHealth(monitoredHealth, watchdog.health);
         int warnings = "WARNING".equals(severity) ||
             "RESOURCE".equals(severity) ? 1 : 0;
         int faults = "-".equals(faultCode) ? 0 : 1;
@@ -116,7 +158,10 @@ public final class FaultMonitoringStateV2_1 {
             FaultSupervisorStateV2_1.requiredServiceEvidence(),
             FaultSupervisorStateV2_1.latestEvidence(),
             FaultSupervisorStateV2_1.localSummary(),
-            metrics, warnings, errors, faults, components
+            metrics, warnings, errors, faults, components,
+            watchdog.active, watchdog.faultComponent, watchdog.faultReason,
+            watchdog.action, watchdog.resetCount, watchdog.lastResetMs,
+            watchdog.lastFaultMs
         );
     }
 
@@ -160,19 +205,13 @@ public final class FaultMonitoringStateV2_1 {
         long now
     ) {
         return new ComponentSnapshot(
-            name, owner, record == null ? "NO TRAFFIC" : "OBSERVED",
-            "NO HEARTBEAT CONTRACT",
+            name, owner, record == null ? "NOT CONNECTED" : "OBSERVED",
+            record == null ? "OPTIONAL HEARTBEAT" :
+                healthOfRecord(record, now),
             record == null ? -1L : now - record.lastSeenMs,
             record == null || record.lastHealthyMs <= 0L ?
                 -1L : now - record.lastHealthyMs,
-            record == null ? "No protocol message observed" : record.detail
-        );
-    }
-
-    private static ComponentSnapshot external(String name, String owner) {
-        return new ComponentSnapshot(
-            name, owner, "NOT MONITORED", "NO HEARTBEAT CONTRACT",
-            -1L, -1L, "Outside the frozen M3 fault interface"
+            record == null ? "Optional heartbeat not connected" : record.detail
         );
     }
 
@@ -185,6 +224,13 @@ public final class FaultMonitoringStateV2_1 {
         if (heartbeat == null) {
             return "NOT OBSERVED";
         }
+        return healthOfRecord(heartbeat, now);
+    }
+
+    private static String healthOfRecord(Heartbeat heartbeat, long now) {
+        if (!heartbeat.healthy) {
+            return "FAULT";
+        }
         long age = now - heartbeat.lastSeenMs;
         if (age >= UNRESPONSIVE_AFTER_MS) {
             return "UNRESPONSIVE";
@@ -193,6 +239,18 @@ public final class FaultMonitoringStateV2_1 {
             return "LATE";
         }
         return "RESPONSIVE";
+    }
+
+    private static String combinedHealth(
+        String monitoredHealth,
+        String watchdogHealth
+    ) {
+        if ("RESETTING".equals(watchdogHealth)) return "RESETTING";
+        if ("FAULT".equals(watchdogHealth) ||
+            "CRITICAL".equals(monitoredHealth)) return "FAULT";
+        if ("WARNING".equals(watchdogHealth) ||
+            "DEGRADED".equals(monitoredHealth)) return "WARNING";
+        return "HEALTHY";
     }
 
     private static String systemHealth(
@@ -228,6 +286,7 @@ public final class FaultMonitoringStateV2_1 {
     private static final class Heartbeat {
         long lastSeenMs;
         long lastHealthyMs;
+        boolean healthy;
         String detail;
 
         Heartbeat() {
@@ -236,6 +295,7 @@ public final class FaultMonitoringStateV2_1 {
         Heartbeat(Heartbeat source) {
             lastSeenMs = source.lastSeenMs;
             lastHealthyMs = source.lastHealthyMs;
+            healthy = source.healthy;
             detail = source.detail;
         }
     }
@@ -290,6 +350,13 @@ public final class FaultMonitoringStateV2_1 {
         public final int errors;
         public final int faults;
         public final ComponentSnapshot[] components;
+        public final boolean watchdogActive;
+        public final String watchdogFaultComponent;
+        public final String watchdogFaultReason;
+        public final String watchdogAction;
+        public final int watchdogResetCount;
+        public final long watchdogLastResetMs;
+        public final long watchdogLastFaultMs;
 
         Snapshot(
             long capturedAtMs, String systemHealth, String visibility,
@@ -301,7 +368,11 @@ public final class FaultMonitoringStateV2_1 {
             String requiredSafeEvidence, String requiredServiceEvidence,
             String latestEvidence, String localState,
             FaultSupervisorMetricsV2_1 metrics, int warnings, int errors,
-            int faults, ComponentSnapshot[] components
+            int faults, ComponentSnapshot[] components,
+            boolean watchdogActive, String watchdogFaultComponent,
+            String watchdogFaultReason, String watchdogAction,
+            int watchdogResetCount, long watchdogLastResetMs,
+            long watchdogLastFaultMs
         ) {
             this.capturedAtMs = capturedAtMs;
             this.systemHealth = systemHealth;
@@ -329,6 +400,13 @@ public final class FaultMonitoringStateV2_1 {
             this.errors = errors;
             this.faults = faults;
             this.components = components;
+            this.watchdogActive = watchdogActive;
+            this.watchdogFaultComponent = watchdogFaultComponent;
+            this.watchdogFaultReason = watchdogFaultReason;
+            this.watchdogAction = watchdogAction;
+            this.watchdogResetCount = watchdogResetCount;
+            this.watchdogLastResetMs = watchdogLastResetMs;
+            this.watchdogLastFaultMs = watchdogLastFaultMs;
         }
     }
 }

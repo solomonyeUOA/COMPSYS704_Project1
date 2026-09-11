@@ -9,9 +9,9 @@ public final class FaultToleranceDemoStateV2_1 {
     private static boolean intentSeen;
     private static boolean readySeen;
     private static boolean passPrinted;
-    private static long nextFaultOfferAt;
-    private static long nextResultOfferAt;
-    private static long nextResumeOfferAt;
+    private static BoundedStringSignalOfferV1 faultOffer;
+    private static BoundedStringSignalOfferV1 resultOffer;
+    private static BoundedStringSignalOfferV1 resumeOffer;
 
     private FaultToleranceDemoStateV2_1() {
     }
@@ -20,9 +20,10 @@ public final class FaultToleranceDemoStateV2_1 {
         intentSeen = false;
         readySeen = false;
         passPrinted = false;
-        nextFaultOfferAt = 0;
-        nextResultOfferAt = 0;
-        nextResumeOfferAt = 0;
+        faultOffer = newOffer();
+        resultOffer = newOffer();
+        resumeOffer = newOffer();
+        faultOffer.begin("fault", System.currentTimeMillis());
         M2TransferFaultAdapterStateV2_1.reset();
         FaultSupervisorStateV2_1.reset();
     }
@@ -30,6 +31,7 @@ public final class FaultToleranceDemoStateV2_1 {
     public static synchronized void onIntent(String payload) {
         if ("V2|IP-DEMO-01|IP-DEMO|RETRY_TRANSFER|1|1".equals(payload)) {
             intentSeen = true;
+            faultOffer.discard();
         }
     }
 
@@ -42,11 +44,10 @@ public final class FaultToleranceDemoStateV2_1 {
     public static synchronized int nextAction() {
         long now = System.currentTimeMillis();
         if (!intentSeen) {
-            if (now >= nextFaultOfferAt) {
-                nextFaultOfferAt = now + 250;
-                return SEND_FAULT;
+            if (!faultOffer.isPending()) {
+                faultOffer.begin("fault", now);
             }
-            return WAIT;
+            return faultOffer.nextValue(now) == null ? WAIT : SEND_FAULT;
         }
         if (!readySeen && !"RECOVERY_READY".equals(
             FaultSupervisorStateV2_1.stateName())) {
@@ -54,23 +55,27 @@ public final class FaultToleranceDemoStateV2_1 {
                 FaultSupervisorStateV2_1.stateName())) {
                 return WAIT;
             }
-            if (now >= nextResultOfferAt) {
-                nextResultOfferAt = now + 250;
-                return SEND_RESULT;
+            if (!resultOffer.isPending()) {
+                resultOffer.begin("result", now);
             }
-            return WAIT;
+            return resultOffer.nextValue(now) == null ? WAIT : SEND_RESULT;
         }
         if (!"IDLE".equals(FaultSupervisorStateV2_1.stateName())) {
-            if (now >= nextResumeOfferAt) {
-                nextResumeOfferAt = now + 250;
-                return SEND_RESUME;
+            resultOffer.discard();
+            if (!resumeOffer.isPending()) {
+                resumeOffer.begin("resume", now);
             }
-            return WAIT;
+            return resumeOffer.nextValue(now) == null ? WAIT : SEND_RESUME;
         }
+        resumeOffer.discard();
         if (!passPrinted) {
             passPrinted = true;
             return PASS;
         }
         return WAIT;
+    }
+
+    private static BoundedStringSignalOfferV1 newOffer() {
+        return new BoundedStringSignalOfferV1(5, 300L, 100L);
     }
 }

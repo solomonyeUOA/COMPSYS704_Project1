@@ -46,18 +46,36 @@ Member3DemoDriver(
     {loop {
         present(BOTTLE_AT_FILL) {
             String bottleId = #BOTTLE_AT_FILL.split("\\|", -1)[0];
-            emit MARK_FILLED(bottleId);
-            System.out.println("Demo: confirm fill " + bottleId);
+            if (Member3DemoStateV1.onFillOffered(#BOTTLE_AT_FILL)) {
+                System.out.println("Demo: confirm fill " + bottleId);
+            }
         }
         present(BOTTLE_AT_CAP) {
             String bottleId = #BOTTLE_AT_CAP.split("\\|", -1)[0];
-            emit MARK_CAPPED(bottleId);
-            System.out.println("Demo: confirm cap " + bottleId);
+            if (Member3DemoStateV1.onCapOffered(#BOTTLE_AT_CAP)) {
+                System.out.println("Demo: confirm cap " + bottleId);
+            }
         }
         present(BOTTLE_AT_LABEL) {
-            emit MARK_LABELLED(#BOTTLE_AT_LABEL);
-            Member3DemoStateV1.onLabelOffered(#BOTTLE_AT_LABEL);
-            System.out.println("Demo: confirm label " + #BOTTLE_AT_LABEL);
+            if (Member3DemoStateV1.onLabelOffered(#BOTTLE_AT_LABEL)) {
+                System.out.println("Demo: confirm label " + #BOTTLE_AT_LABEL);
+            }
+        }
+
+        String fillConfirmation =
+            Member3DemoStateV1.nextFillConfirmation();
+        if (fillConfirmation != null) {
+            emit MARK_FILLED(fillConfirmation);
+        }
+        String capConfirmation =
+            Member3DemoStateV1.nextCapConfirmation();
+        if (capConfirmation != null) {
+            emit MARK_CAPPED(capConfirmation);
+        }
+        String labelConfirmation =
+            Member3DemoStateV1.nextLabelConfirmation();
+        if (labelConfirmation != null) {
+            emit MARK_LABELLED(labelConfirmation);
         }
         pause;
     }}

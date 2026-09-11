@@ -33,6 +33,7 @@ import javax.swing.JSplitPane;
 import javax.swing.JTabbedPane;
 import javax.swing.JTable;
 import javax.swing.JTextArea;
+import javax.swing.JToggleButton;
 import javax.swing.SwingUtilities;
 import javax.swing.SwingWorker;
 import javax.swing.Timer;
@@ -97,7 +98,7 @@ public final class FaultManagementGUI {
         private final ActivityIndicator activity = new ActivityIndicator();
         private final JLabel health = statusLabel("STARTING", BLUE);
         private final JLabel clock = valueLabel("--:--:--");
-        private final JLabel mode = statusLabel("LIVE", GREEN);
+        private final JToggleButton mode = new JToggleButton("LIVE");
         private final JLabel workingStatus = statusLabel("STARTING", BLUE);
         private final JLabel backendState = valueLabel("-");
         private final JLabel currentTask = valueLabel("Starting monitoring");
@@ -147,6 +148,9 @@ public final class FaultManagementGUI {
             setMinimumSize(new Dimension(820, 580));
             setSize(new Dimension(1120, 720));
             setLocationRelativeTo(null);
+            mode.setFocusPainted(false);
+            mode.setOpaque(true);
+            mode.setBorder(BorderFactory.createEmptyBorder(5, 10, 5, 10));
             setContentPane(buildContent());
             wireActions();
             refreshTimer = new Timer(250, event -> refresh());
@@ -285,7 +289,7 @@ public final class FaultManagementGUI {
             actions.add(resume);
             content.add(actions, BorderLayout.CENTER);
             JLabel note = new JLabel(
-                "Test controls use the production policy model and require -Dm3.testMode=true."
+                "Enable TEST MODE in the header to use controlled fault injection."
             );
             note.setForeground(MUTED);
             content.add(note, BorderLayout.SOUTH);
@@ -299,6 +303,14 @@ public final class FaultManagementGUI {
             manualEvidence.addActionListener(event -> runAction("manual-evidence"));
             resume.addActionListener(event -> runAction("resume"));
             reset.addActionListener(event -> runAction("reset"));
+            mode.addActionListener(event -> {
+                FaultGuiActionsV2_1.setTestMode(mode.isSelected());
+                actionFailed = false;
+                actionFeedback = mode.isSelected() ?
+                    t("Test controls enabled", "测试控制已启用") :
+                    t("Live monitoring mode enabled", "实时监控模式已启用");
+                refresh();
+            });
             language.addActionListener(event -> {
                 chinese = !chinese;
                 applyLanguage();
@@ -417,9 +429,12 @@ public final class FaultManagementGUI {
         }
 
         private void updateButtons(FaultMonitoringStateV2_1.Snapshot snapshot) {
-            boolean testMode = Boolean.getBoolean("m3.testMode");
+            boolean testMode = FaultGuiActionsV2_1.isTestMode();
+            mode.setSelected(testMode);
             mode.setText(testMode ? "TEST MODE" : "LIVE");
             mode.setBackground(testMode ? AMBER : GREEN);
+            mode.setForeground(Color.WHITE);
+            mode.setEnabled(!actionRunning);
             String state = snapshot.supervisorState;
             inject.setEnabled(!actionRunning && testMode && FaultGuiPolicyV2_1.canInject(state));
             safeStop.setEnabled(!actionRunning && testMode && FaultGuiPolicyV2_1.canConfirmSafeStop(state));

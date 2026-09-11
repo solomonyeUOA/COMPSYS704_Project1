@@ -1,15 +1,26 @@
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
 /** Validated test actions shared by the fault-management user interface. */
 public final class FaultGuiActionsV2_1 {
     private static final AtomicLong TEST_EVENT_SEQUENCE = new AtomicLong(1);
+    private static final AtomicBoolean TEST_MODE = new AtomicBoolean(
+        Boolean.getBoolean("m3.testMode")
+    );
 
     private FaultGuiActionsV2_1() {
     }
 
+    public static boolean isTestMode() {
+        return TEST_MODE.get();
+    }
+
+    public static void setTestMode(boolean enabled) {
+        TEST_MODE.set(enabled);
+    }
+
     public static boolean perform(String action, String fault) {
-        if (!Boolean.getBoolean("m3.testMode") &&
-            !"reset".equals(action)) {
+        if (!isTestMode() && !"reset".equals(action)) {
             return false;
         }
         if ("inject".equals(action)) {

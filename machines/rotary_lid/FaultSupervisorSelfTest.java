@@ -20,6 +20,7 @@ public final class FaultSupervisorSelfTest {
         testConcurrentFaultHold();
         testMalformedAndUnknownEvents();
         testGuiEnablementRules();
+        testGuiHotModeSwitch();
         testMonitoringSnapshot();
         System.out.println("FaultSupervisorSelfTest PASSED");
     }
@@ -467,6 +468,21 @@ public final class FaultSupervisorSelfTest {
             "newer Controller evidence is enabled after reconciliation");
         require(FaultGuiPolicyV2_1.canResume("RECOVERY_READY"),
             "resume appears only after verified readiness");
+    }
+
+    private static void testGuiHotModeSwitch() {
+        FaultSupervisorStateV2_1.reset();
+        FaultGuiActionsV2_1.setTestMode(false);
+        require(!FaultGuiActionsV2_1.perform("inject", "ARRIVAL_TIMEOUT"),
+            "live mode rejects test injection at the action boundary");
+        FaultGuiActionsV2_1.setTestMode(true);
+        require(FaultGuiActionsV2_1.perform("inject", "ARRIVAL_TIMEOUT"),
+            "hot test-mode switch enables controlled injection");
+        FaultGuiActionsV2_1.setTestMode(false);
+        require(!FaultGuiActionsV2_1.perform("safe-stop", null),
+            "switching back to live immediately blocks test actions");
+        require(FaultGuiActionsV2_1.perform("reset", null),
+            "reset remains available in live mode");
     }
 
     private static void testMonitoringSnapshot() {
