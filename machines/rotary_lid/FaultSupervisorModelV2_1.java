@@ -42,6 +42,7 @@ public final class FaultSupervisorModelV2_1 {
     private State state = State.IDLE;
     private int activeAttempt;
     private boolean manualEvidenceRecorded;
+    private FaultProtocolV2_1.RecoveryResult deferredControllerEvidence;
     private String decision = "IDLE";
     private String latestEvidence = "NONE";
     private long stateEnteredAtMs = System.currentTimeMillis();
@@ -124,6 +125,7 @@ public final class FaultSupervisorModelV2_1 {
         activePolicy = policy;
         activeAttempt = 0;
         manualEvidenceRecorded = false;
+        deferredControllerEvidence = null;
         pendingFaultAlert = payload;
         latestEvidence = "FAULT_EVENT_VALIDATED";
         record("FAULT " + key + " " + policy.summary());
@@ -368,6 +370,52 @@ public final class FaultSupervisorModelV2_1 {
         pendingRecoveryReady = recoveryReady(resultingStateVersion);
         record("MANUAL_RECOVERY_READY " + eventId);
         return true;
+    }
+
+    public synchronized boolean deferManualControllerEvidence(String payload) {
+        FaultProtocolV2_1.RecoveryResult result;
+        try {
+            result = FaultProtocolV2_1.parseRecoveryResult(payload);
+        }
+        catch (IllegalArgumentException exception) {
+            reject("INVALID_DEFERRED_CONTROLLER_EVIDENCE");
+            return false;
+        }
+        if (state != State.LOCKED_OUT || activeEvent == null ||
+            !activeEvent.eventId.equals(result.eventId) ||
+            !activeEvent.sourceEpoch.equals(result.sourceEpoch) ||
+            result.attempt != activeAttempt ||
+            !"SUCCESS".equals(result.outcome) ||
+            result.resultingStateVersion <= activeEvent.stateVersion ||
+            !containsAllEvidence(result.safeEvidence,
+                activePolicy.safeEvidence) ||
+            !containsAllEvidence(result.serviceEvidence,
+                activePolicy.serviceEvidence)) {
+            reject("INVALID_DEFERRED_CONTROLLER_EVIDENCE");
+            return false;
+        }
+        deferredControllerEvidence = result;
+        latestEvidence = "CONTROLLER_EVIDENCE_AWAITING_RECONCILIATION";
+        record("DEFERRED_CONTROLLER_EVIDENCE " + result.eventId);
+        return true;
+    }
+
+    public synchronized boolean applyDeferredControllerEvidence() {
+        if (!manualEvidenceRecorded || deferredControllerEvidence == null) {
+            return false;
+        }
+        FaultProtocolV2_1.RecoveryResult result = deferredControllerEvidence;
+        return confirmManualControllerEvidence(
+            result.eventId,
+            result.sourceEpoch,
+            result.safeEvidence,
+            result.serviceEvidence,
+            result.resultingStateVersion
+        );
+    }
+
+    public synchronized boolean hasManualEvidenceRecorded() {
+        return manualEvidenceRecorded;
     }
 
     public synchronized boolean confirmResourceRestored(
@@ -841,6 +889,7 @@ public final class FaultSupervisorModelV2_1 {
         activePolicy = null;
         activeAttempt = 0;
         manualEvidenceRecorded = false;
+        deferredControllerEvidence = null;
         transition(State.IDLE);
         decision = "IDLE";
         latestEvidence = "NONE";

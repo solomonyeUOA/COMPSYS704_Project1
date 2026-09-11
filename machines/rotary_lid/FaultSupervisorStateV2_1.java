@@ -61,13 +61,14 @@ public final class FaultSupervisorStateV2_1 {
             try {
                 FaultProtocolV2_1.RecoveryResult result =
                     FaultProtocolV2_1.parseRecoveryResult(payload);
-                boolean accepted = MODEL.confirmManualControllerEvidence(
-                    result.eventId,
-                    result.sourceEpoch,
-                    result.safeEvidence,
-                    result.serviceEvidence,
-                    result.resultingStateVersion
-                );
+                boolean accepted = MODEL.hasManualEvidenceRecorded() ?
+                    MODEL.confirmManualControllerEvidence(
+                        result.eventId,
+                        result.sourceEpoch,
+                        result.safeEvidence,
+                        result.serviceEvidence,
+                        result.resultingStateVersion
+                    ) : MODEL.deferManualControllerEvidence(payload);
                 if (accepted) {
                     FaultTestControlStateV2_1.acknowledgeTransfer();
                 }
@@ -126,7 +127,9 @@ public final class FaultSupervisorStateV2_1 {
             !"FAILED".equals(MODEL.getState().name()),
             MODEL.getState().name()
         );
-        if (!FaultGuiActionsV2_1.isTestMode()) {
+        String state = MODEL.getState().name();
+        if (!FaultGuiActionsV2_1.isTestMode() ||
+            "WAITING_ACK".equals(state) || "WAITING_RESULT".equals(state)) {
             MODEL.tick(System.currentTimeMillis());
         }
         return nextOffer(RECOVERY_REQUEST_OFFER, new PendingValue() {
@@ -212,6 +215,11 @@ public final class FaultSupervisorStateV2_1 {
         return MODEL.getState().name();
     }
 
+    /** Holds every new M3 machine action until verified recovery is released. */
+    public static boolean isOperationHeld() {
+        return !"IDLE".equals(MODEL.getState().name());
+    }
+
     public static String decision() {
         return MODEL.getDecision();
     }
@@ -238,6 +246,31 @@ public final class FaultSupervisorStateV2_1 {
 
     public static String activeBottleId() {
         return MODEL.getActiveBottleId();
+    }
+
+    /**
+     * Uses the correlated M2 hand-off as fallback recovery evidence when the
+     * separate recovery-result pulse is lost. M2 emits LOAD_BOTTLE only after
+     * P1 arrival, entry-clear and motor-stop evidence has been accepted.
+     */
+    public static synchronized boolean onRecoveredTransferHandoff(
+        String bottleId
+    ) {
+        String state = MODEL.getState().name();
+        if (!("WAITING_RESULT".equals(state) ||
+            "LOCKED_OUT".equals(state)) ||
+            !"TRANSFER".equals(MODEL.getActiveSubsystem()) ||
+            !"ARRIVAL_TIMEOUT".equals(MODEL.getActiveFaultCode()) ||
+            bottleId == null || !bottleId.equals(MODEL.getActiveBottleId())) {
+            return false;
+        }
+        long resultingVersion = MODEL.getActiveStateVersion() + 1L;
+        return onRecoveryResult(
+            "V2|" + MODEL.getActiveEventId() + "|" +
+            MODEL.getActiveEpoch() + "|" + MODEL.getActiveAttempt() +
+            "|SUCCESS|motor_off+occupancy_consistent|" +
+            "arrival_confirmed|" + resultingVersion
+        );
     }
 
     public static long activeStateVersion() {
@@ -308,6 +341,10 @@ public final class FaultSupervisorStateV2_1 {
             serviceEvidence,
             resultingStateVersion
         );
+    }
+
+    public static boolean applyDeferredControllerEvidence() {
+        return MODEL.applyDeferredControllerEvidence();
     }
 
     public static boolean confirmResourceRestored(

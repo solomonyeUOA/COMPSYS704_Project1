@@ -1,9 +1,10 @@
 /** Test-only fault request state shared by the native GUI and SystemJ CDs. */
 public final class FaultInjectionStateV2_1 {
     private static BoundedSignalOfferV1 transferOffer =
-        new BoundedSignalOfferV1(3, 500L, 100L);
+        new BoundedSignalOfferV1(20, 500L, 100L);
     private static long sequence;
     private static String armedFault;
+    private static String transferRequestId;
 
     private FaultInjectionStateV2_1() {
     }
@@ -22,6 +23,7 @@ public final class FaultInjectionStateV2_1 {
             if (!transferOffer.arm(requestId, requestId + "|" + faultCode)) {
                 return false;
             }
+            transferRequestId = requestId;
         }
         else {
             throw new IllegalArgumentException("unknown fault: " + faultCode);
@@ -36,6 +38,10 @@ public final class FaultInjectionStateV2_1 {
 
     public static synchronized void consumed(String faultCode) {
         if (faultCode != null && faultCode.equals(armedFault)) {
+            if (transferRequestId != null) {
+                transferOffer.acknowledge(transferRequestId);
+                transferRequestId = null;
+            }
             armedFault = null;
         }
     }
@@ -45,7 +51,8 @@ public final class FaultInjectionStateV2_1 {
     }
 
     public static synchronized void reset() {
-        transferOffer = new BoundedSignalOfferV1(3, 500L, 100L);
+        transferOffer = new BoundedSignalOfferV1(20, 500L, 100L);
+        transferRequestId = null;
         armedFault = null;
     }
 

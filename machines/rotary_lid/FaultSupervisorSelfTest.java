@@ -23,6 +23,8 @@ public final class FaultSupervisorSelfTest {
         testGuiHotModeSwitch();
         testGuiMagazineResourceRecovery();
         testGuiM1RecoveryRoundTrip();
+        testLateArrivalEvidenceRequiresManualSequence();
+        testArrivalHandoffCompletesDroppedResult();
         testGuiTransferRecoveryRoundTrip();
         testMonitoringSnapshot();
         System.out.println("FaultSupervisorSelfTest PASSED");
@@ -531,6 +533,7 @@ public final class FaultSupervisorSelfTest {
     private static void testGuiM1RecoveryRoundTrip() {
         FaultSupervisorStateV2_1.reset();
         Member3MachineStateV1.reset();
+        Member3PlantStateV1.reset();
         CoordinatorStateV1.resetForTest();
         FaultGuiActionsV2_1.setTestMode(true);
 
@@ -578,6 +581,15 @@ public final class FaultSupervisorSelfTest {
             "unsolicited resume cannot clear recovery-ready state");
         require(CoordinatorStateV1.ftCoordinationHold,
             "M1 hold remains before explicit GUI approval");
+        require(!Member3MachineStateV1.requestRotation(true),
+            "M3 cannot start another rotary cycle before GUI approval");
+        require(!Member3MachineStateV1.requestLidLoad("HOLD-B001", true),
+            "M3 cannot start another lid cycle before GUI approval");
+        require(Member3PlantStateV1.acceptLoadRequest("HOLD-B001"),
+            "one-reaction load is retained while recovery is held");
+        require(Member3PlantStateV1.pendingLoadCount() == 1 &&
+            !Member3PlantStateV1.drainPendingLoad(),
+            "held load remains queued until explicit GUI approval");
 
         require(FaultGuiActionsV2_1.perform("resume", null),
             "resume button queues a real M1 request");
@@ -591,8 +603,13 @@ public final class FaultSupervisorSelfTest {
             "M3 returns to idle after the M1 decision");
         require(!CoordinatorStateV1.ftCoordinationHold,
             "M1 releases the order hold after verified recovery");
+        require(Member3PlantStateV1.drainPendingLoad(),
+            "queued load resumes only after explicit GUI approval");
+        require(Member3MachineStateV1.requestRotation(true),
+            "M3 may start the next rotary cycle after M1 release");
 
         FaultGuiActionsV2_1.setTestMode(false);
+        Member3PlantStateV1.reset();
         FaultSupervisorStateV2_1.reset();
         CoordinatorStateV1.resetForTest();
     }
@@ -663,6 +680,98 @@ public final class FaultSupervisorSelfTest {
         FaultGuiActionsV2_1.setTestMode(false);
         FaultSupervisorStateV2_1.reset();
         CoordinatorStateV1.resetForTest();
+    }
+
+    private static void testLateArrivalEvidenceRequiresManualSequence() {
+        FaultSupervisorStateV2_1.reset();
+        FaultGuiActionsV2_1.setTestMode(true);
+
+        require(FaultSupervisorStateV2_1.onTransferFault(event(
+            "LATE-ARRIVAL-1", "M2-E01", "TRANSFER",
+            "ARRIVAL_TIMEOUT", "WARNING", 4
+        )), "late arrival fault is accepted");
+        require(FaultSupervisorStateV2_1.onRecoveryAck(
+            "V2|LATE-ARRIVAL-1|M2-E01|1|ACCEPTED|route_clear|4"
+        ), "late arrival retry is acknowledged");
+        FaultSupervisorStateV2_1.modelForTest().tick(
+            System.currentTimeMillis() +
+                FaultSupervisorModelV2_1.RESULT_TIMEOUT_MS + 1L
+        );
+        require("LOCKED_OUT".equals(FaultSupervisorStateV2_1.stateName()),
+            "missing result enters bounded manual recovery");
+        require(FaultSupervisorStateV2_1.onRecoveryResult(
+            "V2|LATE-ARRIVAL-1|M2-E01|1|SUCCESS|" +
+            "motor_off+occupancy_consistent|arrival_confirmed|5"
+        ), "late real controller evidence is retained");
+        require("LOCKED_OUT".equals(FaultSupervisorStateV2_1.stateName()),
+            "late evidence cannot bypass operator reconciliation");
+        require(FaultGuiActionsV2_1.perform("manual-evidence", null),
+            "operator records late arrival reconciliation");
+        require(FaultGuiActionsV2_1.perform("controller-evidence", null),
+            "submit applies retained real controller evidence");
+        require("RECOVERY_READY".equals(
+            FaultSupervisorStateV2_1.stateName()),
+            "resume becomes available after record and submit");
+
+        FaultGuiActionsV2_1.setTestMode(false);
+        FaultSupervisorStateV2_1.reset();
+    }
+
+    private static void testArrivalHandoffCompletesDroppedResult() {
+        FaultSupervisorStateV2_1.reset();
+        Member3PlantStateV1.reset();
+        M2MachineStateV1.reset();
+        M2TransferFaultAdapterStateV2_1.reset();
+        FaultGuiActionsV2_1.setTestMode(true);
+
+        String bottleId = "ARRIVAL-RECOVERY-B001";
+        require(M2TransferFaultAdapterStateV2_1.armTestFault(
+            "ARRIVAL-DROPPED-RESULT|ARRIVAL_TIMEOUT"
+        ), "M2 arms the arrival timeout");
+        require(M2MachineStateV1.offerConveyorBottle(
+            bottleId + "|S|200|GEOM_S|PACK_S"
+        ), "M2 accepts the test bottle");
+        require(M2MachineStateV1.nextConveyorTransferOffer() != null,
+            "M2 starts the faulted transfer");
+        require(M2TransferFaultAdapterStateV2_1.onLocalFault(
+            M2MachineStateV1.takeConveyorFault()
+        ), "M2 adapter records the real transfer fault");
+        require(FaultSupervisorStateV2_1.onTransferFault(
+            M2TransferFaultAdapterStateV2_1.takeFaultEvent()
+        ), "M3 enters automatic recovery for the M2 fault");
+
+        require(M2TransferFaultAdapterStateV2_1.onRecoveryRequest(
+            FaultSupervisorStateV2_1.takeRecoveryRequest()
+        ), "M2 accepts the correlated retry request");
+        require(FaultSupervisorStateV2_1.onRecoveryAck(
+            M2TransferFaultAdapterStateV2_1.takeAck()
+        ), "arrival retry ACK enters result wait");
+        require(M2MachineStateV1.acceptConveyorRecoveryIntent(
+            M2TransferFaultAdapterStateV2_1.takeIntent(), 100L
+        ), "real conveyor restarts");
+        require(M2MachineStateV1.acceptP1Feedback(
+            bottleId + "|true|true|true|true|true"
+        ), "real P1 evidence completes the retried transfer");
+        String recoveredHandoff = M2MachineStateV1.nextLoadBottleOffer();
+        require(recoveredHandoff != null &&
+            M2MachineStateV1.takeConveyorRecoveryEvidence() != null,
+            "M2 produces both hand-off and recovery evidence");
+
+        require(Member3PlantStateV1.acceptLoadRequest(recoveredHandoff),
+            "correlated recovered hand-off is accepted while held");
+        require("RECOVERY_READY".equals(
+            FaultSupervisorStateV2_1.stateName()),
+            "real M2 hand-off closes a dropped recovery-result pulse");
+        require(!Member3PlantStateV1.canRotate(),
+            "recovered bottle remains held until resume approval");
+        require(Member3PlantStateV1.acceptLoadRequest("UNRELATED-B001"),
+            "unrelated hand-off is retained during the hold");
+        require(Member3PlantStateV1.pendingLoadCount() == 1,
+            "only unrelated work remains queued");
+
+        FaultGuiActionsV2_1.setTestMode(false);
+        FaultSupervisorStateV2_1.reset();
+        Member3PlantStateV1.reset();
     }
 
     private static void testMonitoringSnapshot() {
