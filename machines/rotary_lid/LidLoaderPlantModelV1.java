@@ -41,17 +41,11 @@ public final class LidLoaderPlantModelV1 {
     private boolean placeTriggerLatched;
 
     public LidLoaderPlantModelV1() {
-        this(MAGAZINE_CAPACITY);
-    }
-
-    public LidLoaderPlantModelV1(int initialMagazineCount) {
         if (MAGAZINE_CAPACITY <= 0) {
             throw new IllegalStateException("lid magazine geometry gives no usable capacity");
         }
         magazineCapacity = MAGAZINE_CAPACITY;
-        magazineCount = Math.max(0, Math.min(
-            initialMagazineCount, magazineCapacity
-        ));
+        magazineCount = magazineCapacity;
     }
 
     public boolean setPickCommand(boolean enabled, long nowMs) {
@@ -119,10 +113,6 @@ public final class LidLoaderPlantModelV1 {
 
     public void cancelAction() {
         action = Action.IDLE;
-        actionStartMs = 0L;
-        placedSensorUntilMs = 0L;
-        pickFault = false;
-        placeFault = false;
         pickTriggerLatched = false;
         placeTriggerLatched = false;
     }

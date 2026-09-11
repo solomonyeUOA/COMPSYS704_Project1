@@ -30,14 +30,6 @@ public final class LidLoaderControllerModelV1 {
     private long faultSequence;
     private String faultEventId;
 
-    public LidLoaderControllerModelV1() {
-        this(0L);
-    }
-
-    public LidLoaderControllerModelV1(long initialFaultSequence) {
-        faultSequence = Math.max(0L, initialFaultSequence);
-    }
-
     /** Starts only when a bottle and a lid are both available. */
     public boolean requestLoad(
         String bottleId,
@@ -165,10 +157,6 @@ public final class LidLoaderControllerModelV1 {
 
     public String getFaultEventId() {
         return faultEventId;
-    }
-
-    public long getFaultSequence() {
-        return faultSequence;
     }
 
     public String takeCompletedBottleId() {
