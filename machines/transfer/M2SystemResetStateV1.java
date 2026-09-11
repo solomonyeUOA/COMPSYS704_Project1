@@ -1,5 +1,7 @@
 import java.math.BigInteger;
 import java.util.Collections;
+import java.util.Iterator;
+import java.util.LinkedHashSet;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.Set;
 
@@ -7,7 +9,9 @@ import java.util.Set;
 public final class M2SystemResetStateV1 {
     private static volatile boolean quarantined;
     private static volatile String generation = "0";
-    private static BigInteger latest = BigInteger.ZERO;
+    private static final int RESET_HISTORY_LIMIT = 64;
+    private static final LinkedHashSet<String> seenResetIds =
+        new LinkedHashSet<String>();
     private static String activeId;
     private static String completedId;
     private static M2BoundedSignalOfferV1 ack = new M2BoundedSignalOfferV1(10, 100L);
@@ -32,24 +36,22 @@ public final class M2SystemResetStateV1 {
             return false;
         }
         BigInteger number = new BigInteger(resetId.substring(3));
-        if (number.compareTo(latest) < 0 ||
-            (number.equals(latest) && activeId != null &&
-             !resetId.equals(activeId))) {
-            return false;
-        }
         if (resetId.equals(activeId)) {
             if (resetId.equals(completedId)) {
                 ack.arm(resetId, resetId, nowMillis);
             }
             return true;
         }
-        latest = number;
+        if (hasSeenReset(resetId, number)) { return false; }
+        rememberReset(resetId);
         activeId = resetId;
         completedId = null;
         ack = new M2BoundedSignalOfferV1(10, 100L);
         runtimeCleared = false;
         quarantined = true;
-        generation = number.add(BigInteger.ONE).toString();
+        BigInteger nextGeneration = new BigInteger(generation).add(BigInteger.ONE);
+        BigInteger idGeneration = number.add(BigInteger.ONE);
+        generation = nextGeneration.max(idGeneration).toString();
         // The simulated actuators are explicitly de-energised before any
         // controller state is discarded. Hardware adapters must implement
         // the same confirmed-safe contract before returning true here.
@@ -114,6 +116,27 @@ public final class M2SystemResetStateV1 {
 
     public static void observeBottle(String id) {
         if (id != null && !"-".equals(id)) { observed.add(id); }
+    }
+
+    private static boolean hasSeenReset(String resetId, BigInteger number) {
+        for (String seen : seenResetIds) {
+            if (seen.equals(resetId) ||
+                new BigInteger(seen.substring(3)).equals(number)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static void rememberReset(String resetId) {
+        if (seenResetIds.size() >= RESET_HISTORY_LIMIT) {
+            Iterator<String> oldest = seenResetIds.iterator();
+            if (oldest.hasNext()) {
+                oldest.next();
+                oldest.remove();
+            }
+        }
+        seenResetIds.add(resetId);
     }
 
     private static String batchOf(String id) {

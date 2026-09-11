@@ -1,3 +1,5 @@
+import java.math.BigInteger;
+
 /** Safety, reset identity, retirement and fresh-order admission regressions. */
 public final class Member2SystemResetSelfTest {
     public static void main(String[] args) {
@@ -63,7 +65,6 @@ public final class Member2SystemResetSelfTest {
         check(M2SystemResetStateV1.request("RST0002", 5000L), "duplicate accepted");
         check(M2SystemResetStateV1.getResetCount() == count, "duplicate reset cannot erase new work");
         check(M2MachineStateV1.getLoaderStatus() == M2StatusV1.BUSY, "new work survives duplicate reset");
-        check(!M2SystemResetStateV1.request("RST0001", 5000L), "older reset rejected");
         check(!M2SystemResetStateV1.request("RST00002", 5000L), "numeric alias rejected");
         check(!M2SystemResetStateV1.request("RST0002 ", 5000L), "whitespace rejected");
 
@@ -82,6 +83,11 @@ public final class Member2SystemResetSelfTest {
             M2MachineStateV1.isBottleDonePresent(6000L), "P6/sort/done active");
         resetAndAck("RST0003", 6001L);
         assertNoHandoffs(6002L);
+        resetAndAck("RST1789169295177", 6500L);
+        resetAndAck("RST0001", 6600L);
+        check(new BigInteger(M2SystemResetStateV1.getGeneration()).compareTo(
+            new BigInteger("1789169295178")) > 0,
+            "generation remains monotonic after lower unseen reset ID");
         resetAndAck("RST99999999999999999999999999999999", 7000L);
         check("100000000000000000000000000000000".equals(M2SystemResetStateV1.getGeneration()), "arbitrary precision reset generation");
         System.out.println("Member2SystemResetSelfTest PASSED");

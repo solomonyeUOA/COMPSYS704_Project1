@@ -177,10 +177,21 @@ public final class Member4SystemResetSelfTest {
         M4SystemResetStateV1.tick(401L);
         M4SystemResetStateV1.tick(402L);
         require(!M4SystemResetStateV1.request("RST0001", 500L),
-            "older reset cannot trigger after newer completion");
+            "completed reset cannot trigger again");
         require("RST0002".equals(M4SystemResetStateV1.takeAck(500L)),
             "only latest ACK returned");
+        resetAndAck("RST1789169295177", 600L);
+        resetAndAck("RST0003", 700L);
         runNewBottle("AFTER-SECOND-RESET", "S", 200);
+    }
+
+    private static void resetAndAck(String id, long now) {
+        require(M4SystemResetStateV1.request(id, now), "reset accepted " + id);
+        M4SystemResetStateV1.tick(now);
+        M4SystemResetStateV1.tick(now + 1L);
+        M4SystemResetStateV1.tick(now + 2L);
+        require(id.equals(M4SystemResetStateV1.takeAck(now + 2L)),
+            "matching safe ACK " + id);
     }
 
     private static void runNewBottle(String id, String size, int capacity) {
