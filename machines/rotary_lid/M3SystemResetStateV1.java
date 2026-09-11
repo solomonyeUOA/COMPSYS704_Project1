@@ -8,10 +8,10 @@ public final class M3SystemResetStateV1 {
     private static final BoundedStringSignalOfferV1 ACK =
         new BoundedStringSignalOfferV1(5, 120L, 80L);
 
-    private static volatile String activeResetId;
+    private static String activeResetId;
     private static long highestSequence = -1L;
     private static long quietUntilMillis;
-    private static volatile boolean finalised;
+    private static boolean finalised;
 
     private M3SystemResetStateV1() {
     }
@@ -33,7 +33,7 @@ public final class M3SystemResetStateV1 {
         }
 
         String canonical = resetId.trim();
-        long now = nowMillis();
+        long now = System.currentTimeMillis();
         if (sequence < highestSequence) {
             return false;
         }
@@ -57,7 +57,7 @@ public final class M3SystemResetStateV1 {
     }
 
     public static synchronized String takeAck() {
-        long now = nowMillis();
+        long now = System.currentTimeMillis();
         if (activeResetId == null) {
             return null;
         }
@@ -74,7 +74,7 @@ public final class M3SystemResetStateV1 {
         return ACK.nextValue(now);
     }
 
-    public static boolean isQuarantined() {
+    public static synchronized boolean isQuarantined() {
         return activeResetId != null && !finalised;
     }
 
@@ -82,11 +82,5 @@ public final class M3SystemResetStateV1 {
         Member3PlantStateV1.systemReset();
         Member3MachineStateV1.systemReset();
         FaultMonitoringStateV2_1.systemReset();
-    }
-
-    private static long nowMillis() {
-        return java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(
-            System.nanoTime()
-        );
     }
 }

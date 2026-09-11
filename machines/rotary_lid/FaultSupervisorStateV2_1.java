@@ -2,16 +2,6 @@
 public final class FaultSupervisorStateV2_1 {
     private static final FaultSupervisorModelV2_1 MODEL =
         new FaultSupervisorModelV2_1();
-    private static final BoundedStringSignalOfferV1 RECOVERY_REQUEST_OFFER =
-        new BoundedStringSignalOfferV1(3, 500L, 100L);
-    private static final BoundedStringSignalOfferV1 FAULT_ALERT_OFFER =
-        new BoundedStringSignalOfferV1(3, 500L, 100L);
-    private static final BoundedStringSignalOfferV1 SAFE_STOP_OFFER =
-        new BoundedStringSignalOfferV1(3, 500L, 100L);
-    private static final BoundedStringSignalOfferV1 RECOVERY_READY_OFFER =
-        new BoundedStringSignalOfferV1(3, 500L, 100L);
-    private static final BoundedStringSignalOfferV1 RECOVERY_FAILED_OFFER =
-        new BoundedStringSignalOfferV1(3, 500L, 100L);
 
     private FaultSupervisorStateV2_1() {
     }
@@ -33,11 +23,7 @@ public final class FaultSupervisorStateV2_1 {
             FaultMonitoringStateV2_1.M2_LINK,
             "TRANSFER_RECOVERY_ACK"
         );
-        boolean accepted = MODEL.onRecoveryAck(payload);
-        if (accepted) {
-            RECOVERY_REQUEST_OFFER.discard();
-        }
-        return accepted;
+        return MODEL.onRecoveryAck(payload);
     }
 
     public static boolean onRecoveryResult(String payload) {
@@ -53,11 +39,7 @@ public final class FaultSupervisorStateV2_1 {
             FaultMonitoringStateV2_1.M1_LINK,
             "FT_SAFE_STOP_ACK"
         );
-        boolean accepted = MODEL.onSafeStopAck(payload);
-        if (accepted) {
-            SAFE_STOP_OFFER.discard();
-        }
-        return accepted;
+        return MODEL.onSafeStopAck(payload);
     }
 
     public static boolean onResumeDecision(String payload) {
@@ -65,11 +47,7 @@ public final class FaultSupervisorStateV2_1 {
             FaultMonitoringStateV2_1.M1_LINK,
             "FT_RESUME_DECISION"
         );
-        boolean accepted = MODEL.onResumeDecision(payload);
-        if (accepted) {
-            RECOVERY_READY_OFFER.discard();
-        }
-        return accepted;
+        return MODEL.onResumeDecision(payload);
     }
 
     public static String takeRecoveryRequest() {
@@ -79,43 +57,23 @@ public final class FaultSupervisorStateV2_1 {
             MODEL.getState().name()
         );
         MODEL.tick(System.currentTimeMillis());
-        return nextOffer(RECOVERY_REQUEST_OFFER, new PendingValue() {
-            public String take() {
-                return MODEL.takeRecoveryRequest();
-            }
-        });
+        return MODEL.takeRecoveryRequest();
     }
 
     public static String takeFaultAlert() {
-        return nextOffer(FAULT_ALERT_OFFER, new PendingValue() {
-            public String take() {
-                return MODEL.takeFaultAlert();
-            }
-        });
+        return MODEL.takeFaultAlert();
     }
 
     public static String takeSafeStopRequest() {
-        return nextOffer(SAFE_STOP_OFFER, new PendingValue() {
-            public String take() {
-                return MODEL.takeSafeStopRequest();
-            }
-        });
+        return MODEL.takeSafeStopRequest();
     }
 
     public static String takeRecoveryReady() {
-        return nextOffer(RECOVERY_READY_OFFER, new PendingValue() {
-            public String take() {
-                return MODEL.takeRecoveryReady();
-            }
-        });
+        return MODEL.takeRecoveryReady();
     }
 
     public static String takeRecoveryFailed() {
-        return nextOffer(RECOVERY_FAILED_OFFER, new PendingValue() {
-            public String take() {
-                return MODEL.takeRecoveryFailed();
-            }
-        });
+        return MODEL.takeRecoveryFailed();
     }
 
     public static void observeRotaryFault(String eventId, String reason) {
@@ -264,43 +222,13 @@ public final class FaultSupervisorStateV2_1 {
 
     public static void reset() {
         MODEL.reset();
-        discardOffers();
     }
 
     public static void systemReset() {
         MODEL.systemReset();
-        discardOffers();
     }
 
     static FaultSupervisorModelV2_1 modelForTest() {
         return MODEL;
-    }
-
-    private static synchronized String nextOffer(
-        BoundedStringSignalOfferV1 offer,
-        PendingValue pending
-    ) {
-        long now = java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(
-            System.nanoTime()
-        );
-        if (!offer.isPending()) {
-            String payload = pending.take();
-            if (payload != null) {
-                offer.begin(payload, now);
-            }
-        }
-        return offer.nextValue(now);
-    }
-
-    private static synchronized void discardOffers() {
-        RECOVERY_REQUEST_OFFER.discard();
-        FAULT_ALERT_OFFER.discard();
-        SAFE_STOP_OFFER.discard();
-        RECOVERY_READY_OFFER.discard();
-        RECOVERY_FAILED_OFFER.discard();
-    }
-
-    private interface PendingValue {
-        String take();
     }
 }

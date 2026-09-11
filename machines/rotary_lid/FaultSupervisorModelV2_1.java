@@ -222,10 +222,7 @@ public final class FaultSupervisorModelV2_1 {
             ack = FaultProtocolV2_1.parseRecoveryAck(payload);
         }
         catch (IllegalArgumentException exception) {
-            rejectOrFailActiveRecovery(
-                State.WAITING_ACK,
-                "INVALID_ACK " + exception.getMessage()
-            );
+            failRecovery("INVALID_ACK " + exception.getMessage());
             return false;
         }
         String key = eventKey(ack.sourceEpoch, ack.eventId) + "|" +
@@ -243,10 +240,7 @@ public final class FaultSupervisorModelV2_1 {
         if (state != State.WAITING_ACK ||
             !matchesActive(ack.eventId, ack.sourceEpoch, ack.attempt) ||
             ack.acceptedStateVersion != activeEvent.stateVersion) {
-            rejectOrFailActiveRecovery(
-                State.WAITING_ACK,
-                "STALE_OR_MISMATCHED_ACK " + key
-            );
+            failRecovery("STALE_OR_MISMATCHED_ACK " + key);
             return false;
         }
         priorAcks.put(key, payload);
@@ -267,10 +261,7 @@ public final class FaultSupervisorModelV2_1 {
             result = FaultProtocolV2_1.parseRecoveryResult(payload);
         }
         catch (IllegalArgumentException exception) {
-            rejectOrFailActiveRecovery(
-                State.WAITING_RESULT,
-                "INVALID_RESULT " + exception.getMessage()
-            );
+            failRecovery("INVALID_RESULT " + exception.getMessage());
             return false;
         }
         String key = eventKey(result.sourceEpoch, result.eventId) + "|" +
@@ -288,10 +279,7 @@ public final class FaultSupervisorModelV2_1 {
         if (state != State.WAITING_RESULT ||
             !matchesActive(result.eventId, result.sourceEpoch,
                 result.attempt)) {
-            rejectOrFailActiveRecovery(
-                State.WAITING_RESULT,
-                "STALE_OR_MISMATCHED_RESULT " + key
-            );
+            failRecovery("STALE_OR_MISMATCHED_RESULT " + key);
             return false;
         }
         priorResults.put(key, payload);
@@ -759,18 +747,6 @@ public final class FaultSupervisorModelV2_1 {
     private void reject(String reason) {
         rejectedMessages++;
         record("REJECTED " + reason);
-    }
-
-    private void rejectOrFailActiveRecovery(
-        State expectedState,
-        String reason
-    ) {
-        if (state == expectedState && activeEvent != null) {
-            failRecovery(reason);
-        }
-        else {
-            reject(reason);
-        }
     }
 
     private void failRecovery(String reason) {
