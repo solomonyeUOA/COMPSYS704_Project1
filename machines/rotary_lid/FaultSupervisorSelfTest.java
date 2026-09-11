@@ -166,10 +166,19 @@ public final class FaultSupervisorSelfTest {
         require(model.onTransferFault(event(
             "E4", "A", "TRANSFER", "ARRIVAL_TIMEOUT", "WARNING", 20
         )), "first snapshot may start at any version");
-        model.reportAckTimeout();
-        require(!model.onTransferFault(event(
-            "E5", "A", "TRANSFER", "ARRIVAL_TIMEOUT", "WARNING", 22
-        )), "version gap requires a snapshot");
+        require(model.onRecoveryAck(
+            "V2|E4|A|1|ACCEPTED|OK|20"), "first recovery ACK accepted");
+        require(model.onRecoveryResult(
+            "V2|E4|A|1|SUCCESS|motor_off+occupancy_consistent|" +
+            "arrival_confirmed|21"), "first recovery result accepted");
+        require(model.onResumeDecision(
+            "V2|E4|A|RESUME|verified|21"), "first recovery resumed");
+        require(model.onTransferFault(event(
+            "E5", "A", "TRANSFER", "ARRIVAL_TIMEOUT", "WARNING", 42
+        )), "later sparse fault version is accepted after normal operation");
+        require(model.getState() ==
+            FaultSupervisorModelV2_1.State.WAITING_ACK,
+            "second same-epoch fault starts a fresh recovery");
 
         model = new FaultSupervisorModelV2_1();
         require(model.onTransferFault(event(

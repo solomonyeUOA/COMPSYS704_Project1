@@ -15,7 +15,8 @@ public final class SystemResetSelfTest {
         caseISmallBottle();
         caseJLargeBottle();
         caseKMultiProductSmallThenLarge();
-        System.out.println("SystemResetSelfTest PASSED (cases A-K)");
+        caseLExternalResetThenPosReset();
+        System.out.println("SystemResetSelfTest PASSED (cases A-L)");
     }
 
     private static void caseAResetWhileIdle() {
@@ -220,6 +221,33 @@ public final class SystemResetSelfTest {
             "PO-K-P02|2|L".equals(
                 CoordinatorStateV1.currentM4SimulationBatchPayload()),
             "K second product is L");
+    }
+
+    private static void caseLExternalResetThenPosReset() {
+        POSVisualisation.resetForTest();
+        require(POSVisualisation.queueOrderForTest(
+            "PO0001|1|P1,S,60,40,2"), "L POS order queued");
+        String sent = POSVisualisation.pollSubmittedOrder();
+        POSVisualisation.showSubmitted(sent);
+
+        require("POS received system reset completion: RST1789167927465".
+            equals(POSVisualisation.handleSystemResetComplete(
+                "RST1789167927465|RESET_COMPLETE")),
+            "L external M3 reset completion accepted");
+        require(!POSVisualisation.isResetInProgressForTest() &&
+            "PO0002".equals(POSVisualisation.nextOrderIdForTest()),
+            "L external reset clears the order and restores purchasing");
+        require(POSVisualisation.handleSystemResetComplete(
+            "RST1789167927465|RESET_COMPLETE") == null,
+            "L duplicate external completion is idempotent");
+        require("PO0002".equals(POSVisualisation.nextOrderIdForTest()),
+            "L duplicate completion cannot retire a new order identity");
+        require(POSVisualisation.beginSystemReset("RST0001", 100L),
+            "L later POS reset can start normally");
+        require(POSVisualisation.handleSystemResetComplete(
+            "RST0001|RESET_COMPLETE") != null &&
+            !POSVisualisation.isResetInProgressForTest(),
+            "L later POS reset completes normally");
     }
 
     private static void require(boolean condition, String message) {

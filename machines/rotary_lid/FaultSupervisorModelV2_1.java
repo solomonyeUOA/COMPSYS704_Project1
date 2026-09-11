@@ -93,13 +93,9 @@ public final class FaultSupervisorModelV2_1 {
             clearActiveRecovery();
             latestStateVersion = -1;
         }
-        if (event.stateVersion < latestStateVersion) {
-            reject("STALE_STATE " + key);
-            return false;
-        }
         if (latestStateVersion >= 0 &&
-            event.stateVersion > latestStateVersion + 1) {
-            reject("STATE_SNAPSHOT_REQUIRED " + key);
+            event.stateVersion <= latestStateVersion) {
+            reject("STALE_STATE " + key);
             return false;
         }
         if (hasActiveRecovery() && activeEvent != null &&

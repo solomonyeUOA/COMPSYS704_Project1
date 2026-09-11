@@ -35,7 +35,6 @@ public final class CoordinatorStateV1 {
     public static int unloaderStatus = 0;
     public static int labellerStatus = 0;
     public static int sortPackStatus = 0;
-    private static java.math.BigInteger resetWatermark = java.math.BigInteger.valueOf(-1L);
     private static final java.util.Set<String> acceptedOrderIds = new java.util.HashSet<String>();
     private static long nextTwinContextMillis;
     private static long startOrderUntilMillis;
@@ -351,7 +350,6 @@ public final class CoordinatorStateV1 {
         long nowMillis
     ) {
         if (!isValidResetId(resetId) ||
-            new java.math.BigInteger(resetId.substring(3)).compareTo(resetWatermark) <= 0 ||
             processedSystemResetIds.contains(resetId) ||
             systemResetPendingExternalAck ||
             systemResetCompletionPending) {
@@ -359,7 +357,6 @@ public final class CoordinatorStateV1 {
         }
 
         activeSystemResetId = resetId;
-        resetWatermark = new java.math.BigInteger(resetId.substring(3));
         lastSystemResetId = resetId;
         retiredFtKeys.addAll(observedFtKeys);
         observedFtKeys.clear();
@@ -826,7 +823,6 @@ public final class CoordinatorStateV1 {
         observedFtKeys.clear();
         retiredFtKeys.clear();
         m2ResetEpoch = 0;
-        resetWatermark = java.math.BigInteger.valueOf(-1L);
         systemResetPendingExternalAck = false;
         systemResetCompletionPending = false;
         m2SystemResetAcknowledged = false;

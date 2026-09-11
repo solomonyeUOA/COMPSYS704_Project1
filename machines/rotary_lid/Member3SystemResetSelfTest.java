@@ -165,8 +165,12 @@ public final class Member3SystemResetSelfTest {
             "ACK must contain the unchanged resetId");
         require(M3SystemResetStateV1.accept("RST8201"),
             "duplicate reset must be idempotent");
-        require(!M3SystemResetStateV1.accept("RST8200"),
-            "older resetId must be rejected");
+        require(M3SystemResetStateV1.accept("RST0001"),
+            "new POS reset must be accepted after a timestamp resetId");
+        require("RST0001".equals(awaitAck()),
+            "second initiator must receive its correlated ACK");
+        require(!M3SystemResetStateV1.accept("RST8201"),
+            "completed resetId replay must be rejected");
         require(Member3PlantStateV1.loadBottle("M3-RST-B002"),
             "new production must work after reset");
     }
