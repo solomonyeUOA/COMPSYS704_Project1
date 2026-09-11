@@ -93,11 +93,18 @@ public final class SystemWatchdogV1 {
     }
 
     public static synchronized void onSystemResetAccepted(String resetId) {
+        onSystemResetAcceptedAt(resetId, System.currentTimeMillis());
+    }
+
+    static synchronized void onSystemResetAcceptedAt(
+        String resetId,
+        long nowMs
+    ) {
         if (resetId == null || resetId.equals(lastObservedResetId)) {
             return;
         }
         lastObservedResetId = resetId;
-        lastResetMs = System.currentTimeMillis();
+        lastResetMs = nowMs;
         resetInProgress = true;
         health = "RESETTING";
         action = "M1 reset received; waiting for M3 safe-state acknowledgement";

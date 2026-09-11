@@ -1,5 +1,7 @@
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.HashSet;
+import java.util.Set;
 
 /**
  * Single-owner Digital Twin store. It validates updates, rejects conflicting
@@ -14,8 +16,21 @@ public final class DigitalTwinStoreV1 {
         new LinkedHashMap<String, String>();
     private String batchContext = "-";
     private int rejectedUpdateCount;
+    private final Set<String> retiredWorkpieces = new HashSet<String>();
+    private final Set<String> retiredBatchContexts = new HashSet<String>();
+
+    /** Retain event/bottle tombstones while discarding runtime observations. */
+    public synchronized void resetRuntime() {
+        retiredWorkpieces.addAll(workpieces.keySet());
+        if (!"-".equals(batchContext)) { retiredBatchContexts.add(batchContext); }
+        workpieces.clear();
+        resources.clear();
+        batchContext = "-";
+        rejectedUpdateCount = 0;
+    }
 
     public synchronized boolean acceptBatchContext(String payload) {
+        if (retiredBatchContexts.contains(payload)) { return false; }
         String[] fields = payload == null ? new String[0] :
             payload.split("\\|", -1);
         if (fields.length != 7 || !"V1".equals(fields[0]) ||
@@ -25,8 +40,17 @@ public final class DigitalTwinStoreV1 {
             rejectedUpdateCount++;
             return false;
         }
-        int ratioA = Integer.parseInt(fields[3]);
-        int ratioB = Integer.parseInt(fields[4]);
+        int ratioA;
+        int ratioB;
+        try {
+            ratioA = Integer.parseInt(fields[3]);
+            ratioB = Integer.parseInt(fields[4]);
+            Integer.parseInt(fields[5]);
+        }
+        catch (NumberFormatException invalidNumber) {
+            rejectedUpdateCount++;
+            return false;
+        }
         if (ratioA > 100 || ratioB > 100 || ratioA + ratioB != 100) {
             rejectedUpdateCount++;
             return false;
@@ -53,6 +77,7 @@ public final class DigitalTwinStoreV1 {
             rejectedUpdateCount++;
             return false;
         }
+        if (retiredWorkpieces.contains(update.workpieceId)) { return false; }
         Boolean duplicate = duplicateResult(update.eventId, payload);
         if (duplicate != null) {
             if (!duplicate.booleanValue()) {
@@ -152,6 +177,70 @@ public final class DigitalTwinStoreV1 {
 
     public synchronized int getRejectedUpdateCount() {
         return rejectedUpdateCount;
+    }
+
+    public synchronized void recordRejectedUpdate() { rejectedUpdateCount++; }
+
+    /** Invalid or permanently regressive events cannot remain in the reorder queue. */
+    public synchronized boolean isWorkpieceUpdateObsolete(String payload) {
+        M2TwinUpdateV1.WorkpieceUpdate update = M2TwinUpdateV1.parseWorkpiece(payload);
+        WorkpieceTwin twin = workpieces.get(update.workpieceId);
+        if (retiredWorkpieces.contains(update.workpieceId)) { return true; }
+        if (twin == null) { return false; }
+        WorkpieceTwin.Stage current = twin.snapshot().stage;
+        WorkpieceTwin.Stage next = WorkpieceTwin.Stage.valueOf(update.eventType);
+        return current == WorkpieceTwin.Stage.COMPLETE ||
+            current == WorkpieceTwin.Stage.FAULT || next.ordinal() <= current.ordinal();
+    }
+
+    /** Observation transport may reorder stages; only consume a ready stage. */
+    public synchronized boolean isWorkpieceUpdateReady(String payload) {
+        M2TwinUpdateV1.WorkpieceUpdate update = M2TwinUpdateV1.parseWorkpiece(payload);
+        if (acceptedEvents.containsKey(update.eventId)) { return true; }
+        WorkpieceTwin twin = workpieces.get(update.workpieceId);
+        if (twin == null) { return "CREATED".equals(update.eventType); }
+        try {
+            return WorkpieceTwin.legalTransition(twin.snapshot().stage,
+                WorkpieceTwin.Stage.valueOf(update.eventType));
+        }
+        catch (IllegalArgumentException invalidStage) { return false; }
+    }
+
+    /** Full replaceable UI snapshot. Text tokens are UTF-8 URL encoded. */
+    public synchronized String visualisationSnapshot(String generation, long sequence) {
+        StringBuilder out = new StringBuilder("V2|TWIN|").append(generation)
+            .append('|').append(sequence).append("|W=").append(workpieces.size())
+            .append("|R=").append(resources.size()).append("|REJECTED=")
+            .append(rejectedUpdateCount).append("|WORKPIECES=");
+        boolean first = true;
+        for (WorkpieceTwin twin : workpieces.values()) {
+            if (!first) { out.append(';'); }
+            WorkpieceTwin.Snapshot s = twin.snapshot();
+            M2BottleContextV1 c = M2BottleContextV1.parse(s.bottleContext);
+            out.append(escape(s.workpieceId)).append(',').append(s.stage.name())
+                .append(',').append(escape(s.resourceId)).append(',').append(s.version)
+                .append(',').append(c.getSizeCode()).append(',').append(c.getCapacityMl());
+            first = false;
+        }
+        out.append("|RESOURCES=");
+        first = true;
+        for (ResourceTwin twin : resources.values()) {
+            if (!first) { out.append(';'); }
+            ResourceTwin.Snapshot s = twin.snapshot();
+            out.append(escape(s.resourceId)).append(',').append(escape(s.resourceType))
+                .append(',').append(escape(s.linkedWorkpieceId)).append(',').append(s.status)
+                .append(',').append(escape(s.operation)).append(',').append(escape(s.fault))
+                .append(',').append(s.version);
+            first = false;
+        }
+        return out.toString();
+    }
+
+    private static String escape(String value) {
+        try { return java.net.URLEncoder.encode(value, "UTF-8"); }
+        catch (java.io.UnsupportedEncodingException impossible) {
+            throw new IllegalStateException(impossible);
+        }
     }
 
     private boolean createWorkpiece(

@@ -1,5 +1,7 @@
 import java.util.Locale;
 import java.util.Properties;
+import java.util.Map;
+import java.util.HashMap;
 
 /** Batch-driven environment stimulus for the simulation-only M4 CD. */
 public final class RecognitionSimulatorStateV1 {
@@ -31,6 +33,8 @@ public final class RecognitionSimulatorStateV1 {
     private long bottleStartedMillis;
     private long nextRequestMillis;
     private String failure;
+    private final Map<String, String> processedBatches =
+        new HashMap<String, String>();
 
     /**
      * A legacy standalone run fixes one environmental size through
@@ -153,9 +157,9 @@ public final class RecognitionSimulatorStateV1 {
         // One batch identity owns one quantity and one size. Retrying the
         // same contract is idempotent; changing either field under the same
         // ID is a protocol conflict, never a silent re-parameterisation.
-        if (batchId.equals(activeBatchId)) {
-            return requestedQuantity == quantity &&
-                requestedSizeCode.equals(activeSizeCode) ?
+        String contract = requestedQuantity + "|" + requestedSizeCode;
+        if (processedBatches.containsKey(batchId)) {
+            return contract.equals(processedBatches.get(batchId)) ?
                 BatchStartResult.DUPLICATE : BatchStartResult.CONFLICT;
         }
         // Only a batch that is still running may block the next one. A
@@ -166,6 +170,7 @@ public final class RecognitionSimulatorStateV1 {
         }
 
         activeBatchId = batchId;
+        processedBatches.put(batchId, contract);
         activeSizeCode = requestedSizeCode;
         quantity = requestedQuantity;
         distributed = 0;
@@ -187,6 +192,9 @@ public final class RecognitionSimulatorStateV1 {
     ) {
         String[] fields = requestFields(payload);
         if (fields == null) {
+            return BatchStartResult.INVALID;
+        }
+        if (legacySizeCode == null && fields.length != 3) {
             return BatchStartResult.INVALID;
         }
         try {
@@ -315,6 +323,11 @@ public final class RecognitionSimulatorStateV1 {
     }
 
     public static synchronized boolean acceptBatchRequest(String payload) {
+        if (runtime == null) { return false; }
+        if (M4ResetFenceV1.isQuarantined()) {
+            runtime.retireBatchPayload(payload);
+            return false;
+        }
         BatchStartResult result = runtime.startBatchPayload(
             payload,
             System.currentTimeMillis()
@@ -356,6 +369,7 @@ public final class RecognitionSimulatorStateV1 {
     }
 
     public static synchronized String nextRequest() {
+        if (M4ResetFenceV1.isQuarantined() || runtime == null) { return null; }
         String bottleId = runtime.currentBottleId();
         int before = runtime.distributedCount();
         boolean distributed = bottleId != null &&
@@ -393,6 +407,7 @@ public final class RecognitionSimulatorStateV1 {
         long firstBottleMillis
     ) {
         activeBatchId = prefix;
+        processedBatches.put(prefix, configuredQuantity + "|" + legacySizeCode);
         activeSizeCode = legacySizeCode;
         quantity = configuredQuantity;
         distributed = 0;
@@ -409,6 +424,54 @@ public final class RecognitionSimulatorStateV1 {
         terminalLogged = false;
     }
 
+    /** Cancel a cycle, retaining every batch identity for the JVM lifetime. */
+    public void cancelForSystemReset() {
+        for (String batch : processedBatches.keySet()) {
+            M4ResetFenceV1.retirePrefix(batch + "-B");
+        }
+        if (legacyIdentifiers && legacyBottleIdPrefix != null) {
+            M4ResetFenceV1.retirePrefix(legacyBottleIdPrefix);
+        }
+        activeBatchId = null;
+        activeSizeCode = null;
+        quantity = 0;
+        distributed = 0;
+        batchActive = false;
+        requestActive = false;
+        legacyIdentifiers = false;
+        legacyBottleIdPrefix = null;
+        nextBottleMillis = 0L;
+        bottleStartedMillis = 0L;
+        nextRequestMillis = 0L;
+        failure = null;
+    }
+
+    public static synchronized void resetForSystem() {
+        if (runtime != null) { runtime.cancelForSystemReset(); }
+        resetRuntimeLogging();
+    }
+
+    /** Requests delivered during quarantine cannot restart after the ACK. */
+    private void retireBatchPayload(String payload) {
+        String[] fields = requestFields(payload);
+        if (fields == null || (legacySizeCode == null && fields.length != 3)) {
+            return;
+        }
+        try {
+            M4ProtocolV1.validateBottleId(fields[0]);
+            int requested = M4ProtocolV1.unsignedInteger(fields[1], "quantity");
+            String size = fields.length == 3 ? fields[2] : defaultSizeCode();
+            if (requested < 1 || !isSupportedSize(size)) { return; }
+            if (!processedBatches.containsKey(fields[0])) {
+                processedBatches.put(fields[0], requested + "|" + size);
+            }
+            M4ResetFenceV1.retirePrefix(fields[0] + "-B");
+        }
+        catch (IllegalArgumentException invalid) {
+            // Invalid requests have no admissible identity to resurrect.
+        }
+    }
+
     private String defaultSizeCode() {
         return legacySizeCode == null ?
             M4BottleContextV1.SMALL : legacySizeCode;
@@ -421,8 +484,8 @@ public final class RecognitionSimulatorStateV1 {
 
     /**
      * Splits M1's canonical batchId|quantity|sizeCode request. The old
-     * two-field form is still parsed so a Coordinator build that does not
-     * publish a size yet keeps working; it takes the default size. Returns
+     * two-field form is retained exclusively for standalone legacy mode;
+     * startBatchPayload rejects it for the integrated receiver. Returns
      * null when the payload is neither shape.
      */
     private static String[] requestFields(String payload) {

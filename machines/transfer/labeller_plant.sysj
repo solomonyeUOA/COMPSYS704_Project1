@@ -12,10 +12,13 @@ LabellerPlant(
 
     {loop {
         present(LABEL_CMD) {
-            M2PlantStateV1.commandLabel(
+            if (M2PlantStateV1.commandLabel(
                 #LABEL_CMD,
                 System.currentTimeMillis()
-            );
+            )) {
+                M2MachineStateV1.acknowledgeLabelCommand(
+                    (#LABEL_CMD).split("\\|", -1)[0]);
+            }
         }
         present(INJECT_LABEL_VERIFY_FAULT) {
             M2PlantStateV1.setLabelVerificationFault(true);
@@ -24,7 +27,7 @@ LabellerPlant(
             M2PlantStateV1.setLabelVerificationFault(false);
         }
         M2PlantStateV1.tickLabeller(System.currentTimeMillis());
-        String verification = M2PlantStateV1.takeLabelVerification();
+        String verification = M2PlantStateV1.nextLabelVerificationOffer();
         if (verification != null) {
             emit LABEL_VERIFIED(verification);
         }

@@ -43,4 +43,10 @@ public final class M4BoundedEventV1 {
     public boolean isPending() {
         return remaining > 0;
     }
+
+    public void cancel() {
+        payload = null;
+        remaining = 0;
+        nextCopyMs = 0L;
+    }
 }

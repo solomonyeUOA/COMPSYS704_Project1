@@ -17,6 +17,9 @@ ABSVisualisationPlant(
     // Optional M1 IP-only projection of Coordinator-observed M3 evidence.
     input String signal VIZ_FT_EVIDENCE;
     input String signal VIZ_SYSTEM_RESET;
+    input Integer signal VIZ_LABELLER_STATUS;
+    input Integer signal VIZ_SORT_PACK_STATUS;
+    input String signal VIZ_TWIN_SNAPSHOT;
 )
 ->{
     ABSVisualisation.start();
@@ -88,5 +91,17 @@ ABSVisualisationPlant(
     ||
     {loop {present(VIZ_SYSTEM_RESET) {
         ABSVisualisation.resetSystem(#VIZ_SYSTEM_RESET);
+    } pause;}}
+    ||
+    {loop {present(VIZ_LABELLER_STATUS) {
+        ABSVisualisation.updateLabellerStatus(#VIZ_LABELLER_STATUS);
+    } pause;}}
+    ||
+    {loop {present(VIZ_SORT_PACK_STATUS) {
+        ABSVisualisation.updateStatus("Sort / Pack", #VIZ_SORT_PACK_STATUS);
+    } pause;}}
+    ||
+    {loop {present(VIZ_TWIN_SNAPSHOT) {
+        ABSVisualisation.updateTwinSnapshot(#VIZ_TWIN_SNAPSHOT);
     } pause;}}
 }

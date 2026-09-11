@@ -1,6 +1,7 @@
 // M2 side of the frozen V2.1 four-message transfer-fault protocol.
 
 M2TransferFaultAdapter(
+    input String signal M2_SYSTEM_RESET;
     input String signal LOCAL_TRANSFER_FAULT;
     input String signal TRANSFER_RECOVERY_REQUEST;
     input String signal LOCAL_RECOVERY_EVIDENCE;
@@ -9,11 +10,15 @@ M2TransferFaultAdapter(
     output String signal TRANSFER_RECOVERY_ACK;
     output String signal TRANSFER_RECOVERY_RESULT;
     output String signal LOCAL_RECOVERY_INTENT;
+    output String signal M2_SYSTEM_RESET_ACK;
 )
 ->{
     System.out.println("M2 M2TransferFaultAdapterCD started");
 
     {loop {
+        present(M2_SYSTEM_RESET) {
+            M2SystemResetStateV1.request(#M2_SYSTEM_RESET);
+        }
         present(LOCAL_TRANSFER_FAULT) {
             M2TransferFaultAdapterStateV2_1.onLocalFault(
                 #LOCAL_TRANSFER_FAULT
@@ -33,6 +38,12 @@ M2TransferFaultAdapter(
     }}
     ||
     {loop {
+        M2SystemResetStateV1.tick();
+        String resetAck = M2SystemResetStateV1.takeAck();
+        if (resetAck != null) {
+            emit M2_SYSTEM_RESET_ACK(resetAck);
+            System.out.println("M2 SYSTEM_RESET safe ACK=" + resetAck);
+        }
         String event =
             M2TransferFaultAdapterStateV2_1.takeFaultEvent();
         if (event != null) {

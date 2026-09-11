@@ -147,6 +147,19 @@ public final class SortPackPlantModelV1 {
         lastAcceptedCommand = null;
     }
 
+    public void resetForSystem() {
+        // Stop the simulated route/place drive before clearing its identity.
+        stage = Stage.IDLE;
+        boolean remainingPackage = packagePresent;
+        clearFaults();
+        packagePresent = remainingPackage;
+        stageStartMs = 0L;
+    }
+
+    public boolean isSystemResetSafe() {
+        return stage == Stage.IDLE && feedback.isEmpty();
+    }
+
     private void fault(String bottleId, String reason) {
         stage = Stage.FAULT;
         feedback.add(bottleId + "|FAULT|" + reason);

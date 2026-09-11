@@ -33,9 +33,13 @@ LabellerController(
             }
         }
         present(LABEL_VERIFIED) {
-            if (!M2MachineStateV1.acceptLabelVerification(
+            if (M2MachineStateV1.acceptLabelVerification(
                 #LABEL_VERIFIED
             )) {
+                M2PlantStateV1.acknowledgeLabelVerification(
+                    (#LABEL_VERIFIED).split("\\|", -1)[0]);
+            }
+            else {
                 System.out.println("M2 Labeller rejected LABEL_VERIFIED");
             }
         }
@@ -59,7 +63,7 @@ LabellerController(
     }}
     ||
     {loop {
-        String command = M2MachineStateV1.takeLabelCommand();
+        String command = M2MachineStateV1.nextLabelCommandOffer();
         if (command != null) {
             emit LABEL_CMD(command);
         }

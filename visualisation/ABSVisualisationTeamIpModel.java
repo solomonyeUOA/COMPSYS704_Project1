@@ -1,8 +1,8 @@
 /**
  * Read-only presentation model for the team Individual Project extensions.
  *
- * M2 and M4 expose capability information because their live snapshots are
- * not part of the M1 Visualisation interface. M3 evidence is accepted only
+ * M2 snapshots expose confirmed workpiece/resource state and M4 size profiles.
+ * M3 evidence is accepted only
  * from the Coordinator's display-only VIZ_FT_EVIDENCE signal. This class has
  * no command, actuator or recovery output.
  */
@@ -123,6 +123,7 @@ final class ABSVisualisationTeamIpModel {
     private String m3SafeStop = "--";
     private String m3Recovery = "--";
     private Snapshot published;
+    private ABSLiveTwinModel.Snapshot twin;
 
     ABSVisualisationTeamIpModel() {
         publish();
@@ -161,6 +162,38 @@ final class ABSVisualisationTeamIpModel {
         return published;
     }
 
+    synchronized void acceptTwinEvidence(ABSLiveTwinModel.Snapshot evidence) {
+        if (twin == evidence) return;
+        twin = evidence;
+        publish();
+    }
+
+    private String[] twinLines() {
+        if (twin == null) return new String[] {
+            "No current bottle or resource location is inferred.",
+            "Waiting for a live DigitalTwinCD snapshot."
+        };
+        return new String[] {
+            "Workpieces: " + twin.workpieceCount() + " | Resources: " + twin.resourceCount(),
+            "Rejected updates: " + twin.rejected,
+            "Reset generation: " + twin.generation + " | Snapshot: " + twin.sequence,
+            "Open the live tables for bottle identity, stage, size and resource state."
+        };
+    }
+
+    private String[] sizeLines() {
+        if (twin == null) return new String[] {
+            "No symbolic bottle is guessed to be S or L.",
+            "Waiting for confirmed bottle contexts from DigitalTwinCD."
+        };
+        java.util.List<String> lines = new java.util.ArrayList<String>();
+        for (String[] row : twin.workpieces()) {
+            lines.add(row[0] + ": " + row[4] + " / " + row[5] + " mL / " + row[1]);
+        }
+        if (lines.isEmpty()) lines.add("No current workpiece contexts (empty/reset state).");
+        return lines.toArray(new String[lines.size()]);
+    }
+
     private void publish() {
         version++;
         ExtensionSnapshot[] values = new ExtensionSnapshot[EXTENSION_COUNT];
@@ -183,14 +216,12 @@ final class ABSVisualisationTeamIpModel {
                 "Immutable snapshots reject duplicate or invalid updates",
                 "Dedicated read-only viewer available on DigitalTwinViewerCD"
             },
-            false,
-            "LIVE SNAPSHOT NOT EXPOSED TO M1",
-            new String[] {
-                "No current bottle or resource location is inferred.",
-                "This card represents the implemented M2 capability."
-            },
-            "Capability representation only | " +
-                "No live Twin snapshot consumed"
+            twin != null,
+            twin == null ? "AWAITING LIVE SNAPSHOT" :
+                "LIVE: " + twin.workpieceCount() + " BOTTLES / " + twin.resourceCount() + " RESOURCES",
+            twinLines(),
+            twin == null ? "Capability representation only | Awaiting live Twin snapshot" :
+                "Live DigitalTwinCD snapshot | Confirmed events only"
         );
         values[M3_FAULT_TOLERANCE] = new ExtensionSnapshot(
             "M3",
@@ -239,14 +270,11 @@ final class ABSVisualisationTeamIpModel {
                 "LARGE: L / 500 mL / GEOM_L / PACK_L",
                 "Recognition -> context -> fill/cap geometry -> sort/pack"
             },
-            false,
-            "CURRENT LIVE SIZE NOT EXPOSED TO M1",
-            new String[] {
-                "No symbolic bottle is guessed to be S or L.",
-                "RecognitionSimulator is environment stimulus, not the IP."
-            },
-            "Capability/profile representation only | " +
-                "No live size telemetry consumed"
+            twin != null,
+            twin == null ? "AWAITING LIVE SIZE CONTEXT" : "LIVE SIZE CONTEXTS: " + twin.workpieceCount(),
+            sizeLines(),
+            twin == null ? "Capability/profile representation only | Awaiting live size telemetry" :
+                "Live bottle size/capacity from confirmed Registry context via DigitalTwinCD"
         );
         published = new Snapshot(version, values);
     }

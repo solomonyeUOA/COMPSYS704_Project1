@@ -12,6 +12,12 @@ public final class Member3PlantStateV1 {
         new BoundedSignalOfferV1(3);
     private static BoundedSignalOfferV1 capOffer =
         new BoundedSignalOfferV1(3);
+    private static final java.util.Queue<String> twinOutbox =
+        new java.util.ArrayDeque<String>();
+    private static BoundedSignalOfferV1 twinOffer =
+        new BoundedSignalOfferV1(3);
+    private static long twinEventSequence;
+    private static String pendingP6ClearId;
 
     private Member3PlantStateV1() {
     }
@@ -22,6 +28,10 @@ public final class Member3PlantStateV1 {
         fillOffer = new BoundedSignalOfferV1(3);
         labelOffer = new BoundedSignalOfferV1(3);
         capOffer = new BoundedSignalOfferV1(3);
+        twinOutbox.clear();
+        twinOffer = new BoundedSignalOfferV1(3);
+        twinEventSequence = 0L;
+        pendingP6ClearId = null;
         retiredBottleIds.clear();
     }
 
@@ -36,6 +46,9 @@ public final class Member3PlantStateV1 {
         fillOffer = new BoundedSignalOfferV1(3);
         labelOffer = new BoundedSignalOfferV1(3);
         capOffer = new BoundedSignalOfferV1(3);
+        twinOutbox.clear();
+        twinOffer = new BoundedSignalOfferV1(3);
+        pendingP6ClearId = null;
     }
 
     public static synchronized boolean isResetSafe() {
@@ -107,7 +120,13 @@ public final class Member3PlantStateV1 {
         if (M3SystemResetStateV1.isQuarantined()) {
             return false;
         }
-        return rotary.markLidPlaced(bottleId);
+        boolean accepted = rotary.markLidPlaced(bottleId);
+        if (accepted) {
+            twinOutbox.add("V1|W|M3-LID-" + (++twinEventSequence) +
+                "|" + bottleId + "|LIDDED|LID-1|-|" +
+                System.currentTimeMillis());
+        }
+        return accepted;
     }
 
     public static synchronized boolean markCapped(String bottleId) {
@@ -128,6 +147,10 @@ public final class Member3PlantStateV1 {
         boolean accepted = rotary.markLabelled(bottleId);
         if (accepted) {
             labelOffer.acknowledge(bottleId);
+            if (bottleId.equals(pendingP6ClearId) &&
+                rotary.clearP6(bottleId)) {
+                pendingP6ClearId = null;
+            }
         }
         return accepted;
     }
@@ -136,7 +159,17 @@ public final class Member3PlantStateV1 {
         if (M3SystemResetStateV1.isQuarantined()) {
             return false;
         }
-        return rotary.clearP6(bottleId);
+        if (rotary.clearP6(bottleId)) {
+            pendingP6ClearId = null;
+            return true;
+        }
+        String atP6 = rotary.positionLabel(5);
+        if (atP6.startsWith(bottleId + "[") &&
+            !atP6.equals(bottleId + "[FLCB]")) {
+            pendingP6ClearId = bottleId;
+            return true;
+        }
+        return false;
     }
 
     public static synchronized void setAlignmentFault(boolean active) {
@@ -311,5 +344,16 @@ public final class Member3PlantStateV1 {
 
     public static synchronized void cancelLidAction() {
         lid.cancelAction();
+    }
+
+    public static synchronized String nextTwinObservation() {
+        if (M3SystemResetStateV1.isQuarantined()) {
+            return null;
+        }
+        if (!twinOffer.isActive() && !twinOutbox.isEmpty()) {
+            String payload = twinOutbox.remove();
+            twinOffer.arm(payload.split("\\|", -1)[2], payload);
+        }
+        return twinOffer.nextReactionValue();
     }
 }

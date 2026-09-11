@@ -53,10 +53,9 @@ ConveyorController(
         }
 
         String transferContext =
-            M2MachineStateV1.takeConveyorTransferContext();
+            M2MachineStateV1.nextConveyorTransferOffer();
         if (transferContext != null) {
             emit CONVEYOR_TRANSFER(transferContext);
-            M2MachineStateV1.startConveyor(System.currentTimeMillis());
         }
         emit MOTOR_CMD(M2MachineStateV1.isConveyorMotorEnabled());
 

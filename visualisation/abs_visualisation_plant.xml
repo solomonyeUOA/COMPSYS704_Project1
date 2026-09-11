@@ -3,6 +3,9 @@
     <SubSystem Name="ABS_VISUALISATION_SS" Local="true">
         <ClockDomain Name="ABSVisualisationPlantCD"
                      Class="ABSVisualisationPlant">
+            <iSignal Name="VIZ_SORT_PACK_STATUS" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="11008" />
+            <iSignal Name="VIZ_LABELLER_STATUS" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="11008" />
+            <iSignal Name="VIZ_TWIN_SNAPSHOT" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="11008" />
             <iSignal Name="VIZ_LOADER_STATUS"
                      Class="com.systemj.ipc.SimpleServer"
                      IP="127.0.0.1" Port="11008" />

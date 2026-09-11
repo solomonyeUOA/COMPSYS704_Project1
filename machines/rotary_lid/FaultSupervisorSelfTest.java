@@ -487,17 +487,31 @@ public final class FaultSupervisorSelfTest {
 
     private static void testMonitoringSnapshot() {
         FaultSupervisorStateV2_1.reset();
+        SystemWatchdogV1.resetForTest(System.currentTimeMillis());
         FaultMonitoringStateV2_1.heartbeat(
             FaultMonitoringStateV2_1.SUPERVISOR, true, "IDLE"
         );
         FaultMonitoringStateV2_1.heartbeat(
+            FaultMonitoringStateV2_1.ROTARY_CONTROLLER, true, "READY"
+        );
+        FaultMonitoringStateV2_1.heartbeat(
+            FaultMonitoringStateV2_1.ROTARY_PLANT, true, "READY"
+        );
+        FaultMonitoringStateV2_1.heartbeat(
+            FaultMonitoringStateV2_1.LID_CONTROLLER, true, "READY"
+        );
+        FaultMonitoringStateV2_1.heartbeat(
+            FaultMonitoringStateV2_1.LID_PLANT, true, "IDLE"
+        );
+        FaultMonitoringStateV2_1.heartbeat(
             FaultMonitoringStateV2_1.GUI_WORKER, true, "TEST"
         );
+        SystemWatchdogV1.tickForTest(System.currentTimeMillis() + 500L);
         FaultMonitoringStateV2_1.Snapshot idle =
             FaultMonitoringStateV2_1.snapshot();
         require("HEALTHY".equals(idle.systemHealth),
             "idle monitored M3 scope is healthy");
-        require(idle.components.length == 9,
+        require(idle.components.length == 10,
             "global monitoring exposes every declared component boundary");
         require("IDLE".equals(FaultMonitoringPresentationV2_1.displayState(
             component(idle, FaultMonitoringStateV2_1.SUPERVISOR), idle
@@ -528,7 +542,7 @@ public final class FaultSupervisorSelfTest {
         ), "monitoring test accepts transfer fault");
         FaultMonitoringStateV2_1.Snapshot fault =
             FaultMonitoringStateV2_1.snapshot();
-        require("DEGRADED".equals(fault.systemHealth),
+        require("WARNING".equals(fault.systemHealth),
             "isolated recoverable fault degrades rather than crashes the system");
         require(fault.faults == 1 && fault.maximumAttempts == 1,
             "fault snapshot exposes active fault and bounded retry budget");

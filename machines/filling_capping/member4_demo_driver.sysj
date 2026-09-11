@@ -9,6 +9,8 @@ Member4DemoDriver(
     input Integer signal CAPPER_STATUS;
     input String signal MARK_FILLED;
     input String signal MARK_CAPPED;
+    input String signal M4_SYSTEM_RESET_ACK;
+    input String signal M4_WORKPIECE_OBSERVATION;
 
     output String signal BOTTLE_RECOGNISED;
     output Integer signal FILL_A_RATIO;

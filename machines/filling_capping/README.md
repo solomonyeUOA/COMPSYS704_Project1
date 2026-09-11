@@ -43,7 +43,7 @@ different bottle.
 | `FillerAControllerCD` | 11004 | `FILL_A_RATIO`, `FILLER_A_STATUS_REQUEST`, `BOTTLE_AT_FILL`, Plant feedback |
 | `FillerBControllerCD` | 11005 | `FILL_B_RATIO`, `FILLER_B_STATUS_REQUEST`, `FILL_A_DONE`, Plant feedback |
 | `CapperControllerCD` | 11007 | `CAPPER_STATUS_REQUEST`, `BOTTLE_AT_CAP`, Plant feedback |
-| `BottleContextRegistryCD` | 11011 | `BOTTLE_RECOGNISED` |
+| `BottleContextRegistryCD` | 11011 | `BOTTLE_RECOGNISED`, `M4_SYSTEM_RESET` |
 | `SortPackControllerCD` | 11012 | `BOTTLE_READY_FOR_SORT`, Plant feedback |
 | `FillerAPlantCD` | 12004 | Filler A commands / test fault injection |
 | `FillerBPlantCD` | 12005 | Filler B commands / test fault injection |
@@ -87,6 +87,42 @@ uses the real M2 peers.
   gaps for the course runtime; state models de-duplicate them by bottle and
   payload, so they represent one logical idempotent event.
 
+## Whole-system reset and live twin observations
+
+`BottleContextRegistryCD:11011` receives `M4_SYSTEM_RESET(resetId)`, accepting
+only `RST[0-9]{4,}`. It first quarantines recognition, batch requests, contexts,
+commands and feedback. Filler injector/inlet valves and dose movement stop;
+Sort/Pack stops; the Capper stops gripping/twisting and confirms home, raised,
+then unclamped in separate timed plant steps. Only after all safe-state checks
+pass does `M4_SYSTEM_RESET_ACK(resetId)` go to `CoordinatorCD:11001`.
+
+Reset cancels every pending command, feedback, context and twin transport
+window. Registry bottle tombstones and the simulator's complete batch ledger
+survive; bottles from retired batches, including not-yet-issued bottle IDs,
+cannot revive. Requests arriving during quarantine are retired too. A duplicate
+reset resends its ACK without clearing new work; older reset IDs are rejected.
+The simulator returns to IDLE and accepts a new S/L batch with a new batch ID.
+The actuator evidence is from the simulated plant; physical hardware still
+requires its corresponding limit switches and safe-motion confirmation.
+
+Actual Filler B, Capper and Sort/Pack completions queue `FILLED`, `CAPPED` and
+`SORTED` workpiece observations. The registry sends them to
+`DigitalTwinCD.M4_WORKPIECE_OBSERVATION:14002` using `OptionalSimpleClient`:
+
+```text
+V1|W|M4-E01-<sequence>|<bottleId>|<stage>|<resource>|-|<timestampMillis>
+```
+
+Resources are `FILLER_B`, `CAPPER` and `SORT_PACK`, respectively. Each queued
+event has five identical copies separated by 50 ms, with stable event ID and
+timestamp. A later completion cannot overwrite an earlier pending event.
+The event sequence remains monotonic across system resets. These observations
+describe actual completion evidence, independently of visualization animation.
+
+`Member4SystemResetSelfTest` verifies actuator ordering before ACK, retirement
+and quarantine, canceled offers, duplicate/stale resets, S/L restart, and
+the complete queued observation stream across multiple resets.
+
 ## Build and verify
 
 First use the frozen Temurin 8u502 toolchain and verify the JARs as described
@@ -114,7 +150,8 @@ java -cp "/path/to/COMPSYS704_Lab_3/lib/*" \
 
 javac -cp "/path/to/COMPSYS704_Lab_3/lib/*" \
   -d build/member4-classes \
-  build/member4-generated/*.java machines/filling_capping/*.java
+  build/member4-generated/*.java machines/filling_capping/*.java \
+  common/OptionalSimpleClient.java
 
 java -cp "build/member4-classes:/path/to/COMPSYS704_Lab_3/lib/*" \
   Member4ModelSelfTest
@@ -170,8 +207,9 @@ Generated Java and class files are build artifacts and must not be committed.
 
 `RecognitionSimulatorCD` supplies the environmental stimulus that a physical
 camera/size sensor would provide. It is included only in
-`member4_simulation.xml`; canonical `member4_system.xml` remains unchanged and
-has no automatic source. `RECOGNITION_REQUEST` remains internal to M4.
+`member4_simulation.xml`. The canonical `member4_system.xml` still has no
+automatic recognition source, although this draft adds reset/twin and status
+integration to that XML. `RECOGNITION_REQUEST` remains internal to M4.
 
 Use these two simulation mappings together:
 
@@ -193,18 +231,18 @@ PO0002-P01|2|L
 mix both bottle types, and the recognition request M4 generates for that
 batch carries it as `<bottleId>|S` or `<bottleId>|L`.
 
-M1 sends at most three identical copies about 600 ms apart and inserts an
-`ABSENT` reaction after every pulse. M4 accepts one logical batch
+M1 sends at most three identical copies, each PRESENT for 200 ms with a
+600 ms ABSENT gap between copies. M4 accepts one logical batch
 idempotently, generates `PO0001-P01-B001` through `PO0001-P01-B003`, then
 waits for a different batch. The same ID with the same quantity and the same
 size never restarts; the same ID with a different quantity **or** a different
 size is a protocol conflict; a different ID cannot interleave while a batch is
 active. A request whose size code is neither `S` nor `L` is `INVALID`.
 
-A two-field `batchId|quantity` request from a Coordinator build that does not
-publish a size yet is still parsed and takes the default `S` profile, logged
-as a legacy request. This is transitional only; M1's canonical simulation
-payload is three fields.
+The integrated receiver strictly rejects two-field `batchId|quantity`
+requests. That form remains supported only by the standalone legacy Java
+entry point, where the configured `m4.sim.size` supplies the size. Integrated
+requests always carry exactly three fields, including `S` or `L`.
 
 Launch M4 integrated simulation without quantity or size VM arguments:
 

@@ -20,6 +20,7 @@ RotaryTablePlant(
     output String signal BOTTLE_AT_FILL;
     output String signal BOTTLE_AT_CAP;
     output String signal BOTTLE_AT_LABEL;
+    output String signal M3_WORKPIECE_OBSERVATION;
 )
 ->{
     Member3Visualisation.start();
@@ -131,6 +132,10 @@ RotaryTablePlant(
         String labelOffer = Member3PlantStateV1.nextLabelOfferWindow();
         if (labelOffer != null) {
             emit BOTTLE_AT_LABEL(labelOffer);
+        }
+        String twinObservation = Member3PlantStateV1.nextTwinObservation();
+        if (twinObservation != null) {
+            emit M3_WORKPIECE_OBSERVATION(twinObservation);
         }
         }
         pause;

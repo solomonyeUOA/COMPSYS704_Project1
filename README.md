@@ -1,4 +1,102 @@
-# COMPSYS704 Project 1 - Development Integration Baseline
+# COMPSYS704 Project 1 - M1-M4 Integration Draft
+
+This branch proposes the complete M1/M2/M3/M4 simulation integration for the
+team repository `COMPSYS704_Project1`, based on team main `42317b9` (PR #18).
+It imports the reset/twin and finishing-stage fixes previously tested in
+`COMPSYS704_Project1_1` at `4922537` and `a179761`. It is a draft for all four
+members to review, not an assertion that the team has approved every change.
+
+## Run locally (Windows)
+
+In PowerShell:
+
+```powershell
+cd D:\Auckland_University\COMPSYS_704\Project1\github
+python tools\project.py test
+python tools\project.py run --no-build
+```
+
+The first command verifies Java 8 and the Lab3 SystemJ JARs, compiles the project,
+and runs regression tests. The second launches all six real simulation runtimes,
+including POS, the ABS visualization and M3 fault GUI. Enter products in POS and
+submit. Stop **all** runtimes with Ctrl+C in the launching terminal. Alternatively,
+double-click `run-project.bat` to build and open the interactive simulation.
+
+Open the **M2 Digital Twin** card in ABS visualization, then **Live workpieces**
+or **Live resources**. Workpieces show bottle ID, confirmed stage, resource,
+version and S/200 mL or L/500 mL profile. Resource rows include machine ID/type,
+linked bottle, status, operation, fault and version. M2 resources have live
+controller observations; upstream `OBSERVED_*` rows are last confirmed completed
+operations, not a continuous actuator-state feed. The existing overview animation
+remains symbolic; neither twin table controls machines.
+
+The launcher defaults to ports **+10000** (e.g. Coordinator 21001), because this
+PC has an unrelated service on canonical port 11001. It remaps every XML in a
+generated run directory without changing source XML. Use `--port-offset 20000`
+for a second isolated run. Logs remain under `build/runs/<timestamp>`.
+
+The default paths match M2's PC: Adoptium JDK `8.0.502.7` and its Lab3 `lib`
+folder. On another computer, use your own paths to the same pinned Java 8 and
+SystemJ JARs; the compiler is not bundled in this repository. For example:
+
+```powershell
+$env:PROJECT_JAVA_HOME = 'C:\path\to\jdk8u502'
+$env:SYSTEMJ_LIB = 'D:\path\to\COMPSYS704_Lab_3\lib'
+python tools\project.py test
+python tools\project.py run --no-build
+```
+
+Alternatively pass `--java-home` and `--systemj-lib` to each command. The
+launcher verifies the pinned JAR checksums before running. Eclipse is optional;
+no IDE reconfiguration is required. See [the toolchain lock](toolchain/README.md).
+
+See [the reset/twin integration notes](integration/RESET_TWIN_INTEGRATION.md)
+for scope, reproducible live checks and limitations.
+
+### Finishing stages and repeated orders (QA M2-8 / M2-9 / M2-10)
+
+The overall view now shows the complete finishing sequence:
+**Lid Loader -> Capper -> Labeller -> Bottle Unloader -> Sort / Pack**.
+Labeller and Sort / Pack each have a status badge and a clickable read-only
+detail view. The dashed downstream placeholder is no longer used. Sort / Pack
+status comes from its actual Controller through the Coordinator; GP unloading
+completion is not treated as proof that sorting has finished.
+
+There is **no two-order submission limit**. Submit Order is disabled while one
+order is active, then becomes available when that order completes. The previous
+stall was a labeller completion-drain bug, not a POS limit: if `UNLOAD_READY`
+was consumed before `MARK_LABELLED`, the labeller could remain DONE and refuse
+the next bottle. It now rearms only after both outputs have been consumed,
+in either order, and its ResourceTwin returns to READY at that same transition.
+Live testing also exposed missed one-reaction machine commands/confirmations
+and simulation batch requests. These now use bounded retained transmissions;
+duplicate bottle identities cannot trigger the same physical operation twice.
+You do not need Reset System between successfully completed orders. Resource
+limits still apply (for example the lid magazine must eventually be refilled).
+
+After pulling source changes, rebuild before using `--no-build`:
+
+```powershell
+python tools\project.py test
+python tools\project.py run --no-build
+```
+
+Repeated-order acceptance (five mixed S/L orders, 15 bottle twins):
+
+```powershell
+python tools\project.py run --no-build --headless --order 'PO0001|2|P1,S,60,40,1;P2,L,50,50,2' --order-count 5 --duration 115 --expect-completions 5 --expect-workpieces 15
+```
+
+To check the actual GUI animation through all ten stages, leave the ABS window
+open until this test stops its six runtimes automatically:
+
+```powershell
+python tools\project.py run --no-build --order 'PO0001|1|P1,L,60,40,3' --duration 120 --expect-completions 1 --expect-workpieces 3 --expect-visual-completions 3
+```
+
+The overview is a symbolic animation and can catch up after the real GP count
+increases. A new batch replaces the previous batch's symbolic view; use the
+BottleTwin and ResourceTwin tables for retained confirmed records.
 
 This repository is the current development-stage integration baseline for the
 Automated Bottling System (ABS). It contains M1's Swing POS, Coordinator and
@@ -22,7 +120,7 @@ agreed and applied consistently to source, XML and tests.
   `RotaryTableControllerCD:11003` with separate `CONVEYOR_*` and `ROTARY_*`
   status interfaces.
 - `MockControllerCD` remains a regression fixture and is not a production
-  substitute for the eight real Machine Controllers.
+  substitute for the real Machine Controllers.
 - M3 owns `RotaryTableControllerCD:11003`, `LidLoaderControllerCD:11006`,
   `RotaryTablePlantCD:12003`, `LidLoaderPlantCD:12006` and
   `FaultSupervisorCD:13003`.
@@ -36,6 +134,26 @@ agreed and applied consistently to source, XML and tests.
   actuators or physical Plant state.
 - The obsolete combined `TransportControllerCD` / `TRANSPORT_*` status
   boundary is not part of the current M1 architecture.
+
+## Draft PR member review
+
+- [ ] M1: review Coordinator reset/batch delivery, ten-stage Swing overview,
+  and read-only BottleTwin/ResourceTwin tables. This PR extends the current
+  Swing UI; the separate, unmerged Web3D prototype is not imported. Agree its
+  future telemetry/UI compatibility before combining those branches.
+- [ ] M2: review label verification, bounded identity-preserving handoffs,
+  repeated-order rearming, safe reset and both twin stores.
+- [ ] M3: review simulated rotary/lid reset reconciliation, retained identity
+  fences and confirmed LIDDED observations.
+- [ ] M4: review safe filling/capping/sort reset, S/L context, confirmed twin
+  observations and Sort/Pack telemetry.
+- [ ] All members: rebuild, repeat the live checks, inspect cross-member
+  interfaces and agree the documented simulation limits before marking ready.
+
+The [verification notes](integration/RESET_TWIN_INTEGRATION.md) distinguish
+historical `github_1` GUI checks from new team-checkout checks: 31 suites,
+five consecutive mixed orders / 15 completed bottles, and active reset
+followed by fresh production all passed on this integration branch.
 
 ## Start here
 
@@ -102,8 +220,8 @@ cycle.
 For integrated simulation, each accepted product batch also publishes the
 simulation-only signal `M4_SIM_BATCH_REQUEST:String` as
 `<orderId>-P<two-digit product index>|<quantity>|<sizeCode>`. The Coordinator
-sends three identical bounded copies about 600 ms apart with an `ABSENT`
-reaction between copies. This does not replace `START_ORDER` or change
+sends three identical bounded copies, each PRESENT for 200 ms with 600 ms
+ABSENT gaps between copies. This does not replace `START_ORDER` or change
 Controller ownership. The current M4 `RecognitionSimulatorCD` consumes the
 third field, de-duplicates identical retries, rejects reuse of a batch ID with
 a different quantity or size, and emits bottles at the batch-specific size.
@@ -159,9 +277,10 @@ The POS Reset System control sends a bounded String-valued
 clears M1-owned state and fans the identity out as
 `M2_SYSTEM_RESET`, `M3_SYSTEM_RESET`, `M4_SYSTEM_RESET` and
 `VIZ_SYSTEM_RESET`. It reports `SYSTEM_RESET_COMPLETE` only after matching
-M2/M3/M4 ACKs. The production teammate receivers are a pending integration
-contract; until they are implemented the state intentionally remains
-`RESET_PENDING_EXTERNAL_ACK`.
+M2/M3/M4 ACKs. This integration branch implements all three receivers with
+simulation-safe reset barriers and retained stale-work tombstones. If a member
+is missing or cannot confirm safety, the Coordinator correctly remains in
+`RESET_PENDING_EXTERNAL_ACK`; receipt alone is not completion.
 
 ## Local Clock Domains and ports
 

@@ -39,6 +39,8 @@ public final class CapperPlantModelV1 {
     private String pendingFeedback;
     private String forcedFaultAction;
     private String lastAcceptedCommand;
+    private int resetStep;
+    private String resetEvidence = "NONE";
 
     public CapperPlantModelV1(long actionDelayMs) {
         if (actionDelayMs < 0) {
@@ -48,6 +50,7 @@ public final class CapperPlantModelV1 {
     }
 
     public boolean acceptCommand(String payload, long nowMs) {
+        if (resetStep != 0) { return false; }
         if (payload != null && payload.equals(lastAcceptedCommand)) {
             return true;
         }
@@ -149,6 +152,10 @@ public final class CapperPlantModelV1 {
     }
 
     public void tick(long nowMs) {
+        if (resetStep != 0) {
+            tickSystemReset(nowMs);
+            return;
+        }
         if (pendingFeedback == null || nowMs - stageStartMs < actionDelayMs) {
             return;
         }
@@ -244,6 +251,59 @@ public final class CapperPlantModelV1 {
         stage = Stage.IDLE;
         lastAcceptedCommand = null;
     }
+
+    public void beginSystemReset(long nowMs) {
+        if (resetStep != 0) { return; }
+        // A lowering/clamping stroke may be partly complete even if its
+        // completion sensor has not fired. Conservatively retain the clamp.
+        if (stage == Stage.LOWERING || lowered) {
+            lowered = true;
+            clamped = true;
+        }
+        if (stage == Stage.CLAMPING) { clamped = true; }
+        gripping = false;
+        pendingFeedback = null;
+        feedback.clear();
+        resetEvidence = "GRIP_TWIST_STOPPED";
+        stage = Stage.RETURNING;
+        resetStep = 1;
+        stageStartMs = nowMs;
+    }
+
+    public void tickSystemReset(long nowMs) {
+        if (resetStep == 0 || nowMs - stageStartMs < actionDelayMs) {
+            return;
+        }
+        if (resetStep == 1) {
+            twisted = false;
+            resetEvidence += ",HOME_CONFIRMED";
+            stage = Stage.RAISING;
+            resetStep = 2;
+        }
+        else if (resetStep == 2) {
+            lowered = false;
+            resetEvidence += ",RAISED_CONFIRMED";
+            stage = Stage.UNCLAMPING;
+            resetStep = 3;
+        }
+        else {
+            // Release the bottle only after the simulated raised sensor.
+            if (lowered) { return; }
+            clamped = false;
+            resetEvidence += ",UNCLAMPED_CONFIRMED";
+            resetStep = 0;
+            clearFaults();
+        }
+        stageStartMs = nowMs;
+    }
+
+    public boolean isSystemResetSafe() {
+        return resetStep == 0 && stage == Stage.IDLE && !clamped &&
+            !lowered && !gripping && !twisted && pendingFeedback == null &&
+            feedback.isEmpty();
+    }
+
+    public String systemResetEvidence() { return resetEvidence; }
 
     private void begin(Stage next, String eventAndValue, long nowMs) {
         stage = next;

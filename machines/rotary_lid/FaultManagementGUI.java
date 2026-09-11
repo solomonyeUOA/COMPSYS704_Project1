@@ -100,6 +100,10 @@ public final class FaultManagementGUI {
         private final JLabel clock = valueLabel("--:--:--");
         private final JToggleButton mode = new JToggleButton("LIVE");
         private final JLabel workingStatus = statusLabel("STARTING", BLUE);
+        private final JLabel watchdogStatus = statusLabel("ACTIVE", GREEN);
+        private final JLabel watchdogFault = valueLabel("None");
+        private final JLabel watchdogReason = valueLabel("None");
+        private final JLabel watchdogReset = valueLabel("0 / Never");
         private final JLabel backendState = valueLabel("-");
         private final JLabel currentTask = valueLabel("Starting monitoring");
         private final JLabel currentStage = valueLabel("-");
@@ -212,12 +216,25 @@ public final class FaultManagementGUI {
             panel.add(field("Current stage", currentStage), c);
             c.gridx = 0;
             c.gridy = 1;
+            c.gridwidth = 1;
+            c.weightx = 0;
+            panel.add(field("Watchdog", watchdogStatus), c);
+            c.gridx = 1;
+            panel.add(field("Fault component", watchdogFault), c);
+            c.gridx = 2;
+            c.weightx = 1;
+            panel.add(field("Fault reason", watchdogReason), c);
+            c.gridx = 3;
+            c.weightx = 0;
+            panel.add(field("Reset count / last reset", watchdogReset), c);
+            c.gridx = 0;
+            c.gridy = 2;
             c.gridwidth = 4;
             c.weightx = 1;
             progress.setStringPainted(true);
             progress.setForeground(BLUE);
             panel.add(progress, c);
-            c.gridy = 2;
+            c.gridy = 3;
             c.gridwidth = 3;
             panel.add(field("Warning / fault / next action", scroll(alert)), c);
             c.gridx = 3;
@@ -225,7 +242,7 @@ public final class FaultManagementGUI {
             c.weightx = 0;
             panel.add(field("Session counts", counts), c);
             c.gridx = 0;
-            c.gridy = 3;
+            c.gridy = 4;
             c.gridwidth = 4;
             c.weightx = 1;
             panel.add(field("Last control action", scroll(feedback)), c);
@@ -372,7 +389,8 @@ public final class FaultManagementGUI {
             );
             FaultMonitoringStateV2_1.Snapshot snapshot =
                 FaultMonitoringStateV2_1.snapshot();
-            String viewState = displayState(snapshot.supervisorState);
+            String viewState = "RESETTING".equals(snapshot.systemHealth) ?
+                t("RESETTING", "重置中") : displayState(snapshot.supervisorState);
             health.setText(t("SYSTEM ", "系统 ") + snapshot.systemHealth);
             health.setBackground(healthColor(snapshot.systemHealth));
             clock.setText(new SimpleDateFormat("HH:mm:ss").format(
@@ -381,6 +399,12 @@ public final class FaultManagementGUI {
             workingStatus.setText(viewState);
             workingStatus.setBackground(statusColor(snapshot.supervisorState));
             backendState.setText(snapshot.supervisorState);
+            watchdogStatus.setText(snapshot.watchdogActive ? "ACTIVE" : "INACTIVE");
+            watchdogStatus.setBackground(snapshot.watchdogActive ? GREEN : MUTED);
+            watchdogFault.setText(snapshot.watchdogFaultComponent);
+            watchdogReason.setText(snapshot.watchdogFaultReason);
+            watchdogReset.setText(snapshot.watchdogResetCount + " / " +
+                formatTimestamp(snapshot.watchdogLastResetMs));
             currentTask.setText(actionRunning ? runningAction : currentTask(snapshot));
             currentStage.setText(currentStage(snapshot));
             counts.setText(t("Warnings ", "警告 ") + snapshot.warnings +
@@ -397,7 +421,8 @@ public final class FaultManagementGUI {
         }
 
         private void updateMessages(FaultMonitoringStateV2_1.Snapshot snapshot) {
-            boolean error = "FAILED".equals(snapshot.supervisorState) ||
+            boolean error = "FAULT".equals(snapshot.systemHealth) ||
+                "FAILED".equals(snapshot.supervisorState) ||
                 "LOCKED_OUT".equals(snapshot.supervisorState);
             alert.setForeground(error ? RED : TEXT);
             alert.setText(nextAction(snapshot));
@@ -454,6 +479,13 @@ public final class FaultManagementGUI {
         ) {
             long inState = Math.max(0L, snapshot.capturedAtMs - snapshot.stateEnteredAtMs);
             return line("System health", snapshot.systemHealth) +
+                line("Watchdog", snapshot.watchdogActive ? "ACTIVE" : "INACTIVE") +
+                line("Watchdog fault component", snapshot.watchdogFaultComponent) +
+                line("Watchdog fault reason", snapshot.watchdogFaultReason) +
+                line("Watchdog action", snapshot.watchdogAction) +
+                line("Watchdog reset count", String.valueOf(snapshot.watchdogResetCount)) +
+                line("Last reset", formatTimestamp(snapshot.watchdogLastResetMs)) +
+                line("Last fault", formatTimestamp(snapshot.watchdogLastFaultMs)) +
                 line("Monitoring visibility", snapshot.visibility) +
                 line("Working status", viewState) +
                 line("Backend state", snapshot.supervisorState) +
@@ -533,6 +565,13 @@ public final class FaultManagementGUI {
         }
 
         private String nextAction(FaultMonitoringStateV2_1.Snapshot snapshot) {
+            if ("RESETTING".equals(snapshot.systemHealth) ||
+                "FAULT".equals(snapshot.systemHealth) &&
+                    !"None".equals(snapshot.watchdogFaultComponent)) {
+                return t("Watchdog: ", "看门狗：") + snapshot.watchdogAction +
+                    " | " + snapshot.watchdogFaultComponent + ": " +
+                    snapshot.watchdogFaultReason;
+            }
             String state = snapshot.supervisorState;
             String source = "-".equals(snapshot.subsystem) ? "" :
                 snapshot.subsystem + " / " + snapshot.faultCode + ": ";
@@ -571,7 +610,9 @@ public final class FaultManagementGUI {
 
         private Color healthColor(String systemHealth) {
             if ("HEALTHY".equals(systemHealth)) return GREEN;
-            if ("CRITICAL".equals(systemHealth)) return RED;
+            if ("FAULT".equals(systemHealth) ||
+                "CRITICAL".equals(systemHealth)) return RED;
+            if ("RESETTING".equals(systemHealth)) return BLUE;
             return AMBER;
         }
 
@@ -612,6 +653,13 @@ public final class FaultManagementGUI {
         private static String formatDuration(long durationMs) {
             if (durationMs < 1000L) return "<1 s";
             return (durationMs / 1000L) + " s";
+        }
+
+        private static String formatTimestamp(long timestampMs) {
+            if (timestampMs < 0L) return "Never";
+            return new SimpleDateFormat("HH:mm:ss").format(
+                new Date(timestampMs)
+            );
         }
 
         private static JPanel panel(java.awt.LayoutManager layout) {

@@ -7,6 +7,10 @@ FaultSupervisor(
     input String signal FT_SAFE_STOP_ACK;
     input String signal FT_RESUME_DECISION;
     input String signal M3_SYSTEM_RESET;
+    input String signal WATCHDOG_M1_HEARTBEAT;
+    input String signal WATCHDOG_M2_HEARTBEAT;
+    input String signal WATCHDOG_M4_HEARTBEAT;
+    input String signal WATCHDOG_POS_HEARTBEAT;
 
     output String signal TRANSFER_RECOVERY_REQUEST;
     output String signal FT_FAULT_ALERT;
@@ -14,6 +18,7 @@ FaultSupervisor(
     output String signal FT_RECOVERY_READY;
     output String signal FT_RECOVERY_FAILED;
     output String signal M3_SYSTEM_RESET_ACK;
+    output String signal SYSTEM_RESET_REQUEST;
 )
 ->{
     FaultManagementGUI.start();
@@ -21,7 +26,9 @@ FaultSupervisor(
 
     {loop {
         present(M3_SYSTEM_RESET) {
-            M3SystemResetStateV1.accept(#M3_SYSTEM_RESET);
+            if (M3SystemResetStateV1.accept(#M3_SYSTEM_RESET)) {
+                SystemWatchdogV1.onSystemResetAccepted(#M3_SYSTEM_RESET);
+            }
         }
         pause;
     }}
@@ -30,6 +37,42 @@ FaultSupervisor(
         String resetAck = M3SystemResetStateV1.takeAck();
         if (resetAck != null) {
             emit M3_SYSTEM_RESET_ACK(resetAck);
+        }
+        pause;
+    }}
+    ||
+    {loop {
+        present(WATCHDOG_M1_HEARTBEAT) {
+            FaultMonitoringStateV2_1.externalHeartbeat(
+                FaultMonitoringStateV2_1.M1_LINK,
+                #WATCHDOG_M1_HEARTBEAT
+            );
+        }
+        present(WATCHDOG_M2_HEARTBEAT) {
+            FaultMonitoringStateV2_1.externalHeartbeat(
+                FaultMonitoringStateV2_1.M2_LINK,
+                #WATCHDOG_M2_HEARTBEAT
+            );
+        }
+        present(WATCHDOG_M4_HEARTBEAT) {
+            FaultMonitoringStateV2_1.externalHeartbeat(
+                FaultMonitoringStateV2_1.M4_LINK,
+                #WATCHDOG_M4_HEARTBEAT
+            );
+        }
+        present(WATCHDOG_POS_HEARTBEAT) {
+            FaultMonitoringStateV2_1.externalHeartbeat(
+                FaultMonitoringStateV2_1.POS_LINK,
+                #WATCHDOG_POS_HEARTBEAT
+            );
+        }
+        pause;
+    }}
+    ||
+    {loop {
+        String resetRequest = SystemWatchdogV1.nextSystemResetRequest();
+        if (resetRequest != null) {
+            emit SYSTEM_RESET_REQUEST(resetRequest);
         }
         pause;
     }}
