@@ -90,6 +90,8 @@
         </ClockDomain>
 
         <ClockDomain Name="M2TransferFaultAdapterCD" Class="M2TransferFaultAdapter">
+            <iSignal Name="M2_SYSTEM_RESET" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="13002" />
+            <oSignal Name="M2_SYSTEM_RESET_ACK" To="CoordinatorCD.M2_SYSTEM_RESET_ACK" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="11001" />
             <iSignal Name="LOCAL_TRANSFER_FAULT" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="13002" />
             <iSignal Name="TRANSFER_RECOVERY_REQUEST" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="13002" />
             <iSignal Name="LOCAL_RECOVERY_EVIDENCE" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="13002" />
@@ -100,6 +102,9 @@
         </ClockDomain>
 
         <ClockDomain Name="DigitalTwinCD" Class="DigitalTwin">
+            <iSignal Name="M3_WORKPIECE_OBSERVATION" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="14002" />
+            <iSignal Name="M4_WORKPIECE_OBSERVATION" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="14002" />
+            <oSignal Name="VIZ_TWIN_SNAPSHOT" To="ABSVisualisationPlantCD.VIZ_TWIN_SNAPSHOT" Class="OptionalSimpleClient" IP="127.0.0.1" Port="11008" />
             <iSignal Name="TWIN_BATCH_CONTEXT" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="14002" />
             <iSignal Name="LOADER_WORKPIECE_TWIN_UPDATE" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="14002" />
             <iSignal Name="LOADER_RESOURCE_TWIN_UPDATE" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="14002" />

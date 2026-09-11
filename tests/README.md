@@ -102,7 +102,18 @@ creates the next deterministic batch ID, conflicting quantities do not mutate
 the current identity, conflicting sizes are rejected, and the generated Coordinator exposes the expected
 `M4_SIM_BATCH_REQUEST` value. It also verifies that an order ID `OrderV1`
 accepts but the simulation transport cannot represent only skips the trigger:
-the order is still accepted and no batch identity is retained.
+the order is still accepted and no batch identity is retained. Held-delivery
+cases cover delayed sampling within each 200 ms window, 600 ms ABSENT gaps,
+receiver deduplication, bounded expiration and reset cancellation.
+
+The independent workspace's `python tools/project.py test` also discovers
+`Member2RepeatedOrdersSelfTest`, `Member2ReliableActuationSelfTest`,
+`ProductionOverviewSelfTest` and `ABSVisualisationLiveTraceSelfTest`. These
+cover reversed labeller output consumption, retained bottle-correlated
+commands/sensor evidence, duplicate/reset protection, all ten clickable
+overview stages, and replay of sparse live telemetry through Sort / Pack.
+Live POS/Twin and GUI acceptance commands are in the root README; passing
+model tests alone does not establish end-to-end runtime delivery.
 
 ## Run the four runtimes
 
@@ -182,7 +193,7 @@ Coordinator BOTTLE_DONE 2/2 ...
 [COORD-LIFECYCLE] ORDER_COMPLETE attempt=1 PO001|COMPLETED|...
 ```
 
-ABS Visualisation shows these eight machines:
+The legacy Mock supplies these eight GP status streams:
 
 ```text
 Bottle Loader / Conveyor / Rotary Turntable / Filler A / Filler B /
@@ -191,6 +202,13 @@ Lid Loader / Capper / Bottle Unloader
 READY -> BUSY -> DONE
 Progress=0/2 -> 1/2 -> order/batch completion
 ```
+
+The actual integrated overview has ten modules: the above sequence also includes
+**Labeller between Capper and Bottle Unloader**, then **Sort / Pack after Bottle
+Unloader**. Each has its own status and detail view. The legacy Mock does not
+produce Sort/Pack telemetry: GP order completion can therefore pass in Mock mode
+while the full symbolic finishing journey waits for independent sorting evidence.
+Use `python tools/project.py run` for the complete real-controller simulation.
 
 The display is an asynchronous read-only observer. When the final
 `BOTTLE_DONE` and next-product dispatch occur in adjacent reactions, it may

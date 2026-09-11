@@ -76,7 +76,9 @@ public final class LabellerControllerModelV1 {
             return null;
         }
         markLabelledPending = false;
-        return activeBottleId;
+        String result = activeBottleId;
+        releaseCompletedBottleIfDrained();
+        return result;
     }
 
     public String takeUnloadReady() {
@@ -85,11 +87,22 @@ public final class LabellerControllerModelV1 {
         }
         unloadReadyPending = false;
         String result = activeBottleId;
-        if (!markLabelledPending) {
+        releaseCompletedBottleIfDrained();
+        return result;
+    }
+
+    /**
+     * The two outputs have independent bounded-offer backpressure. Either
+     * can be drained first, so BOTH consumption paths must perform rearm.
+     * Releasing only in takeUnloadReady left DONE latched when an older
+     * MARK_LABELLED retry delayed consumption of the newer confirmation.
+     */
+    private void releaseCompletedBottleIfDrained() {
+        if (status == M2StatusV1.DONE &&
+            !markLabelledPending && !unloadReadyPending) {
             activeBottleId = null;
             status = M2StatusV1.READY;
         }
-        return result;
     }
 
     public boolean resetFault(boolean labelPathClear,

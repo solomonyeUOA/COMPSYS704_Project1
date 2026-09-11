@@ -1,10 +1,11 @@
-# Group 6 Integration Skeleton
+# Group 6 M1-M4 Integration Draft
 
 ## Purpose
 
 This directory records the current production integration topology. M1, M2,
-M3 and M4 production XML is registered in `system-manifest.json`; physical
-cross-member acceptance remains an end-to-end integration task.
+M3 and M4 production XML is registered in `system-manifest.json`. This draft
+imports the tested cross-member simulation fixes for team review; physical
+hardware acceptance remains a separate end-to-end integration task.
 
 ## M1 GP component ownership
 
@@ -50,10 +51,11 @@ separate reset subsystem.
 | Coordinator -> M4 simulator | `M4_SIM_BATCH_REQUEST` | Simulation-only `batchId|quantity|sizeCode` publication |
 
 M1's Coordinator-side reset orchestration and ACK barrier are implemented.
-The latest main does not yet contain the M2, M3 or M4 reset receivers and
-matching ACK emitters, so production whole-system reset remains pending
-teammate integration and correctly stays in `RESET_PENDING_EXTERNAL_ACK` until
-all three matching acknowledgements arrive. READY status is not reset evidence.
+This integration branch also implements the M2/M3/M4 safe-state receivers
+and matching ACK emitters. Reset correctly stays in `RESET_PENDING_EXTERNAL_ACK`
+until all three matching acknowledgements arrive. READY status alone is not
+reset evidence. See [reset/twin integration and verification](RESET_TWIN_INTEGRATION.md)
+for the source team-main baseline, simulation safety scope and live test results.
 
 ## Runtime topology
 

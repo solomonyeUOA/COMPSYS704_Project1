@@ -6,6 +6,7 @@ Member3DemoDriver(
     input String signal BOTTLE_AT_FILL;
     input String signal BOTTLE_AT_CAP;
     input String signal BOTTLE_AT_LABEL;
+    input String signal M3_WORKPIECE_OBSERVATION;
 
     output signal ROTARY_STATUS_REQUEST;
     output signal LID_STATUS_REQUEST;

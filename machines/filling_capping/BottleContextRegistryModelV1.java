@@ -1,11 +1,14 @@
 import java.util.HashMap;
 import java.util.Map;
+import java.util.HashSet;
+import java.util.Set;
 
 /** Single logical registry for validated S/L bottle contexts. */
 public final class BottleContextRegistryModelV1 {
     private final Map<String, M4BottleContextV1> contexts =
         new HashMap<String, M4BottleContextV1>();
     private int status = M4StatusV1.READY;
+    private final Set<String> retiredBottleIds = new HashSet<String>();
     private String faultReason = "-";
 
     /**
@@ -16,6 +19,9 @@ public final class BottleContextRegistryModelV1 {
         try {
             M4BottleContextV1 candidate =
                 M4BottleContextV1.fromRecognition(payload);
+            if (retiredBottleIds.contains(candidate.getBottleId())) {
+                return null;
+            }
             M4BottleContextV1 existing =
                 contexts.get(candidate.getBottleId());
             if (existing != null) {
@@ -46,6 +52,13 @@ public final class BottleContextRegistryModelV1 {
 
     public int size() {
         return contexts.size();
+    }
+
+    public void resetForSystem() {
+        retiredBottleIds.addAll(contexts.keySet());
+        contexts.clear();
+        status = M4StatusV1.READY;
+        faultReason = "-";
     }
 
     public int getStatus() {

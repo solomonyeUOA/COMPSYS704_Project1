@@ -11,10 +11,13 @@ DigitalTwin(
     input String signal UNLOADER_WORKPIECE_TWIN_UPDATE;
     input String signal UNLOADER_RESOURCE_TWIN_UPDATE;
     input String signal WORKPIECE_TWIN_UPDATE;
+    input String signal M3_WORKPIECE_OBSERVATION;
+    input String signal M4_WORKPIECE_OBSERVATION;
     input String signal RESOURCE_TWIN_UPDATE;
     input String signal TWIN_CONTEXT_REQUEST;
 
     output String signal TWIN_CONTEXT_SNAPSHOT;
+    output String signal VIZ_TWIN_SNAPSHOT;
 )
 ->{
     System.out.println("M2 DigitalTwinCD started (read-only)");
@@ -92,6 +95,18 @@ DigitalTwin(
     } pause;}}
     ||
     {loop {
+        present(M3_WORKPIECE_OBSERVATION) {
+            DigitalTwinStateV1.acceptExternalWorkpieceObservation(#M3_WORKPIECE_OBSERVATION);
+        }
+        present(M4_WORKPIECE_OBSERVATION) {
+            DigitalTwinStateV1.acceptExternalWorkpieceObservation(#M4_WORKPIECE_OBSERVATION);
+        }
+        DigitalTwinStateV1.drainObservations();
+        String visualisationSnapshot = DigitalTwinStateV1.nextVisualisationSnapshot(
+            System.currentTimeMillis());
+        if (visualisationSnapshot != null) {
+            emit VIZ_TWIN_SNAPSHOT(visualisationSnapshot);
+        }
         String snapshot = DigitalTwinStateV1.takeSnapshot();
         if (snapshot != null) {
             emit TWIN_CONTEXT_SNAPSHOT(snapshot);

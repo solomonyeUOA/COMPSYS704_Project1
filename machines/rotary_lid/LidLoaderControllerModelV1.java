@@ -29,13 +29,15 @@ public final class LidLoaderControllerModelV1 {
     private String completedBottleId;
     private long faultSequence;
     private String faultEventId;
+    private final java.util.Set<String> retiredBottleIds =
+        new java.util.HashSet<String>();
 
     /** Starts only when a bottle and a lid are both available. */
     public boolean requestLoad(
         String bottleId,
         boolean lidAvailable
     ) {
-        if (state != State.READY || bottleId == null) {
+        if (state != State.READY || bottleId == null || retiredBottleIds.contains(bottleId)) {
             return false;
         }
         BottleContextV1.validateBottleId(bottleId);
@@ -91,6 +93,7 @@ public final class LidLoaderControllerModelV1 {
         if (state != State.DONE) {
             return false;
         }
+        retiredBottleIds.add(activeBottleId);
         activeBottleId = null;
         completedBottleId = null;
         state = State.READY;
@@ -176,5 +179,23 @@ public final class LidLoaderControllerModelV1 {
         faultReason = reason;
         faultSequence++;
         faultEventId = "LID-" + faultSequence;
+    }
+
+    public void stopOutputs() {
+        pickActuatorEnabled = placeActuatorEnabled = false;
+    }
+
+    public void retireBottle(String bottleId) {
+        if (bottleId != null) retiredBottleIds.add(bottleId);
+    }
+
+    public void resetRuntime() {
+        if (activeBottleId != null) retiredBottleIds.add(activeBottleId);
+        activeBottleId = completedBottleId = faultEventId = null;
+        state = State.READY;
+        stateElapsedMs = 0;
+        pickActuatorEnabled = placeActuatorEnabled = false;
+        fault = Fault.NONE;
+        faultReason = "";
     }
 }

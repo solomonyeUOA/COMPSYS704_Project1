@@ -5,6 +5,7 @@ SortPackController(
     input String signal SORT_PACK_PLANT_FEEDBACK;
 
     output String signal SORT_PACK_PLANT_COMMAND;
+    output Integer signal SORT_PACK_STATUS;
 )
 ->{
     System.out.println("M4 SortPackControllerCD started");
@@ -33,6 +34,8 @@ SortPackController(
     ||
     {loop {
         Member4MachineStateV1.tick();
+        // Read-only telemetry, continuously present so brief cycles are visible.
+        emit SORT_PACK_STATUS(Member4MachineStateV1.getSortPackStatus());
         String command = Member4MachineStateV1.takeSortPackCommand();
         if (command != null) {
             emit SORT_PACK_PLANT_COMMAND(command);

@@ -1,6 +1,8 @@
 // M3 IP fault supervisor. It never drives transfer, rotary or lid actuators.
 
 FaultSupervisor(
+    input String signal M3_SYSTEM_RESET;
+    output String signal M3_SYSTEM_RESET_ACK;
     input String signal TRANSFER_FAULT_EVENT;
     input String signal TRANSFER_RECOVERY_ACK;
     input String signal TRANSFER_RECOVERY_RESULT;
@@ -18,6 +20,14 @@ FaultSupervisor(
     System.out.println("M3 FaultSupervisorCD started on V2.1 boundary");
 
     {loop {
+        present(M3_SYSTEM_RESET) {
+            M3SystemResetStateV1.request(#M3_SYSTEM_RESET);
+        }
+        M3SystemResetStateV1.tick();
+        String resetAck = M3SystemResetStateV1.takeAck();
+        if (resetAck != null) {
+            emit M3_SYSTEM_RESET_ACK(resetAck);
+        }
         present(TRANSFER_FAULT_EVENT) {
             FaultSupervisorStateV2_1.onTransferFault(
                 #TRANSFER_FAULT_EVENT

@@ -23,6 +23,13 @@ public final class FaultSupervisorModelV2_1 {
         new HashMap<String, String>();
     private final Map<String, String> priorResults =
         new HashMap<String, String>();
+    private final java.util.Set<String> resetRetiredEvents =
+        new java.util.HashSet<String>();
+    private final java.util.Set<String> resetRetiredLocalEvents =
+        new java.util.HashSet<String>();
+    private final java.util.Set<String> retiredTransferEpochs =
+        new java.util.HashSet<String>();
+    private long completedSystemResets;
     private final List<String> history = new ArrayList<String>();
     private final Map<String, String> localActiveEvents =
         new HashMap<String, String>();
@@ -70,6 +77,15 @@ public final class FaultSupervisorModelV2_1 {
         }
 
         String key = eventKey(event.sourceEpoch, event.eventId);
+        if ("TRANSFER".equals(event.subsystem) &&
+            retiredTransferEpochs.contains(event.sourceEpoch)) {
+            reject("RESET_RETIRED_TRANSFER_EPOCH " + event.sourceEpoch);
+            return false;
+        }
+        if (resetRetiredEvents.contains(key)) {
+            reject("RESET_RETIRED_EVENT " + key);
+            return false;
+        }
         if (priorEvents.containsKey(key)) {
             boolean identical = priorEvents.get(key).equals(payload);
             duplicateMessages++;
@@ -212,12 +228,21 @@ public final class FaultSupervisorModelV2_1 {
     }
 
     public synchronized boolean onRecoveryAck(String payload) {
+        if (activeEvent == null) {
+            reject("NO_ACTIVE_INCIDENT_ACK");
+            return false;
+        }
         FaultProtocolV2_1.RecoveryAck ack;
         try {
             ack = FaultProtocolV2_1.parseRecoveryAck(payload);
         }
         catch (IllegalArgumentException exception) {
             failRecovery("INVALID_ACK " + exception.getMessage());
+            return false;
+        }
+        if (retiredTransferEpochs.contains(ack.sourceEpoch) ||
+            resetRetiredEvents.contains(eventKey(ack.sourceEpoch, ack.eventId))) {
+            reject("RESET_RETIRED_ACK");
             return false;
         }
         String key = eventKey(ack.sourceEpoch, ack.eventId) + "|" +
@@ -251,12 +276,21 @@ public final class FaultSupervisorModelV2_1 {
     }
 
     public synchronized boolean onRecoveryResult(String payload) {
+        if (activeEvent == null) {
+            reject("NO_ACTIVE_INCIDENT_RESULT");
+            return false;
+        }
         FaultProtocolV2_1.RecoveryResult result;
         try {
             result = FaultProtocolV2_1.parseRecoveryResult(payload);
         }
         catch (IllegalArgumentException exception) {
             failRecovery("INVALID_RESULT " + exception.getMessage());
+            return false;
+        }
+        if (retiredTransferEpochs.contains(result.sourceEpoch) ||
+            resetRetiredEvents.contains(eventKey(result.sourceEpoch, result.eventId))) {
+            reject("RESET_RETIRED_RESULT");
             return false;
         }
         String key = eventKey(result.sourceEpoch, result.eventId) + "|" +
@@ -420,6 +454,7 @@ public final class FaultSupervisorModelV2_1 {
         String eventId,
         String reason
     ) {
+        if (resetRetiredLocalEvents.contains("ROTARY|" + eventId)) return;
         if (sameLocalEvent("ROTARY", eventId)) {
             return;
         }
@@ -433,6 +468,7 @@ public final class FaultSupervisorModelV2_1 {
         String eventId,
         LidLoaderControllerModelV1.Fault fault
     ) {
+        if (resetRetiredLocalEvents.contains("LID|" + eventId)) return;
         if (sameLocalEvent("LID", eventId)) {
             return;
         }
@@ -499,6 +535,7 @@ public final class FaultSupervisorModelV2_1 {
             return;
         }
         localActiveEvents.remove(subsystem);
+        resetRetiredLocalEvents.add(subsystem + "|" + eventId);
         localDecisions.put(subsystem, "READY");
         record("LOCAL_FAULT_RESOLVED " + subsystem + " " + eventId);
     }
@@ -611,6 +648,10 @@ public final class FaultSupervisorModelV2_1 {
     }
 
     public synchronized void reset() {
+        resetRetiredEvents.clear();
+        resetRetiredLocalEvents.clear();
+        retiredTransferEpochs.clear();
+        completedSystemResets = 0;
         priorEvents.clear();
         priorAcks.clear();
         priorResults.clear();
@@ -631,6 +672,45 @@ public final class FaultSupervisorModelV2_1 {
         traceSequence = 0;
         clearActiveRecovery();
         clearOutputs();
+    }
+
+    /** Preserve identities of events discarded while the reset gate is closed. */
+    public synchronized void retireFaultDuringReset(String payload) {
+        try {
+            FaultProtocolV2_1.FaultEvent event = FaultProtocolV2_1.parseFaultEvent(payload);
+            resetRetiredEvents.add(eventKey(event.sourceEpoch, event.eventId));
+        }
+        catch (IllegalArgumentException ignored) { }
+    }
+
+    /** M2 advances its source generation once per successful system reset. */
+    public synchronized void resetRuntimeForSystemReset() {
+        String base = System.getProperty("m2.sourceEpoch", "E01");
+        String previous = completedSystemResets == 0 ? base :
+            base + "R" + completedSystemResets;
+        if (!"GUI-TEST".equals(previous)) retiredTransferEpochs.add(previous);
+        for (String payload : priorEvents.values()) {
+            FaultProtocolV2_1.FaultEvent event = FaultProtocolV2_1.parseFaultEvent(payload);
+            if ("TRANSFER".equals(event.subsystem) && !"GUI-TEST".equals(event.sourceEpoch)) {
+                retiredTransferEpochs.add(event.sourceEpoch);
+            }
+        }
+        completedSystemResets++;
+        resetRuntimePreservingHistory();
+    }
+
+    /** Clear live recovery without erasing evidence of retired messages. */
+    public synchronized void resetRuntimePreservingHistory() {
+        resetRetiredEvents.addAll(priorEvents.keySet());
+        for (Map.Entry<String, String> entry : localActiveEvents.entrySet()) {
+            resetRetiredLocalEvents.add(entry.getKey() + "|" + entry.getValue());
+        }
+        localActiveEvents.clear();
+        localDecisions.clear();
+        localRetryCounts.clear();
+        clearActiveRecovery();
+        clearOutputs();
+        record("WHOLE_SYSTEM_RESET NORMAL/IDLE; prior IDs retained");
     }
 
     private void issueRecoveryRequest() {

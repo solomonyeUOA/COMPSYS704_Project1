@@ -12,10 +12,12 @@ BottleUnloaderPlant(
 
     {loop {
         present(UNLOAD_CMD) {
-            M2PlantStateV1.commandUnload(
+            if (M2PlantStateV1.commandUnload(
                 #UNLOAD_CMD,
                 System.currentTimeMillis()
-            );
+            )) {
+                M2MachineStateV1.acknowledgeUnloadCommand(#UNLOAD_CMD);
+            }
         }
         present(INJECT_REMOVAL_FAULT) {
             M2PlantStateV1.setRemovalFault(true);
@@ -24,7 +26,7 @@ BottleUnloaderPlant(
             M2PlantStateV1.setRemovalFault(false);
         }
         M2PlantStateV1.tickUnloader(System.currentTimeMillis());
-        String confirmation = M2PlantStateV1.takeRemovalConfirmed();
+        String confirmation = M2PlantStateV1.nextRemovalConfirmationOffer();
         if (confirmation != null) {
             emit REMOVAL_CONFIRMED(confirmation);
         }

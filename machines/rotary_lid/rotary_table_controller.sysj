@@ -28,7 +28,12 @@ RotaryTableController(
     ||
     {loop {
         present(ROTARY_BOTTLE_CONTEXT) {
-            if (BottleContextV1.isValid(#ROTARY_BOTTLE_CONTEXT)) {
+            if (M3SystemResetStateV1.isQuarantined()) {
+                // Retire late context IDs even while forwarding is disabled.
+                Member3PlantStateV1.registerBottleContext(#ROTARY_BOTTLE_CONTEXT);
+            }
+            if (!M3SystemResetStateV1.isQuarantined() &&
+                BottleContextV1.isValid(#ROTARY_BOTTLE_CONTEXT)) {
                 emit ROTARY_CONTEXT_TO_PLANT(#ROTARY_BOTTLE_CONTEXT);
                 System.out.println("M3 forwarded bottle context to Plant");
             }
@@ -41,6 +46,9 @@ RotaryTableController(
     ||
     {boolean plantNotReadyObserved = false;
     loop {
+        if (M3SystemResetStateV1.isQuarantined()) {
+            plantNotReadyObserved = false;
+        }
         present(ROTATION_READY) {
             if (Member3MachineStateV1.getRotaryStatus() ==
                 Member3MachineStateV1.DONE && plantNotReadyObserved) {
@@ -92,7 +100,8 @@ RotaryTableController(
                 Member3MachineStateV1.getActiveCycleId());
         }
         // Keep the cycle-correlated commit visible until the Plant barrier reopens.
-        if (Member3MachineStateV1.getRotaryStatus() ==
+        if (!M3SystemResetStateV1.isQuarantined() &&
+            Member3MachineStateV1.getRotaryStatus() ==
             Member3MachineStateV1.DONE) {
             emit ROTATION_DONE((int)
                 Member3MachineStateV1.getLastCompletedCycleId());

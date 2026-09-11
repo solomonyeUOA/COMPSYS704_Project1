@@ -15,6 +15,11 @@ public final class Member4MachineStateV1 {
     private static M4BoundedEventV1 rotaryContextEvent;
     private static M4BoundedEventV1 loadProfileEvent;
     private static M4BoundedEventV1 unloadProfileEvent;
+    private static final java.util.Queue<String> twinObservations =
+        new java.util.ArrayDeque<String>();
+    private static final M4BoundedEventV1 twinObservationEvent =
+        new M4BoundedEventV1(5, 50L);
+    private static long twinSequence;
 
     static {
         reset();
@@ -59,6 +64,7 @@ public final class Member4MachineStateV1 {
     }
 
     public static synchronized boolean acceptRecognition(String payload) {
+        if (!M4ResetFenceV1.accept(payload)) { return false; }
         try {
             String context = registry.acceptRecognition(payload);
             if (context == null) {
@@ -76,14 +82,17 @@ public final class Member4MachineStateV1 {
     }
 
     public static synchronized String takeRotaryContext() {
+        if (M4ResetFenceV1.isQuarantined()) { return null; }
         return rotaryContextEvent.take(System.currentTimeMillis());
     }
 
     public static synchronized String takeLoadProfile() {
+        if (M4ResetFenceV1.isQuarantined()) { return null; }
         return loadProfileEvent.take(System.currentTimeMillis());
     }
 
     public static synchronized String takeUnloadProfile() {
+        if (M4ResetFenceV1.isQuarantined()) { return null; }
         return unloadProfileEvent.take(System.currentTimeMillis());
     }
 
@@ -102,14 +111,17 @@ public final class Member4MachineStateV1 {
     }
 
     public static synchronized void setFillerARatio(int ratio) {
+        if (M4ResetFenceV1.isQuarantined()) { return; }
         fillerA.setRatio(ratio);
     }
 
     public static synchronized void setFillerBRatio(int ratio) {
+        if (M4ResetFenceV1.isQuarantined()) { return; }
         fillerB.setRatio(ratio);
     }
 
     public static synchronized boolean acceptBottleAtFill(String context) {
+        if (!M4ResetFenceV1.accept(context)) { return false; }
         return fillerA.acceptBottleAtFill(
             context,
             System.currentTimeMillis()
@@ -117,16 +129,19 @@ public final class Member4MachineStateV1 {
     }
 
     public static synchronized void acceptFillADone(String completion) {
+        if (!M4ResetFenceV1.accept(completion)) { return; }
         fillerB.acceptFillADone(completion, System.currentTimeMillis());
     }
 
     public static synchronized void acceptBottleAtCap(String context) {
+        if (!M4ResetFenceV1.accept(context)) { return; }
         capper.acceptBottleAtCap(context, System.currentTimeMillis());
     }
 
     public static synchronized boolean acceptBottleReadyForSort(
         String context
     ) {
+        if (!M4ResetFenceV1.accept(context)) { return false; }
         return sortPack.acceptBottleReady(
             context,
             System.currentTimeMillis()
@@ -134,22 +149,27 @@ public final class Member4MachineStateV1 {
     }
 
     public static synchronized void acceptFillerAFeedback(String feedback) {
+        if (!M4ResetFenceV1.accept(feedback)) { return; }
         fillerA.acceptPlantFeedback(feedback, System.currentTimeMillis());
     }
 
     public static synchronized void acceptFillerBFeedback(String feedback) {
+        if (!M4ResetFenceV1.accept(feedback)) { return; }
         fillerB.acceptPlantFeedback(feedback, System.currentTimeMillis());
     }
 
     public static synchronized void acceptCapperFeedback(String feedback) {
+        if (!M4ResetFenceV1.accept(feedback)) { return; }
         capper.acceptPlantFeedback(feedback, System.currentTimeMillis());
     }
 
     public static synchronized void acceptSortPackFeedback(String feedback) {
+        if (!M4ResetFenceV1.accept(feedback)) { return; }
         sortPack.acceptPlantFeedback(feedback, System.currentTimeMillis());
     }
 
     public static synchronized void tick() {
+        if (M4ResetFenceV1.isQuarantined()) { return; }
         long now = System.currentTimeMillis();
         fillerA.tick(now);
         fillerB.tick(now);
@@ -158,18 +178,22 @@ public final class Member4MachineStateV1 {
     }
 
     public static synchronized String takeFillerACommand() {
+        if (M4ResetFenceV1.isQuarantined()) { return null; }
         return takeCommand(fillerA.takePlantCommand(), fillerACommandEvent);
     }
 
     public static synchronized String takeFillerBCommand() {
+        if (M4ResetFenceV1.isQuarantined()) { return null; }
         return takeCommand(fillerB.takePlantCommand(), fillerBCommandEvent);
     }
 
     public static synchronized String takeCapperCommand() {
+        if (M4ResetFenceV1.isQuarantined()) { return null; }
         return takeCommand(capper.takePlantCommand(), capperCommandEvent);
     }
 
     public static synchronized String takeSortPackCommand() {
+        if (M4ResetFenceV1.isQuarantined()) { return null; }
         return takeCommand(
             sortPack.takePlantCommand(),
             sortPackCommandEvent
@@ -177,6 +201,7 @@ public final class Member4MachineStateV1 {
     }
 
     public static synchronized String takeFillADone() {
+        if (M4ResetFenceV1.isQuarantined()) { return null; }
         long now = System.currentTimeMillis();
         String completed = fillerA.takeCompletion();
         if (completed != null) {
@@ -186,26 +211,70 @@ public final class Member4MachineStateV1 {
     }
 
     public static synchronized String takeMarkFilled() {
+        if (M4ResetFenceV1.isQuarantined()) { return null; }
         long now = System.currentTimeMillis();
         String completed = fillerB.takeCompletion();
         if (completed != null) {
             markFilledEvent.publish(completed, now);
+            observe(completed, "FILLED", "FILLER_B");
         }
         return markFilledEvent.take(now);
     }
 
     public static synchronized String takeMarkCapped() {
+        if (M4ResetFenceV1.isQuarantined()) { return null; }
         long now = System.currentTimeMillis();
         String completed = capper.takeCompletion();
         if (completed != null) {
             markCappedEvent.publish(completed, now);
+            observe(completed, "CAPPED", "CAPPER");
         }
         return markCappedEvent.take(now);
     }
 
     public static synchronized String takeSortPackCompletion() {
-        return sortPack.takeCompletion();
+        if (M4ResetFenceV1.isQuarantined()) { return null; }
+        String completed = sortPack.takeCompletion();
+        if (completed != null) { observe(completed, "SORTED", "SORT_PACK"); }
+        return completed;
     }
+
+    private static void observe(String bottle, String stage, String resource) {
+        bottle = bottle.split("\\|", -1)[0];
+        twinObservations.add("V1|W|M4-E01-" + (++twinSequence) + "|" +
+            bottle + "|" + stage + "|" + resource + "|-|" +
+            System.currentTimeMillis());
+    }
+
+    public static synchronized String takeWorkpieceObservation() {
+        return takeWorkpieceObservation(System.currentTimeMillis());
+    }
+
+    public static synchronized String takeWorkpieceObservation(long now) {
+        if (M4ResetFenceV1.isQuarantined()) { return null; }
+        if (!twinObservationEvent.isPending() && !twinObservations.isEmpty()) {
+            twinObservationEvent.publish(twinObservations.remove(), now);
+        }
+        return twinObservationEvent.take(now);
+    }
+
+    public static synchronized void beginSystemReset() {
+        fillADoneEvent.cancel(); markFilledEvent.cancel();
+        markCappedEvent.cancel(); fillerACommandEvent.cancel();
+        fillerBCommandEvent.cancel(); capperCommandEvent.cancel();
+        sortPackCommandEvent.cancel(); rotaryContextEvent.cancel();
+        loadProfileEvent.cancel(); unloadProfileEvent.cancel();
+        twinObservations.clear(); twinObservationEvent.cancel();
+    }
+
+    public static synchronized void completeSystemReset() {
+        BottleContextRegistryModelV1 retainedRegistry = registry;
+        retainedRegistry.resetForSystem();
+        reset();
+        registry = retainedRegistry;
+    }
+
+    public static synchronized int contextCount() { return registry.size(); }
 
     public static synchronized int getFillerAStatus() {
         return fillerA.getStatus();
@@ -217,6 +286,10 @@ public final class Member4MachineStateV1 {
 
     public static synchronized int getCapperStatus() {
         return capper.getStatus();
+    }
+
+    public static synchronized int getSortPackStatus() {
+        return sortPack.getStatus();
     }
 
     public static synchronized String snapshot() {

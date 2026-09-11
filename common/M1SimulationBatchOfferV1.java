@@ -3,19 +3,16 @@ import java.util.Locale;
 /**
  * Bounded, idempotent transport for the simulation-only M1 -> M4 batch
  * request. A logical product batch owns one stable payload. Retries never
- * regenerate its identity, and every PRESENT pulse is followed by an ABSENT
- * reaction before another copy can be offered.
+ * regenerate its identity. Each copy stays PRESENT for 200 ms, followed by
+ * a wall-clock ABSENT gap before another copy can be offered. A single
+ * logical reaction is too brief for independently scheduled TCP receivers.
  */
 public final class M1SimulationBatchOfferV1 {
-    private final int maximumOffers;
-    private final long retryIntervalMillis;
+    static final long SIGNAL_HOLD_MILLIS = 200L;
+    private final BoundedStringSignalOfferV1 transport;
     private String batchId;
     private int quantity;
     private String sizeCode;
-    private String payload;
-    private int offerCount;
-    private boolean absentReactionRequired;
-    private long nextOfferAtMillis;
 
     public M1SimulationBatchOfferV1(
         int maximumOffers,
@@ -31,8 +28,9 @@ public final class M1SimulationBatchOfferV1 {
                 "retryIntervalMillis must be positive"
             );
         }
-        this.maximumOffers = maximumOffers;
-        this.retryIntervalMillis = retryIntervalMillis;
+        transport = new BoundedStringSignalOfferV1(
+            maximumOffers, SIGNAL_HOLD_MILLIS, retryIntervalMillis
+        );
     }
 
     /**
@@ -75,10 +73,10 @@ public final class M1SimulationBatchOfferV1 {
         batchId = requestedBatchId;
         quantity = requestedQuantity;
         sizeCode = requestedSizeCode;
-        payload = batchId + "|" + quantity + "|" + sizeCode;
-        offerCount = 0;
-        absentReactionRequired = false;
-        nextOfferAtMillis = nowMillis;
+        // This is a confirmed new product boundary, not a retry. Preserve
+        // duplicate identity above even after the old transport has drained.
+        transport.discard();
+        transport.begin(getStablePayload(), nowMillis);
         return true;
     }
 
@@ -99,27 +97,7 @@ public final class M1SimulationBatchOfferV1 {
     }
 
     public String nextReactionValue(long nowMillis) {
-        if (payload == null) {
-            return null;
-        }
-        if (absentReactionRequired) {
-            absentReactionRequired = false;
-            if (offerCount >= maximumOffers) {
-                payload = null;
-            }
-            return null;
-        }
-        if (offerCount >= maximumOffers) {
-            payload = null;
-            return null;
-        }
-        if (nowMillis < nextOfferAtMillis) {
-            return null;
-        }
-        offerCount++;
-        absentReactionRequired = true;
-        nextOfferAtMillis = nowMillis + retryIntervalMillis;
-        return batchId + "|" + quantity + "|" + sizeCode;
+        return transport.nextValue(nowMillis);
     }
 
     /**
@@ -131,10 +109,7 @@ public final class M1SimulationBatchOfferV1 {
         batchId = null;
         quantity = 0;
         sizeCode = null;
-        payload = null;
-        offerCount = 0;
-        absentReactionRequired = false;
-        nextOfferAtMillis = 0L;
+        transport.discard();
     }
 
     public String getBatchId() {
@@ -147,11 +122,11 @@ public final class M1SimulationBatchOfferV1 {
     }
 
     public int getOfferCount() {
-        return offerCount;
+        return transport.getOfferCount();
     }
 
     public boolean isPending() {
-        return payload != null;
+        return transport.isPending();
     }
 
     private static void validateOrderId(String orderId) {

@@ -12,7 +12,7 @@ RecognitionPlant(
             String recognised = RecognitionPlantModelV1.recognise(
                 #RECOGNITION_REQUEST
             );
-            if (recognised != null) {
+            if (recognised != null && M4ResetFenceV1.accept(recognised)) {
                 emit BOTTLE_RECOGNISED(recognised);
             }
             else {

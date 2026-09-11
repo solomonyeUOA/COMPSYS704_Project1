@@ -9,13 +9,15 @@ BottleLoaderPlant(
 
     {loop {
         present(LOAD_CMD) {
-            M2PlantStateV1.commandLoad(
+            if (M2PlantStateV1.commandLoad(
                 #LOAD_CMD,
                 System.currentTimeMillis()
-            );
+            )) {
+                M2MachineStateV1.acknowledgeLoadCommand(#LOAD_CMD);
+            }
         }
         M2PlantStateV1.tickLoader(System.currentTimeMillis());
-        String confirmation = M2PlantStateV1.takeLoadConfirmed();
+        String confirmation = M2PlantStateV1.nextLoadConfirmationOffer();
         if (confirmation != null) {
             emit LOAD_CONFIRMED(confirmation);
         }

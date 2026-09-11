@@ -33,6 +33,15 @@ public final class CoordinatorStateV1 {
     public static int lidStatus = 0;
     public static int capperStatus = 0;
     public static int unloaderStatus = 0;
+    public static int labellerStatus = 0;
+    public static int sortPackStatus = 0;
+    private static java.math.BigInteger resetWatermark = java.math.BigInteger.valueOf(-1L);
+    private static final java.util.Set<String> acceptedOrderIds = new java.util.HashSet<String>();
+    private static long nextTwinContextMillis;
+    private static long startOrderUntilMillis;
+    private static int m2ResetEpoch;
+    private static final java.util.Set<String> observedFtKeys = new java.util.HashSet<String>();
+    private static final java.util.Set<String> retiredFtKeys = new java.util.HashSet<String>();
 
     /** Non-null only when the active payload used the frozen V1 format. */
     public static OrderV1 activeOrder = null;
@@ -135,13 +144,14 @@ public final class CoordinatorStateV1 {
         }
         String parsedOrderId = parsedOrderV2 != null ?
             parsedOrderV2.orderId : parsedOrderV1.orderId;
-        if (parsedOrderId.equals(lastAcceptedOrderId)) {
+        if (acceptedOrderIds.contains(parsedOrderId)) {
             return false;
         }
 
         activeOrderV2 = parsedOrderV2;
         activeOrder = parsedOrderV1;
         lastAcceptedOrderId = parsedOrderId;
+        acceptedOrderIds.add(parsedOrderId);
         currentProductIndex = 0;
         loadCurrentProduct();
         orderActive = true;
@@ -226,8 +236,8 @@ public final class CoordinatorStateV1 {
     }
 
     /**
-     * Returns at most three identical copies with a 600 ms retry interval and
-     * an ABSENT reaction between copies.
+     * Returns three bounded 200 ms PRESENT windows with the identical batch
+     * payload, separated by 600 ms ABSENT gaps. No receipt ACK is inferred.
      */
     public static String nextM4SimulationBatchRequest() {
         return nextM4SimulationBatchRequest(System.currentTimeMillis());
@@ -341,6 +351,7 @@ public final class CoordinatorStateV1 {
         long nowMillis
     ) {
         if (!isValidResetId(resetId) ||
+            new java.math.BigInteger(resetId.substring(3)).compareTo(resetWatermark) <= 0 ||
             processedSystemResetIds.contains(resetId) ||
             systemResetPendingExternalAck ||
             systemResetCompletionPending) {
@@ -348,7 +359,11 @@ public final class CoordinatorStateV1 {
         }
 
         activeSystemResetId = resetId;
+        resetWatermark = new java.math.BigInteger(resetId.substring(3));
         lastSystemResetId = resetId;
+        retiredFtKeys.addAll(observedFtKeys);
+        observedFtKeys.clear();
+        m2ResetEpoch++;
         processedSystemResetIds.add(resetId);
         clearM1OwnedRuntimeState(nowMillis);
         m2SystemResetAcknowledged = false;
@@ -445,6 +460,13 @@ public final class CoordinatorStateV1 {
                 activeSystemResetId + "|RESET_COMPLETE",
                 nowMillis
             );
+            ftVisualState = "NORMAL";
+            ftVisualSource = "SYSTEM_RESET";
+            ftVisualEvent = activeSystemResetId;
+            ftVisualSafeStop = "MEMBERS_ACKNOWLEDGED";
+            ftVisualRecovery = "RESET_COMPLETE";
+            queueFtVisualEvidence();
+            System.out.println("[COORD-RESET] ACK barrier complete " + systemResetSnapshot());
         }
         return newlyAcknowledged;
     }
@@ -493,7 +515,7 @@ public final class CoordinatorStateV1 {
 
     /** Records a validated alert without changing order execution. */
     public static boolean recordFtFaultAlert(String payload) {
-        if (!isPresentPayload(payload)) {
+        if (!admitFtEvidence(payload)) {
             return false;
         }
         latestFtFaultAlert = payload;
@@ -511,7 +533,7 @@ public final class CoordinatorStateV1 {
      * machine actuator and therefore cannot establish FT_SAFE_STOP_ACK.
      */
     public static boolean recordFtSafeStopRequest(String payload) {
-        if (!isPresentPayload(payload)) {
+        if (!admitFtEvidence(payload)) {
             return false;
         }
         pendingFtSafeStopRequest = payload;
@@ -527,7 +549,7 @@ public final class CoordinatorStateV1 {
 
     /** Records service-ready evidence but intentionally keeps the M1 hold. */
     public static boolean recordFtRecoveryReady(String payload) {
-        if (!isPresentPayload(payload)) {
+        if (!admitFtEvidence(payload)) {
             return false;
         }
         latestFtRecoveryReady = payload;
@@ -540,7 +562,7 @@ public final class CoordinatorStateV1 {
 
     /** Records/escalates a failed recovery and retains the M1 hold. */
     public static boolean recordFtRecoveryFailed(String payload) {
-        if (!isPresentPayload(payload)) {
+        if (!admitFtEvidence(payload)) {
             return false;
         }
         latestFtRecoveryFailed = payload;
@@ -639,6 +661,7 @@ public final class CoordinatorStateV1 {
         }
         completedBottles = 0;
         beginM4SimulationBatch();
+        startOrderUntilMillis = System.currentTimeMillis() + 500L;
     }
 
     /**
@@ -752,6 +775,10 @@ public final class CoordinatorStateV1 {
         lidStatus = 0;
         capperStatus = 0;
         unloaderStatus = 0;
+        labellerStatus = 0;
+        sortPackStatus = 0;
+        nextTwinContextMillis = 0L;
+        startOrderUntilMillis = 0L;
     }
 
     static synchronized void resetForTest() {
@@ -759,6 +786,11 @@ public final class CoordinatorStateV1 {
         lastSystemResetId = "";
         processedSystemResetIds.clear();
         lastAcceptedOrderId = "";
+        acceptedOrderIds.clear();
+        observedFtKeys.clear();
+        retiredFtKeys.clear();
+        m2ResetEpoch = 0;
+        resetWatermark = java.math.BigInteger.valueOf(-1L);
         systemResetPendingExternalAck = false;
         systemResetCompletionPending = false;
         m2SystemResetAcknowledged = false;
@@ -784,7 +816,41 @@ public final class CoordinatorStateV1 {
         return resetId != null && resetId.matches("RST[0-9]{4,}");
     }
 
+    /** Read-only recipe context for the twin; repeating a stable payload is idempotent. */
+    public static synchronized String nextTwinBatchContext() {
+        long now = System.currentTimeMillis();
+        if (!orderActive || systemResetPendingExternalAck || now < nextTwinContextMillis) return null;
+        nextTwinContextMillis = now + 250L;
+        return "V1|" + currentOrderId() + "|" + currentProductId() + "|" +
+            currentLiquidARatio + "|" + currentLiquidBRatio + "|" + requiredBottles + "|" + currentSizeCode();
+    }
+
+    /** One held quantity window; no anonymous retry after a batch may finish. */
+    public static synchronized boolean publishStartOrder() {
+        return orderActive && !systemResetPendingExternalAck &&
+            System.currentTimeMillis() < startOrderUntilMillis;
+    }
+
     private static boolean isPresentPayload(String payload) {
         return payload != null && payload.trim().length() > 0;
+    }
+
+    /** Preserve correlation tombstones across reset; delayed FT cannot restore HOLD. */
+    private static synchronized boolean admitFtEvidence(String payload) {
+        if (!isPresentPayload(payload)) return false;
+        String[] fields = payload.split("\\|", -1);
+        String key = fields.length >= 3 && "V2".equals(fields[0]) ? fields[2] + "|" + fields[1] : payload;
+        if (systemResetPendingExternalAck) {
+            retiredFtKeys.add(key);
+            return false;
+        }
+        if (retiredFtKeys.contains(key)) return false;
+        if (fields.length >= 3 && "V2".equals(fields[0]) && fields[2].matches("E01(?:R[0-9]+)?")) {
+            java.math.BigInteger epoch = "E01".equals(fields[2]) ? java.math.BigInteger.ZERO :
+                new java.math.BigInteger(fields[2].substring(4));
+            if (epoch.compareTo(java.math.BigInteger.valueOf(m2ResetEpoch)) < 0) return false;
+        }
+        observedFtKeys.add(key);
+        return true;
     }
 }

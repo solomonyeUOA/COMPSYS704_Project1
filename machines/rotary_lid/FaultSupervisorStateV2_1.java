@@ -7,46 +7,63 @@ public final class FaultSupervisorStateV2_1 {
     }
 
     public static boolean onTransferFault(String payload) {
+        if (M3SystemResetStateV1.isQuarantined()) {
+            MODEL.retireFaultDuringReset(payload);
+            return false;
+        }
         return MODEL.onTransferFault(payload);
     }
 
     public static boolean onFaultEvent(String payload) {
+        if (M3SystemResetStateV1.isQuarantined()) {
+            MODEL.retireFaultDuringReset(payload);
+            return false;
+        }
         return MODEL.onFaultEvent(payload);
     }
 
     public static boolean onRecoveryAck(String payload) {
+        if (M3SystemResetStateV1.isQuarantined()) return false;
         return MODEL.onRecoveryAck(payload);
     }
 
     public static boolean onRecoveryResult(String payload) {
+        if (M3SystemResetStateV1.isQuarantined()) return false;
         return MODEL.onRecoveryResult(payload);
     }
 
     public static boolean onSafeStopAck(String payload) {
+        if (M3SystemResetStateV1.isQuarantined()) return false;
         return MODEL.onSafeStopAck(payload);
     }
 
     public static boolean onResumeDecision(String payload) {
+        if (M3SystemResetStateV1.isQuarantined()) return false;
         return MODEL.onResumeDecision(payload);
     }
 
     public static String takeRecoveryRequest() {
+        if (M3SystemResetStateV1.isQuarantined()) return null;
         return MODEL.takeRecoveryRequest();
     }
 
     public static String takeFaultAlert() {
+        if (M3SystemResetStateV1.isQuarantined()) return null;
         return MODEL.takeFaultAlert();
     }
 
     public static String takeSafeStopRequest() {
+        if (M3SystemResetStateV1.isQuarantined()) return null;
         return MODEL.takeSafeStopRequest();
     }
 
     public static String takeRecoveryReady() {
+        if (M3SystemResetStateV1.isQuarantined()) return null;
         return MODEL.takeRecoveryReady();
     }
 
     public static String takeRecoveryFailed() {
+        if (M3SystemResetStateV1.isQuarantined()) return null;
         return MODEL.takeRecoveryFailed();
     }
 
@@ -188,6 +205,14 @@ public final class FaultSupervisorStateV2_1 {
 
     public static void reset() {
         MODEL.reset();
+    }
+
+    public static void resetRuntimePreservingHistory() {
+        MODEL.resetRuntimePreservingHistory();
+    }
+
+    public static void resetRuntimeForSystemReset() {
+        MODEL.resetRuntimeForSystemReset();
     }
 
     static FaultSupervisorModelV2_1 modelForTest() {

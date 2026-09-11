@@ -34,10 +34,14 @@ BottleUnloaderController(
             }
         }
         present(REMOVAL_CONFIRMED) {
-            if (!M2MachineStateV1.acceptRemovalConfirmed(
+            if (M2MachineStateV1.acceptRemovalConfirmed(
                 #REMOVAL_CONFIRMED,
                 System.currentTimeMillis()
             )) {
+                M2PlantStateV1.acknowledgeRemovalConfirmation(
+                    (#REMOVAL_CONFIRMED).split("\\|", -1)[0]);
+            }
+            else {
                 System.out.println("M2 Unloader rejected removal evidence");
             }
         }
@@ -45,7 +49,7 @@ BottleUnloaderController(
     }}
     ||
     {loop {
-        String command = M2MachineStateV1.takeUnloadCommand();
+        String command = M2MachineStateV1.nextUnloadCommandOffer();
         if (command != null) {
             emit UNLOAD_CMD(command);
         }

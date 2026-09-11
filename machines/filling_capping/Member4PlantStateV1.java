@@ -36,22 +36,30 @@ public final class Member4PlantStateV1 {
     }
 
     public static synchronized void acceptFillerACommand(String command) {
+        if (!M4ResetFenceV1.accept(command)) { return; }
         fillerA.acceptCommand(command, System.currentTimeMillis());
     }
 
     public static synchronized void acceptFillerBCommand(String command) {
+        if (!M4ResetFenceV1.accept(command)) { return; }
         fillerB.acceptCommand(command, System.currentTimeMillis());
     }
 
     public static synchronized void acceptCapperCommand(String command) {
+        if (!M4ResetFenceV1.accept(command)) { return; }
         capper.acceptCommand(command, System.currentTimeMillis());
     }
 
     public static synchronized void acceptSortPackCommand(String command) {
+        if (!M4ResetFenceV1.accept(command)) { return; }
         sortPack.acceptCommand(command, System.currentTimeMillis());
     }
 
     public static synchronized void tick() {
+        if (M4ResetFenceV1.isQuarantined()) {
+            tickSystemReset(System.currentTimeMillis());
+            return;
+        }
         long now = System.currentTimeMillis();
         fillerA.tick(now);
         fillerB.tick(now);
@@ -60,18 +68,22 @@ public final class Member4PlantStateV1 {
     }
 
     public static synchronized String takeFillerAFeedback() {
+        if (M4ResetFenceV1.isQuarantined()) { return null; }
         return takeFeedback(fillerA.takeFeedback(), fillerAFeedbackEvent);
     }
 
     public static synchronized String takeFillerBFeedback() {
+        if (M4ResetFenceV1.isQuarantined()) { return null; }
         return takeFeedback(fillerB.takeFeedback(), fillerBFeedbackEvent);
     }
 
     public static synchronized String takeCapperFeedback() {
+        if (M4ResetFenceV1.isQuarantined()) { return null; }
         return takeFeedback(capper.takeFeedback(), capperFeedbackEvent);
     }
 
     public static synchronized String takeSortPackFeedback() {
+        if (M4ResetFenceV1.isQuarantined()) { return null; }
         return takeFeedback(
             sortPack.takeFeedback(),
             sortPackFeedbackEvent
@@ -79,18 +91,22 @@ public final class Member4PlantStateV1 {
     }
 
     public static synchronized void injectFillerAFault(String fault) {
+        if (M4ResetFenceV1.isQuarantined()) { return; }
         configureFillerFault(fillerA, fault);
     }
 
     public static synchronized void injectFillerBFault(String fault) {
+        if (M4ResetFenceV1.isQuarantined()) { return; }
         configureFillerFault(fillerB, fault);
     }
 
     public static synchronized void injectCapperFault(String action) {
+        if (M4ResetFenceV1.isQuarantined()) { return; }
         capper.setForcedFaultAction(action);
     }
 
     public static synchronized void injectSortPackFault(String fault) {
+        if (M4ResetFenceV1.isQuarantined()) { return; }
         if ("WRONG_LANE".equals(fault)) {
             sortPack.setForceWrongLane(true);
         }
@@ -106,6 +122,29 @@ public final class Member4PlantStateV1 {
         return "FillerA " + fillerA.snapshot() + "\nFillerB " +
             fillerB.snapshot() + "\n" + capper.snapshot() + "\n" +
             sortPack.snapshot();
+    }
+
+    public static synchronized void beginSystemReset(long now) {
+        fillerA.resetForSystem();
+        fillerB.resetForSystem();
+        capper.beginSystemReset(now);
+        sortPack.resetForSystem();
+        fillerAFeedbackEvent.cancel(); fillerBFeedbackEvent.cancel();
+        capperFeedbackEvent.cancel(); sortPackFeedbackEvent.cancel();
+    }
+
+    public static synchronized void tickSystemReset(long now) {
+        capper.tickSystemReset(now);
+    }
+
+    public static synchronized boolean isSystemResetSafe() {
+        return fillerA.isSystemResetSafe() && fillerB.isSystemResetSafe() &&
+            capper.isSystemResetSafe() && sortPack.isSystemResetSafe();
+    }
+
+    public static synchronized String systemResetEvidence() {
+        return "FILLER_VALVES_OFF,MOVEMENT_OFF,SORT_STOPPED," +
+            capper.systemResetEvidence();
     }
 
     private static String takeFeedback(
