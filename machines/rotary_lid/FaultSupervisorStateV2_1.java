@@ -98,12 +98,26 @@ public final class FaultSupervisorStateV2_1 {
             FaultMonitoringStateV2_1.M1_LINK,
             "FT_RESUME_DECISION"
         );
+        if (FaultGuiActionsV2_1.isTestMode() &&
+            isResumeDecision(payload) &&
+            !FaultTestControlStateV2_1.hasPendingResumeRequest()) {
+            return false;
+        }
         boolean accepted = MODEL.onResumeDecision(payload);
         if (accepted) {
             RECOVERY_READY_OFFER.discard();
             FaultTestControlStateV2_1.acknowledge();
         }
         return accepted;
+    }
+
+    private static boolean isResumeDecision(String payload) {
+        if (payload == null) {
+            return false;
+        }
+        String[] fields = payload.split("\\|", -1);
+        return fields.length == 6 && "V2".equals(fields[0]) &&
+            "RESUME".equals(fields[3]);
     }
 
     public static String takeRecoveryRequest() {

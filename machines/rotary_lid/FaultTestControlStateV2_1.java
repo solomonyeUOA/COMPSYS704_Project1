@@ -4,6 +4,7 @@ public final class FaultTestControlStateV2_1 {
         new BoundedStringSignalOfferV1(3, 500L, 100L);
     private static final BoundedStringSignalOfferV1 TRANSFER_OFFER =
         new BoundedStringSignalOfferV1(3, 500L, 100L);
+    private static boolean resumeRequested;
 
     private FaultTestControlStateV2_1() {
     }
@@ -13,7 +14,11 @@ public final class FaultTestControlStateV2_1 {
     }
 
     public static synchronized boolean requestResume() {
-        return begin("RESUME");
+        boolean accepted = begin("RESUME");
+        if (accepted) {
+            resumeRequested = true;
+        }
+        return accepted;
     }
 
     public static synchronized boolean requestTransferRecovery() {
@@ -44,6 +49,7 @@ public final class FaultTestControlStateV2_1 {
 
     public static synchronized void acknowledge() {
         M1_OFFER.discard();
+        resumeRequested = false;
     }
 
     public static synchronized void acknowledgeTransfer() {
@@ -53,6 +59,11 @@ public final class FaultTestControlStateV2_1 {
     public static synchronized void reset() {
         M1_OFFER.discard();
         TRANSFER_OFFER.discard();
+        resumeRequested = false;
+    }
+
+    public static synchronized boolean hasPendingResumeRequest() {
+        return resumeRequested;
     }
 
     private static boolean begin(String action) {

@@ -73,6 +73,10 @@ public final class RotaryTablePlantModelV1 {
         return true;
     }
 
+    public boolean hasActiveBottle(String bottleId) {
+        return bottleId != null && findBottle(bottleId) != null;
+    }
+
     /** Starts one physical step on a rising command from the M3 Controller. */
     public boolean setMotorCommand(boolean enabled, long cycleId, long nowMs) {
         boolean started = false;

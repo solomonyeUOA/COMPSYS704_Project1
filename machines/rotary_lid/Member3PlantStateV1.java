@@ -2,6 +2,10 @@
 public final class Member3PlantStateV1 {
     private static final java.util.Set<String> retiredBottleIds =
         new java.util.HashSet<String>();
+    private static final java.util.Queue<String> pendingLoadQueue =
+        new java.util.ArrayDeque<String>();
+    private static final java.util.Set<String> pendingLoadIds =
+        new java.util.HashSet<String>();
     private static RotaryTablePlantModelV1 rotary =
         new RotaryTablePlantModelV1();
     private static LidLoaderPlantModelV1 lid =
@@ -32,12 +36,15 @@ public final class Member3PlantStateV1 {
         twinOffer = new BoundedSignalOfferV1(3);
         twinEventSequence = 0L;
         pendingP6ClearId = null;
+        pendingLoadQueue.clear();
+        pendingLoadIds.clear();
         retiredBottleIds.clear();
     }
 
     /** Clears work in flight while preserving physical lid inventory. */
     public static synchronized void systemReset() {
         retiredBottleIds.addAll(rotary.activeBottleIds());
+        retiredBottleIds.addAll(pendingLoadIds);
         int magazineCount = lid.getMagazineCount();
         rotary.safeStopAndClear();
         rotary = new RotaryTablePlantModelV1();
@@ -49,6 +56,8 @@ public final class Member3PlantStateV1 {
         twinOutbox.clear();
         twinOffer = new BoundedSignalOfferV1(3);
         pendingP6ClearId = null;
+        pendingLoadQueue.clear();
+        pendingLoadIds.clear();
     }
 
     public static synchronized boolean isResetSafe() {
@@ -62,6 +71,62 @@ public final class Member3PlantStateV1 {
             return false;
         }
         return rotary.loadBottle(id);
+    }
+
+    /**
+     * Accepts the one-reaction M2 load event without dropping it while P1 is
+     * occupied or M3 is fault-held. Repeated transport copies are idempotent.
+     */
+    public static synchronized boolean acceptLoadRequest(String id) {
+        if (M3SystemResetStateV1.isQuarantined() ||
+            retiredBottleIds.contains(id) || !validBottleId(id)) {
+            return false;
+        }
+        if (rotary.hasActiveBottle(id) || pendingLoadIds.contains(id)) {
+            return true;
+        }
+        if (rotary.loadBottle(id)) {
+            return true;
+        }
+        pendingLoadQueue.add(id);
+        pendingLoadIds.add(id);
+        return true;
+    }
+
+    /** Loads at most one queued bottle when the physical P1 slot is free. */
+    public static synchronized boolean drainPendingLoad() {
+        if (M3SystemResetStateV1.isQuarantined()) {
+            return false;
+        }
+        while (!pendingLoadQueue.isEmpty()) {
+            String id = pendingLoadQueue.peek();
+            if (retiredBottleIds.contains(id) || rotary.hasActiveBottle(id)) {
+                pendingLoadQueue.remove();
+                pendingLoadIds.remove(id);
+                continue;
+            }
+            if (!rotary.loadBottle(id)) {
+                return false;
+            }
+            pendingLoadQueue.remove();
+            pendingLoadIds.remove(id);
+            return true;
+        }
+        return false;
+    }
+
+    static synchronized int pendingLoadCount() {
+        return pendingLoadQueue.size();
+    }
+
+    private static boolean validBottleId(String id) {
+        try {
+            BottleContextV1.validateBottleId(id);
+            return true;
+        }
+        catch (IllegalArgumentException invalid) {
+            return false;
+        }
     }
 
     public static synchronized boolean registerBottleContext(String payload) {

@@ -21,6 +21,7 @@ public final class FaultSupervisorSelfTest {
         testMalformedAndUnknownEvents();
         testGuiEnablementRules();
         testGuiHotModeSwitch();
+        testGuiMagazineResourceRecovery();
         testGuiM1RecoveryRoundTrip();
         testGuiTransferRecoveryRoundTrip();
         testMonitoringSnapshot();
@@ -487,6 +488,46 @@ public final class FaultSupervisorSelfTest {
             "reset remains available in live mode");
     }
 
+    private static void testGuiMagazineResourceRecovery() {
+        FaultSupervisorStateV2_1.reset();
+        Member3MachineStateV1.reset();
+        Member3PlantStateV1.reset();
+        FaultGuiActionsV2_1.setTestMode(true);
+
+        int capacity = Member3PlantStateV1.getLidMagazineCapacity();
+        require(Member3PlantStateV1.refillLids(1) == 0,
+            "magazine recovery test starts at physical capacity");
+        require(!Member3MachineStateV1.requestLidLoad("RESOURCE-B001", false),
+            "empty resource prevents the controller from starting");
+        require("RESOURCE_WAIT".equals(FaultSupervisorStateV2_1.stateName()),
+            "magazine empty enters resource wait");
+
+        // Model one consumed slot so the GUI recovery must change Plant state.
+        Member3PlantStateV1.setPickCommand(true);
+        sleep(LidLoaderPlantModelV1.PICK_TIME_MS + 25L);
+        Member3PlantStateV1.updateLidLoader();
+        Member3PlantStateV1.setPickCommand(false);
+        Member3PlantStateV1.setPlaceCommand(true);
+        sleep(LidLoaderPlantModelV1.PLACE_TIME_MS + 25L);
+        Member3PlantStateV1.updateLidLoader();
+        Member3PlantStateV1.setPlaceCommand(false);
+        require(Member3PlantStateV1.getLidMagazineCount() == capacity - 1,
+            "Plant inventory is below capacity before recovery");
+
+        require(FaultGuiActionsV2_1.perform("controller-evidence", null),
+            "resource evidence refills the real Plant and clears the fault");
+        require(Member3PlantStateV1.getLidMagazineCount() == capacity &&
+            Member3PlantStateV1.isLidAvailable(),
+            "resource recovery restores actual magazine availability");
+        require("RECOVERY_READY".equals(FaultSupervisorStateV2_1.stateName()),
+            "resource recovery waits for M1 resume approval");
+
+        FaultGuiActionsV2_1.setTestMode(false);
+        Member3PlantStateV1.reset();
+        Member3MachineStateV1.reset();
+        FaultSupervisorStateV2_1.reset();
+    }
+
     private static void testGuiM1RecoveryRoundTrip() {
         FaultSupervisorStateV2_1.reset();
         Member3MachineStateV1.reset();
@@ -527,6 +568,16 @@ public final class FaultSupervisorSelfTest {
         require(CoordinatorStateV1.recordFtRecoveryReady(
             FaultSupervisorStateV2_1.takeRecoveryReady()
         ), "M1 records recovery-ready evidence");
+        require(FaultTestControlStateV2_1.nextRequest() == null,
+            "controller evidence does not queue an implicit resume request");
+        require(!FaultSupervisorStateV2_1.onResumeDecision(
+            "V2|GUI-RECOVERY-1|M3-E01|RESUME|UNSOLICITED|2"
+        ), "test-mode supervisor rejects resume without GUI approval");
+        require("RECOVERY_READY".equals(
+            FaultSupervisorStateV2_1.stateName()),
+            "unsolicited resume cannot clear recovery-ready state");
+        require(CoordinatorStateV1.ftCoordinationHold,
+            "M1 hold remains before explicit GUI approval");
 
         require(FaultGuiActionsV2_1.perform("resume", null),
             "resume button queues a real M1 request");
@@ -746,6 +797,16 @@ public final class FaultSupervisorSelfTest {
     private static void require(boolean condition, String message) {
         if (!condition) {
             throw new AssertionError(message);
+        }
+    }
+
+    private static void sleep(long milliseconds) {
+        try {
+            Thread.sleep(milliseconds);
+        }
+        catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            throw new AssertionError("test interrupted");
         }
     }
 }

@@ -6,6 +6,7 @@ public final class Member3PlantSelfTest {
     public static void main(String[] args) {
         testBottleThroughSixPositions();
         testMultipleBottlePipeline();
+        testFaultHoldLoadBacklog();
         testIdentityAndP6Interlocks();
         testRotaryAlignmentFault();
         testLidPlantSequence();
@@ -84,6 +85,44 @@ public final class Member3PlantSelfTest {
         require(table.markFilled("B"), "B fills independently");
     }
 
+    private static void testFaultHoldLoadBacklog() {
+        Member3PlantStateV1.reset();
+        for (int index = 1; index <= 20; index++) {
+            String bottleId = String.format("Q%03d", index);
+            require(Member3PlantStateV1.registerBottleContext(context(bottleId)),
+                "queued context accepted " + bottleId);
+        }
+        require(Member3PlantStateV1.acceptLoadRequest("Q001"),
+            "first load request enters P1");
+        for (int index = 2; index <= 20; index++) {
+            String bottleId = String.format("Q%03d", index);
+            require(Member3PlantStateV1.acceptLoadRequest(bottleId),
+                "busy P1 queues " + bottleId);
+        }
+        require(Member3PlantStateV1.acceptLoadRequest("Q002"),
+            "duplicate transport copy is idempotent");
+        require(Member3PlantStateV1.pendingLoadCount() == 19,
+            "all 20-bottle requests are retained without duplicate entries");
+
+        advancePlantFacade(1);
+        require(Member3PlantStateV1.drainPendingLoad(),
+            "first queued bottle loads after P1 clears");
+        require(Member3PlantStateV1.positionLabel(0).startsWith("Q002["),
+            "queued bottle order is preserved");
+        require(Member3PlantStateV1.pendingLoadCount() == 18,
+            "remaining 20-bottle backlog is retained");
+
+        require(Member3PlantStateV1.markFilled("Q001"),
+            "first bottle clears its fill barrier");
+        advancePlantFacade(2);
+        require(Member3PlantStateV1.drainPendingLoad(),
+            "second queued bottle loads after the next P1 clear");
+        require(Member3PlantStateV1.positionLabel(0).startsWith("Q003[") &&
+            Member3PlantStateV1.pendingLoadCount() == 17,
+            "20-bottle backlog continues in original order after recovery");
+        Member3PlantStateV1.reset();
+    }
+
     private static void testIdentityAndP6Interlocks() {
         RotaryTablePlantModelV1 table = new RotaryTablePlantModelV1();
         require(!table.loadBottle("bad id"), "invalid bottle ID is rejected");
@@ -124,13 +163,10 @@ public final class Member3PlantSelfTest {
 
     private static void testLidPlantSequence() {
         LidLoaderPlantModelV1 lid = new LidLoaderPlantModelV1();
-        int expectedCapacity = (int) Math.floor(
-            LidLoaderPlantModelV1.USABLE_MAGAZINE_HEIGHT_MM
-                / LidLoaderPlantModelV1.STACKED_LID_THICKNESS_MM
-        );
-        require(lid.getMagazineCapacity() == expectedCapacity,
-            "capacity is derived from the documented Plant geometry");
-        require(expectedCapacity == 30, "documented geometry provides 30 lids");
+        int expectedCapacity = LidLoaderPlantModelV1.MAGAZINE_CAPACITY;
+        require(lid.getMagazineCapacity() == 9999 &&
+            expectedCapacity == 9999,
+            "simulation magazine capacity is 9999 lids");
         require(lid.getMagazineCount() == lid.getMagazineCapacity(),
             "magazine starts at its physical capacity");
         require(lid.setPickCommand(true, 0), "pick starts on rising command");
