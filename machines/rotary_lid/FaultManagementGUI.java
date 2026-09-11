@@ -151,6 +151,8 @@ public final class FaultManagementGUI {
         private String actionFeedback = "";
         private boolean actionFailed;
         private long lastWatchdogNotificationSequence;
+        private String lastEventId = "-";
+        private String lastSupervisorState = "IDLE";
 
         DashboardFrame() {
             super("M3 Fault-Tolerance Monitor");
@@ -406,6 +408,7 @@ public final class FaultManagementGUI {
             );
             FaultMonitoringStateV2_1.Snapshot snapshot =
                 FaultMonitoringStateV2_1.snapshot();
+            synchroniseActionFeedback(snapshot);
             String viewState = "RESETTING".equals(snapshot.systemHealth) ?
                 t("RESETTING", "重置中") : displayState(snapshot.supervisorState);
             health.setText(t("SYSTEM ", "系统 ") + snapshot.systemHealth);
@@ -442,6 +445,31 @@ public final class FaultManagementGUI {
             history.setText(historyText());
             updateButtons(snapshot);
             showWatchdogNotification(snapshot);
+        }
+
+        private void synchroniseActionFeedback(
+            FaultMonitoringStateV2_1.Snapshot snapshot
+        ) {
+            boolean newFault = !"-".equals(snapshot.eventId) &&
+                !snapshot.eventId.equals(lastEventId);
+            if (newFault && !actionRunning) {
+                actionFailed = false;
+                actionFeedback = t(
+                    "Fault detected; follow the enabled recovery steps.",
+                    "已检测到故障；请按已启用的恢复步骤操作。"
+                );
+            }
+            if ("RECOVERY_READY".equals(snapshot.supervisorState) &&
+                !"RECOVERY_READY".equals(lastSupervisorState) &&
+                !actionRunning) {
+                actionFailed = false;
+                actionFeedback = t(
+                    "Recovery verified; system HOLD remains until Approve resume is pressed.",
+                    "恢复验证完成；按下批准恢复前系统仍保持暂停。"
+                );
+            }
+            lastEventId = snapshot.eventId;
+            lastSupervisorState = snapshot.supervisorState;
         }
 
         private void showWatchdogNotification(

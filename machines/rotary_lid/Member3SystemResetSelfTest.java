@@ -91,6 +91,10 @@ public final class Member3SystemResetSelfTest {
         ), "Plant reset context precondition");
         require(Member3PlantStateV1.loadBottle("RST-PLANT"),
             "Plant reset bottle precondition");
+        require(Member3PlantStateV1.acceptLoadRequest("RST-QUEUED"),
+            "Plant reset queued bottle precondition");
+        require(Member3PlantStateV1.pendingLoadCount() == 1,
+            "second bottle waits while P1 is occupied");
         Member3PlantStateV1.setRotaryMotor(true, 1L);
         Member3PlantStateV1.setPickCommand(true);
         int inventory = Member3PlantStateV1.getLidMagazineCount();
@@ -110,6 +114,9 @@ public final class Member3SystemResetSelfTest {
         }
         require(!Member3PlantStateV1.loadBottle("RST-PLANT"),
             "reset retires in-flight bottle identity");
+        require(Member3PlantStateV1.pendingLoadCount() == 0 &&
+            !Member3PlantStateV1.acceptLoadRequest("RST-QUEUED"),
+            "reset clears and retires queued bottle identities");
     }
 
     private static void testResetBarrierAndQuarantine() throws Exception {

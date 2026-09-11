@@ -4,24 +4,8 @@ public final class LidLoaderPlantModelV1 {
     public static final long PLACE_TIME_MS = 300;
     public static final long PLACED_SENSOR_HOLD_MS = 200;
 
-    /*
-     * Simulation geometry in millimetres. The finite capacity is a Plant
-     * property; it is deliberately independent of order quantities.
-     */
-    public static final double MAGAZINE_INTERNAL_HEIGHT_MM = 120.0;
-    public static final double TOP_PICK_CLEARANCE_MM = 8.0;
-    public static final double BOTTOM_FOLLOWER_HEIGHT_MM = 12.0;
-    public static final double SENSOR_CLEARANCE_MM = 4.0;
-    public static final double SAFETY_ALLOWANCE_MM = 6.0;
-    public static final double STACKED_LID_THICKNESS_MM = 3.0;
-    public static final double USABLE_MAGAZINE_HEIGHT_MM =
-        MAGAZINE_INTERNAL_HEIGHT_MM
-            - TOP_PICK_CLEARANCE_MM
-            - BOTTOM_FOLLOWER_HEIGHT_MM
-            - SENSOR_CLEARANCE_MM
-            - SAFETY_ALLOWANCE_MM;
-    public static final int MAGAZINE_CAPACITY =
-        (int) Math.floor(USABLE_MAGAZINE_HEIGHT_MM / STACKED_LID_THICKNESS_MM);
+    /** Finite simulation capacity, independent of the submitted order size. */
+    public static final int MAGAZINE_CAPACITY = 9999;
 
     private enum Action {
         IDLE,

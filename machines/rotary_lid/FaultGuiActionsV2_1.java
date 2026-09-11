@@ -58,6 +58,21 @@ public final class FaultGuiActionsV2_1 {
         String event = FaultSupervisorStateV2_1.activeEventId();
         String epoch = FaultSupervisorStateV2_1.activeEpoch();
         long version = FaultSupervisorStateV2_1.activeStateVersion();
+        if ("RESOURCE_WAIT".equals(state)) {
+            int missingLids = Member3PlantStateV1.getLidMagazineCapacity() -
+                Member3PlantStateV1.getLidMagazineCount();
+            if (missingLids > 0 &&
+                Member3PlantStateV1.refillLids(missingLids) <= 0) {
+                return false;
+            }
+            boolean lidAvailable = Member3PlantStateV1.isLidAvailable();
+            if (!lidAvailable || !Member3MachineStateV1.recoverActiveTestFault()) {
+                return false;
+            }
+            return FaultSupervisorStateV2_1.confirmResourceRestored(
+                event, lidAvailable, version + 1
+            );
+        }
         if (("ROTARY".equals(FaultSupervisorStateV2_1.activeSubsystem()) ||
             "LID".equals(FaultSupervisorStateV2_1.activeSubsystem())) &&
             !Member3MachineStateV1.recoverActiveTestFault()) {
@@ -75,11 +90,6 @@ public final class FaultGuiActionsV2_1 {
                 FaultSupervisorStateV2_1.requiredSafeEvidence() + "|" +
                 FaultSupervisorStateV2_1.requiredServiceEvidence() + "|" +
                 (version + 1)
-            );
-        }
-        if ("RESOURCE_WAIT".equals(state)) {
-            return FaultSupervisorStateV2_1.confirmResourceRestored(
-                event, true, version + 1
             );
         }
         if ("LOCKED_OUT".equals(state)) {

@@ -27,7 +27,7 @@ RotaryTablePlant(
     System.out.println("Member 3 RotaryTablePlantCD started");
 
     {loop {present(LOAD_BOTTLE) {
-        if (!Member3PlantStateV1.loadBottle(#LOAD_BOTTLE)) {
+        if (!Member3PlantStateV1.acceptLoadRequest(#LOAD_BOTTLE)) {
             System.out.println("M3 rejected LOAD_BOTTLE=" + #LOAD_BOTTLE);
         }
     } pause;}}
@@ -105,6 +105,7 @@ RotaryTablePlant(
     ||
     {loop {
         if (!M3SystemResetStateV1.isQuarantined()) {
+        Member3PlantStateV1.drainPendingLoad();
         if (Member3PlantStateV1.canRotate()) {
             emit ROTATION_READY;
         }
