@@ -103,7 +103,6 @@ RotaryTablePlant(
     }}
     ||
     {loop {
-        if (!M3SystemResetStateV1.isQuarantined()) {
         if (Member3PlantStateV1.canRotate()) {
             emit ROTATION_READY;
         }
@@ -120,18 +119,20 @@ RotaryTablePlant(
             emit LID_POSITION_CLEAR;
         }
 
-        String fillOffer = Member3PlantStateV1.nextFillOfferWindow();
+        String fillOffer = Member3PlantStateV1.takeFillOffer();
         if (fillOffer != null) {
             emit BOTTLE_AT_FILL(fillOffer);
+            System.out.println("M3 offered P2 bottle to filler");
         }
-        String capOffer = Member3PlantStateV1.nextCapOfferWindow();
+        String capOffer = Member3PlantStateV1.takeCapOffer();
         if (capOffer != null) {
             emit BOTTLE_AT_CAP(capOffer);
+            System.out.println("M3 offered P4 bottle to capper");
         }
-        String labelOffer = Member3PlantStateV1.nextLabelOfferWindow();
+        String labelOffer = Member3PlantStateV1.takeLabelOffer();
         if (labelOffer != null) {
             emit BOTTLE_AT_LABEL(labelOffer);
-        }
+            System.out.println("M3 offered P6 bottle to labeller");
         }
         pause;
     }}

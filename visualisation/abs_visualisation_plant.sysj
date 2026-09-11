@@ -14,9 +14,6 @@ ABSVisualisationPlant(
     input Integer signal VIZ_UNLOADER_STATUS;
     input Integer signal VIZ_REQUIRED_BOTTLES;
     input Integer signal VIZ_COMPLETED_BOTTLES;
-    // Optional M1 IP-only projection of Coordinator-observed M3 evidence.
-    input String signal VIZ_FT_EVIDENCE;
-    input String signal VIZ_SYSTEM_RESET;
 )
 ->{
     ABSVisualisation.start();
@@ -80,13 +77,5 @@ ABSVisualisationPlant(
         ABSVisualisation.updateCompletedBottles(
             #VIZ_COMPLETED_BOTTLES
         );
-    } pause;}}
-    ||
-    {loop {present(VIZ_FT_EVIDENCE) {
-        ABSVisualisation.updateFtEvidence(#VIZ_FT_EVIDENCE);
-    } pause;}}
-    ||
-    {loop {present(VIZ_SYSTEM_RESET) {
-        ABSVisualisation.resetSystem(#VIZ_SYSTEM_RESET);
     } pause;}}
 }

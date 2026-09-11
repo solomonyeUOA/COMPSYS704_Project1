@@ -5,9 +5,6 @@
             <!-- POS -> Coordinator and Controller -> Coordinator inputs -->
             <iSignal Name="ORDER" Class="com.systemj.ipc.SimpleServer"
                      IP="127.0.0.1" Port="11001" />
-            <iSignal Name="SYSTEM_RESET_REQUEST"
-                     Class="com.systemj.ipc.SimpleServer"
-                     IP="127.0.0.1" Port="11001" />
             <iSignal Name="LOADER_STATUS" Class="com.systemj.ipc.SimpleServer"
                      IP="127.0.0.1" Port="11001" />
             <iSignal Name="CONVEYOR_STATUS" Class="com.systemj.ipc.SimpleServer"
@@ -41,42 +38,10 @@
                      Class="com.systemj.ipc.SimpleServer"
                      IP="127.0.0.1" Port="11001" />
 
-            <!-- Member reset acknowledgements -> CoordinatorCD -->
-            <iSignal Name="M2_SYSTEM_RESET_ACK"
-                     Class="com.systemj.ipc.SimpleServer"
-                     IP="127.0.0.1" Port="11001" />
-            <iSignal Name="M3_SYSTEM_RESET_ACK"
-                     Class="com.systemj.ipc.SimpleServer"
-                     IP="127.0.0.1" Port="11001" />
-            <iSignal Name="M4_SYSTEM_RESET_ACK"
-                     Class="com.systemj.ipc.SimpleServer"
-                     IP="127.0.0.1" Port="11001" />
-
             <!-- Coordinator -> POS -->
             <oSignal Name="ORDER_COMPLETE" To="POSCD.ORDER_COMPLETE"
                      Class="com.systemj.ipc.SimpleClient"
                      IP="127.0.0.1" Port="11000" />
-            <oSignal Name="SYSTEM_RESET_COMPLETE"
-                     To="POSCD.SYSTEM_RESET_COMPLETE"
-                     Class="com.systemj.ipc.SimpleClient"
-                     IP="127.0.0.1" Port="11000" />
-
-            <!--
-                Optional until M2/M3/M4 add idempotent safe-state reset
-                receivers and return the matching reset identity as ACK.
-            -->
-            <oSignal Name="M2_SYSTEM_RESET"
-                     To="M2TransferFaultAdapterCD.M2_SYSTEM_RESET"
-                     Class="OptionalSimpleClient"
-                     IP="127.0.0.1" Port="13002" />
-            <oSignal Name="M3_SYSTEM_RESET"
-                     To="FaultSupervisorCD.M3_SYSTEM_RESET"
-                     Class="OptionalSimpleClient"
-                     IP="127.0.0.1" Port="13003" />
-            <oSignal Name="M4_SYSTEM_RESET"
-                     To="BottleContextRegistryCD.M4_SYSTEM_RESET"
-                     Class="OptionalSimpleClient"
-                     IP="127.0.0.1" Port="11011" />
 
             <!-- CoordinatorCD -> M3 FaultSupervisorCD, frozen V2.1 -->
             <oSignal Name="FT_SAFE_STOP_ACK"
@@ -87,15 +52,6 @@
                      To="FaultSupervisorCD.FT_RESUME_DECISION"
                      Class="OptionalSimpleClient"
                      IP="127.0.0.1" Port="13003" />
-
-            <!--
-                SIMULATION ONLY: stable batchId|quantity|sizeCode, 3 copies
-                about 600 ms apart with an ABSENT reaction between pulses.
-            -->
-            <oSignal Name="M4_SIM_BATCH_REQUEST"
-                     To="RecognitionSimulatorCD.M4_SIM_BATCH_REQUEST"
-                     Class="OptionalSimpleClient"
-                     IP="127.0.0.1" Port="11014" />
 
             <!-- Coordinator -> Bottle Loader Controller -->
             <oSignal Name="START_ORDER"
@@ -197,14 +153,6 @@
             <oSignal Name="VIZ_COMPLETED_BOTTLES"
                      To="ABSVisualisationPlantCD.VIZ_COMPLETED_BOTTLES"
                      Class="com.systemj.ipc.SimpleClient"
-                     IP="127.0.0.1" Port="11008" />
-            <oSignal Name="VIZ_FT_EVIDENCE"
-                     To="ABSVisualisationPlantCD.VIZ_FT_EVIDENCE"
-                     Class="OptionalSimpleClient"
-                     IP="127.0.0.1" Port="11008" />
-            <oSignal Name="VIZ_SYSTEM_RESET"
-                     To="ABSVisualisationPlantCD.VIZ_SYSTEM_RESET"
-                     Class="OptionalSimpleClient"
                      IP="127.0.0.1" Port="11008" />
         </ClockDomain>
     </SubSystem>

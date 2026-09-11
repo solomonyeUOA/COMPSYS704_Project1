@@ -7,9 +7,6 @@ Filler/Capper positioning, and size-based sorting and packaging.
 
 `member4_system.xml` is the canonical production mapping.
 `member4_demo.xml` and `member4_demo_driver.sysj` are test-only.
-For the six-runtime group simulation, use `member4_simulation.xml` as the
-M4 entrypoint. It contains the same ten M4 modules plus the finite,
-output-only `RecognitionSimulatorCD` described below.
 
 ## Bottle context
 
@@ -59,8 +56,8 @@ owned by the M2 Bottle Unloader after physical collection.
 
 Registry `LOAD_PROFILE`/`UNLOAD_PROFILE` and downstream
 `BOTTLE_READY_FOR_SORT` require the matching M2 integration endpoints. Their
-M4 receivers and payload validation are implemented; end-to-end acceptance
-uses the real M2 peers.
+M4 receivers and payload validation are implemented; the M2 peer remains the
+current external dependency.
 
 ## Control and safety behaviour
 
@@ -89,9 +86,7 @@ uses the real M2 peers.
 
 ## Build and verify
 
-First use the frozen Temurin 8u502 toolchain and verify the JARs as described
-in `../../toolchain/README.md`. From the repository root, replace the lab path
-if necessary:
+From the repository root, replace the lab path if necessary:
 
 ```sh
 mkdir -p build/member4-generated build/member4-classes
@@ -109,17 +104,14 @@ java -cp "/path/to/COMPSYS704_Lab_3/lib/*" \
   machines/filling_capping/capper_plant.sysj \
   machines/filling_capping/sort_pack_controller.sysj \
   machines/filling_capping/sort_pack_plant.sysj \
-  machines/filling_capping/recognition_simulator.sysj \
   machines/filling_capping/member4_demo_driver.sysj
 
-javac -cp "/path/to/COMPSYS704_Lab_3/lib/*" \
+javac --release 8 -cp "/path/to/COMPSYS704_Lab_3/lib/*" \
   -d build/member4-classes \
   build/member4-generated/*.java machines/filling_capping/*.java
 
 java -cp "build/member4-classes:/path/to/COMPSYS704_Lab_3/lib/*" \
   Member4ModelSelfTest
-java -cp "build/member4-classes:/path/to/COMPSYS704_Lab_3/lib/*" \
-  RecognitionSimulatorSelfTest
 ```
 
 The deterministic self-test covers valid 200/500 mL cycles, formula results,
@@ -128,13 +120,12 @@ suppression, wrong-lane rejection and package counting. Expected output:
 
 ```text
 Member4ModelSelfTest PASSED
-RecognitionSimulatorSelfTest PASSED
 ```
 
 Compile and run the deterministic M3/M4 boundary test with both model sets:
 
 ```sh
-javac -cp "/path/to/COMPSYS704_Lab_3/lib/*" \
+javac --release 8 -cp "/path/to/COMPSYS704_Lab_3/lib/*" \
   -d build/member4-classes \
   machines/rotary_lid/*.java machines/filling_capping/*.java \
   machines/filling_capping/integration/*.java
@@ -165,82 +156,3 @@ java -Djava.awt.headless=true \
 ```
 
 Generated Java and class files are build artifacts and must not be committed.
-
-## Six-runtime batch-driven simulation
-
-`RecognitionSimulatorCD` supplies the environmental stimulus that a physical
-camera/size sensor would provide. It is included only in
-`member4_simulation.xml`; canonical `member4_system.xml` remains unchanged and
-has no automatic source. `RECOGNITION_REQUEST` remains internal to M4.
-
-Use these two simulation mappings together:
-
-```text
-xuqi_coordinator/coordinator.xml
-machines/filling_capping/member4_simulation.xml
-```
-
-When POS submits a product quantity and bottle size, M1 publishes
-`M4_SIM_BATCH_REQUEST:String` on simulation-only port 11014:
-
-```text
-<orderId>-P<two-digit product index>|<quantity>|<sizeCode>
-PO0001-P01|3|S
-PO0002-P01|2|L
-```
-
-`sizeCode` is `S` or `L` only. Every batch owns its own size, so one run may
-mix both bottle types, and the recognition request M4 generates for that
-batch carries it as `<bottleId>|S` or `<bottleId>|L`.
-
-M1 sends at most three identical copies about 600 ms apart and inserts an
-`ABSENT` reaction after every pulse. M4 accepts one logical batch
-idempotently, generates `PO0001-P01-B001` through `PO0001-P01-B003`, then
-waits for a different batch. The same ID with the same quantity and the same
-size never restarts; the same ID with a different quantity **or** a different
-size is a protocol conflict; a different ID cannot interleave while a batch is
-active. A request whose size code is neither `S` nor `L` is `INVALID`.
-
-A two-field `batchId|quantity` request from a Coordinator build that does not
-publish a size yet is still parsed and takes the default `S` profile, logged
-as a legacy request. This is transitional only; M1's canonical simulation
-payload is three fields.
-
-Launch M4 integrated simulation without quantity or size VM arguments:
-
-```sh
-java -Djava.awt.headless=true \
-  -cp "build/member4-classes:/path/to/COMPSYS704_Project1_SystemJ_lib/*" \
-  com.systemj.SystemJRunner machines/filling_capping/member4_simulation.xml
-```
-
-| VM property | Default | Integrated meaning |
-| --- | --- | --- |
-| `m4.sim.intervalMillis` | `1000` | Gap after one context's local copies drain |
-| `m4.sim.requestGapMillis` | `100` | Minimum interval between request copies |
-| `m4.sim.timeoutMillis` | `10000` | Maximum wait for local context distribution |
-
-`m4.sim.size`, `m4.sim.quantity`, `m4.sim.bottleIdPrefix`, and
-`m4.sim.startDelayMillis` are retained only by the standalone legacy Java
-state-model entry point, where `m4.sim.size` still fixes one environmental
-profile (`S` = 200 mL, `L` = 500 mL). Integrated `RecognitionSimulatorCD`
-starts in `IDLE`, ignores all four, and takes the size from M1's batch
-trigger.
-
-Expected evidence for `PO0001-P01|3|S`:
-
-```text
-[M4-SIM] batch accepted id=PO0001-P01 quantity=3 size=S
-[M4-SIM] recognising PO0001-P01-B001|S
-[M4-SIM] context dispatched PO0001-P01-B001 1/3
-...
-[M4-SIM] FINISHED batch=PO0001-P01 quantity=3
-```
-
-The same order with `PO0002-P01|2|L` produces `PO0002-P01-B001|L` and the
-500 mL geometry/packaging profiles instead.
-
-`FINISHED` means the requested recognition contexts have been dispatched
-locally. It is not an M2/M3 delivery acknowledgment or order-completion claim.
-Do not run `member4_system.xml`, `member4_demo.xml`, and
-`member4_simulation.xml` together because their M4 receiver ports overlap.

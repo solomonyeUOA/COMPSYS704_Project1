@@ -8,9 +8,6 @@ MockController(
     input Integer signal START_ORDER;
     input Integer signal FILL_A_RATIO;
     input Integer signal FILL_B_RATIO;
-    input String signal M2_SYSTEM_RESET;
-    input String signal M3_SYSTEM_RESET;
-    input String signal M4_SYSTEM_RESET;
 
     input signal LOADER_STATUS_REQUEST;
     input signal CONVEYOR_STATUS_REQUEST;
@@ -30,9 +27,6 @@ MockController(
     output Integer signal CAPPER_STATUS;
     output Integer signal UNLOADER_STATUS;
     output signal BOTTLE_DONE;
-    output String signal M2_SYSTEM_RESET_ACK;
-    output String signal M3_SYSTEM_RESET_ACK;
-    output String signal M4_SYSTEM_RESET_ACK;
 )
 ->{
     System.out.println(
@@ -73,28 +67,6 @@ MockController(
             }
             pause;
         }
-    }
-    ||
-    // One test-only receiver simulates three independent member reset
-    // endpoints. Every valid duplicate receives the matching idempotent ACK.
-    {
-        {loop {present(M2_SYSTEM_RESET) {
-            if (MockStateV1.acceptSystemReset(#M2_SYSTEM_RESET)) {
-                emit M2_SYSTEM_RESET_ACK(#M2_SYSTEM_RESET);
-            }
-        } pause;}}
-        ||
-        {loop {present(M3_SYSTEM_RESET) {
-            if (MockStateV1.acceptSystemReset(#M3_SYSTEM_RESET)) {
-                emit M3_SYSTEM_RESET_ACK(#M3_SYSTEM_RESET);
-            }
-        } pause;}}
-        ||
-        {loop {present(M4_SYSTEM_RESET) {
-            if (MockStateV1.acceptSystemReset(#M4_SYSTEM_RESET)) {
-                emit M4_SYSTEM_RESET_ACK(#M4_SYSTEM_RESET);
-            }
-        } pause;}}
     }
     ||
     // Each status interface remains independent, as real Controllers will be.

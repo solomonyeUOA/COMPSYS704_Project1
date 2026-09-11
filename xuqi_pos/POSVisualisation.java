@@ -2,7 +2,6 @@ import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Dimension;
 import java.awt.Font;
-import java.awt.FlowLayout;
 import java.awt.GraphicsEnvironment;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
@@ -17,10 +16,8 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
-import javax.swing.JComboBox;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
-import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JTextField;
 import javax.swing.SwingConstants;
@@ -32,10 +29,6 @@ import javax.swing.SwingUtilities;
  */
 public final class POSVisualisation {
     private static final String TEST_ORDER_PROPERTY = "abs.pos.testOrder";
-    private static final long TEST_RESET_DELAY_MILLIS = Long.getLong(
-        "abs.pos.testResetDelayMillis",
-        Long.valueOf(-1L)
-    ).longValue();
     private static final long TEST_ORDER_DELAY_MILLIS = Long.getLong(
         "abs.pos.testOrderDelayMillis",
         Long.valueOf(5000)
@@ -69,16 +62,9 @@ public final class POSVisualisation {
     private static final long START_MILLIS = System.currentTimeMillis();
     private static final AtomicReference<String> PENDING_ORDER =
         new AtomicReference<String>();
-    private static final BoundedStringSignalOfferV1 RESET_OFFER =
-        new BoundedStringSignalOfferV1(
-            ORDER_TRANSMISSION_ATTEMPTS,
-            ORDER_SIGNAL_HOLD_MILLIS,
-            ORDER_RETRY_MILLIS
-        );
 
     private static volatile POSVisualisation instance;
     private static int testOrdersReturned = 0;
-    private static boolean testResetRequested = false;
     private static long nextTestOrderMillis =
         START_MILLIS + TEST_ORDER_DELAY_MILLIS;
     private static int nextOrderNumber = 1;
@@ -90,9 +76,6 @@ public final class POSVisualisation {
     private static String activeTransmissionPayload = null;
     private static long activeTransmissionUntilMillis = 0L;
     private static boolean transmissionStartedThisPoll = false;
-    private static boolean resetInProgress = false;
-    private static String activeResetId = null;
-    private static int nextResetNumber = 1;
     private static final Set<String> COMPLETED_ORDER_IDS =
         new HashSet<String>();
 
@@ -100,7 +83,6 @@ public final class POSVisualisation {
     private final JTextField orderIdField;
     private final List<ProductInputRow> productRows;
     private final JButton submitButton;
-    private final JButton resetButton;
     private final JLabel submissionStatus;
     private final JLabel completionStatus;
 
@@ -148,20 +130,9 @@ public final class POSVisualisation {
                 queueOrderFromForm();
             }
         });
-        resetButton = new JButton("Reset System");
-        resetButton.setForeground(new Color(150, 45, 35));
-        resetButton.addActionListener(new ActionListener() {
-            @Override
-            public void actionPerformed(ActionEvent event) {
-                confirmAndRequestSystemReset();
-            }
-        });
-        JPanel actionPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 12, 0));
-        actionPanel.add(submitButton);
-        actionPanel.add(resetButton);
         constraints.gridy = 2;
         constraints.insets = new Insets(8, 0, 4, 0);
-        form.add(actionPanel, constraints);
+        form.add(submitButton, constraints);
 
         submissionStatus = new JLabel("Enter an order and select Submit Order");
         submissionStatus.setHorizontalAlignment(SwingConstants.CENTER);
@@ -216,9 +187,6 @@ public final class POSVisualisation {
     public static synchronized String pollSubmittedOrder() {
         long now = System.currentTimeMillis();
         transmissionStartedThisPoll = false;
-        if (resetInProgress) {
-            return null;
-        }
 
         // Keep one logical transport copy PRESENT for a bounded wall-clock
         // window. A one-reaction network pulse can otherwise be overwritten
@@ -297,9 +265,6 @@ public final class POSVisualisation {
     }
 
     public static synchronized void showSubmitted(final String payload) {
-        if (resetInProgress) {
-            return;
-        }
         int separator = payload.indexOf('|');
         String transmittedOrderId =
             separator > 0 ? payload.substring(0, separator) : null;
@@ -332,10 +297,6 @@ public final class POSVisualisation {
      * for a duplicate transport copy already handled by the POS.
      */
     public static synchronized String handleCompletion(String payload) {
-        if (resetInProgress) {
-            return "POS ignored ORDER_COMPLETE while system reset is active: " +
-                payload;
-        }
         String completedOrderId = "";
         String completionState = "";
         String completionSeconds = "";
@@ -408,12 +369,6 @@ public final class POSVisualisation {
     }
 
     private void queueOrderFromForm() {
-        synchronized (POSVisualisation.class) {
-            if (resetInProgress) {
-                showValidationError("System reset is still in progress");
-                return;
-            }
-        }
         String orderId = orderIdField.getText().trim();
         if (!isProtocolToken(orderId)) {
             showValidationError("Order ID is required and cannot contain | , ;");
@@ -424,7 +379,6 @@ public final class POSVisualisation {
         for (int index = 0; index < productRows.size(); index++) {
             ProductInputRow row = productRows.get(index);
             String productId = row.productId.getText().trim();
-            String sizeCode = row.selectedSizeCode();
             if (!isProtocolToken(productId)) {
                 showValidationError(
                     "Product is required and cannot contain | , ;"
@@ -465,17 +419,12 @@ public final class POSVisualisation {
                 products.append(';');
             }
             products.append(productId).append(',')
-                .append(sizeCode).append(',')
                 .append(liquidA).append(',')
                 .append(liquidB).append(',')
                 .append(quantity);
         }
 
         String payload = orderId + "|" + productRows.size() + "|" + products;
-        if (OrderV2.parse(payload) == null) {
-            showValidationError("Invalid size-aware order was not queued");
-            return;
-        }
         if (!PENDING_ORDER.compareAndSet(null, payload)) {
             showValidationError("An order is already waiting to be submitted");
             return;
@@ -522,163 +471,6 @@ public final class POSVisualisation {
         return String.format("PO%04d", nextOrderNumber);
     }
 
-    private void confirmAndRequestSystemReset() {
-        Object[] options = {"Cancel", "Reset System"};
-        int choice = JOptionPane.showOptionDialog(
-            frame,
-            "Reset the entire ABS system?\n" +
-                "The active order will be aborted and all runtime state " +
-                "will return to its safe initial state.",
-            "Confirm System Reset",
-            JOptionPane.DEFAULT_OPTION,
-            JOptionPane.WARNING_MESSAGE,
-            null,
-            options,
-            options[0]
-        );
-        if (choice == 1) {
-            requestSystemReset();
-        }
-    }
-
-    private static synchronized void requestSystemReset() {
-        beginSystemReset(
-            String.format("RST%04d", nextResetNumber++),
-            System.currentTimeMillis()
-        );
-    }
-
-    static synchronized boolean beginSystemReset(
-        String resetId,
-        long nowMillis
-    ) {
-        if (resetInProgress || resetId == null ||
-            !resetId.matches("RST[0-9]{4,}")) {
-            return false;
-        }
-
-        resetInProgress = true;
-        activeResetId = resetId;
-        PENDING_ORDER.set(null);
-        pendingTransmissionPayload = null;
-        orderTransmissionsRemaining = 0;
-        nextOrderTransmissionMillis = 0L;
-        activeTransmissionPayload = null;
-        activeTransmissionUntilMillis = 0L;
-        transmissionStartedThisPoll = false;
-        activeOrderId = null;
-        nextOrderNumber++;
-        RESET_OFFER.discard();
-        RESET_OFFER.begin(resetId, nowMillis);
-        updateResetUi("Resetting system...", false);
-        return true;
-    }
-
-    /** Returns a bounded reliable copy of the active reset identity. */
-    public static synchronized String pollSystemResetRequest() {
-        if (!resetInProgress && !testResetRequested &&
-            TEST_RESET_DELAY_MILLIS >= 0L &&
-            System.currentTimeMillis() >=
-                START_MILLIS + TEST_RESET_DELAY_MILLIS) {
-            testResetRequested = true;
-            requestSystemReset();
-        }
-        return pollSystemResetRequest(System.currentTimeMillis());
-    }
-
-    static synchronized String pollSystemResetRequest(long nowMillis) {
-        return RESET_OFFER.nextValue(nowMillis);
-    }
-
-    public static synchronized boolean isSystemResetTransmissionStart() {
-        return RESET_OFFER.isTransmissionStarted();
-    }
-
-    /** Accepts only the completion for the currently active reset identity. */
-    public static synchronized String handleSystemResetComplete(String payload) {
-        if (payload == null || !resetInProgress) {
-            return null;
-        }
-        String expected = activeResetId + "|RESET_COMPLETE";
-        if (!expected.equals(payload)) {
-            return "POS ignored SYSTEM_RESET_COMPLETE for non-active reset: " +
-                payload;
-        }
-
-        String completedResetId = activeResetId;
-        RESET_OFFER.discard();
-        activeResetId = null;
-        resetInProgress = false;
-        nextTestOrderMillis =
-            System.currentTimeMillis() + TEST_ORDER_INTERVAL_MILLIS;
-        updateResetUi(
-            "Reset complete - ready for " + nextOrderId(),
-            true
-        );
-        return "POS received system reset completion: " + completedResetId;
-    }
-
-    private static void updateResetUi(
-        final String message,
-        final boolean complete
-    ) {
-        final POSVisualisation ui = instance;
-        if (ui == null) {
-            return;
-        }
-        SwingUtilities.invokeLater(new Runnable() {
-            @Override
-            public void run() {
-                ui.orderIdField.setText(nextOrderId());
-                ui.submissionStatus.setForeground(
-                    complete ? new Color(20, 120, 55) : new Color(180, 105, 20)
-                );
-                ui.submissionStatus.setText(message);
-                ui.completionStatus.setForeground(new Color(90, 90, 90));
-                ui.completionStatus.setText(
-                    "<html><div style='text-align:center'>" +
-                    (complete ? "System reset complete" : "Reset pending external ACKs") +
-                    "</div></html>"
-                );
-                ui.submitButton.setEnabled(complete);
-                ui.resetButton.setEnabled(complete);
-            }
-        });
-    }
-
-    static synchronized void resetForTest() {
-        PENDING_ORDER.set(null);
-        RESET_OFFER.discard();
-        testOrdersReturned = 0;
-        testResetRequested = false;
-        nextOrderNumber = 1;
-        nextResetNumber = 1;
-        activeOrderId = null;
-        pendingTransmissionPayload = null;
-        orderTransmissionsRemaining = 0;
-        lastOrderTransmissionAttempt = 0;
-        nextOrderTransmissionMillis = 0L;
-        activeTransmissionPayload = null;
-        activeTransmissionUntilMillis = 0L;
-        transmissionStartedThisPoll = false;
-        resetInProgress = false;
-        activeResetId = null;
-        COMPLETED_ORDER_IDS.clear();
-    }
-
-    static synchronized boolean isResetInProgressForTest() {
-        return resetInProgress;
-    }
-
-    static synchronized String nextOrderIdForTest() {
-        return nextOrderId();
-    }
-
-    static synchronized boolean queueOrderForTest(String payload) {
-        return !resetInProgress && OrderV2.parse(payload) != null &&
-            PENDING_ORDER.compareAndSet(null, payload);
-    }
-
     private static void updateSubmissionStatus(
         final String message,
         final boolean error
@@ -723,14 +515,12 @@ public final class POSVisualisation {
 
         addFormLabel(panel, constraints, 0, "Product");
         addFormField(panel, constraints, 0, row.productId);
-        addFormLabel(panel, constraints, 1, "Bottle Size");
-        addFormField(panel, constraints, 1, row.bottleSize);
-        addFormLabel(panel, constraints, 2, "Quantity");
-        addFormField(panel, constraints, 2, row.quantity);
-        addFormLabel(panel, constraints, 3, "Liquid A %");
-        addFormField(panel, constraints, 3, row.liquidA);
-        addFormLabel(panel, constraints, 4, "Liquid B %");
-        addFormField(panel, constraints, 4, row.liquidB);
+        addFormLabel(panel, constraints, 1, "Quantity");
+        addFormField(panel, constraints, 1, row.quantity);
+        addFormLabel(panel, constraints, 2, "Liquid A %");
+        addFormField(panel, constraints, 2, row.liquidA);
+        addFormLabel(panel, constraints, 3, "Liquid B %");
+        addFormField(panel, constraints, 3, row.liquidB);
         return panel;
     }
 
@@ -769,24 +559,9 @@ public final class POSVisualisation {
         panel.add(field, constraints);
     }
 
-    private static void addFormField(
-        JPanel panel,
-        GridBagConstraints constraints,
-        int row,
-        JComboBox<SizeOption> field
-    ) {
-        constraints.gridx = 1;
-        constraints.gridy = row;
-        constraints.gridwidth = 1;
-        constraints.weightx = 1.0;
-        constraints.fill = GridBagConstraints.HORIZONTAL;
-        panel.add(field, constraints);
-    }
-
     /** One row today; adding up to four rows does not change ORDER encoding. */
     private static final class ProductInputRow {
         private final JTextField productId;
-        private final JComboBox<SizeOption> bottleSize;
         private final JTextField quantity;
         private final JTextField liquidA;
         private final JTextField liquidB;
@@ -798,34 +573,9 @@ public final class POSVisualisation {
             String liquidBValue
         ) {
             productId = new JTextField(productIdValue, 14);
-            bottleSize = new JComboBox<SizeOption>(new SizeOption[] {
-                new SizeOption("Small \u2014 200 mL", OrderV2.SMALL),
-                new SizeOption("Large \u2014 500 mL", OrderV2.LARGE)
-            });
-            bottleSize.setSelectedIndex(0);
             quantity = new JTextField(quantityValue, 14);
             liquidA = new JTextField(liquidAValue, 14);
             liquidB = new JTextField(liquidBValue, 14);
-        }
-
-        private String selectedSizeCode() {
-            SizeOption selected = (SizeOption)bottleSize.getSelectedItem();
-            return selected == null ? OrderV2.SMALL : selected.code;
-        }
-    }
-
-    private static final class SizeOption {
-        private final String label;
-        private final String code;
-
-        private SizeOption(String displayedLabel, String protocolCode) {
-            label = displayedLabel;
-            code = protocolCode;
-        }
-
-        @Override
-        public String toString() {
-            return label;
         }
     }
 }
