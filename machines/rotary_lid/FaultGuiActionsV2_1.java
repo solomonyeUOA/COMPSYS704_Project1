@@ -1,9 +1,7 @@
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicLong;
 
 /** Validated test actions shared by the fault-management user interface. */
 public final class FaultGuiActionsV2_1 {
-    private static final AtomicLong TEST_EVENT_SEQUENCE = new AtomicLong(1);
     private static final AtomicBoolean TEST_MODE = new AtomicBoolean(
         Boolean.getBoolean("m3.testMode")
     );
@@ -39,71 +37,32 @@ public final class FaultGuiActionsV2_1 {
             return sendResume();
         }
         if ("reset".equals(action)) {
-            FaultSupervisorStateV2_1.reset();
-            return true;
+            return SystemWatchdogV1.requestManualSystemReset();
         }
         throw new IllegalArgumentException("unknown action: " + action);
     }
 
     private static boolean inject(String fault) {
-        String subsystem;
-        String severity;
-        if ("ALIGNMENT_TIMEOUT".equals(fault)) {
-            subsystem = "ROTARY";
-            severity = "WARNING";
-        }
-        else if ("MOTOR_STALL".equals(fault) ||
-            "POSITION_SENSOR_FAILURE".equals(fault)) {
-            subsystem = "ROTARY";
-            severity = "CRITICAL";
-        }
-        else if ("MAGAZINE_EMPTY".equals(fault)) {
-            subsystem = "LID";
-            severity = "RESOURCE";
-        }
-        else if ("PICK_TIMEOUT".equals(fault)) {
-            subsystem = "LID";
-            severity = "WARNING";
-        }
-        else if ("PLACEMENT_TIMEOUT".equals(fault) ||
-            "LID_SENSOR_FAULT".equals(fault)) {
-            subsystem = "LID";
-            severity = "CRITICAL";
-        }
-        else if ("ARRIVAL_TIMEOUT".equals(fault)) {
-            subsystem = "TRANSFER";
-            severity = "WARNING";
-        }
-        else if ("DEPARTURE_TIMEOUT".equals(fault) ||
-            "PHOTO_EYE_FAILURE".equals(fault) ||
-            "POSITION_CONFLICT".equals(fault)) {
-            subsystem = "TRANSFER";
-            severity = "CRITICAL";
-        }
-        else {
-            throw new IllegalArgumentException("unknown fault: " + fault);
-        }
-
-        long sequence = TEST_EVENT_SEQUENCE.getAndIncrement();
-        return FaultSupervisorStateV2_1.onFaultEvent(
-            "V2|GUI-" + sequence + "|GUI-TEST|" + subsystem + "|" +
-            fault + "|" + severity + "|B-GUI|" + sequence
-        );
+        return FaultInjectionStateV2_1.arm(fault);
     }
 
     private static boolean confirmSafeStop() {
-        return FaultSupervisorStateV2_1.onSafeStopAck(
-            "V2|" + FaultSupervisorStateV2_1.activeEventId() + "|" +
-            FaultSupervisorStateV2_1.activeEpoch() + "|SAFE_STOPPED|" +
-            FaultSupervisorStateV2_1.activeStateVersion()
-        );
+        return FaultTestControlStateV2_1.requestSafeStop();
     }
 
     private static boolean returnControllerEvidence() {
+        if ("TRANSFER".equals(FaultSupervisorStateV2_1.activeSubsystem())) {
+            return FaultTestControlStateV2_1.requestTransferRecovery();
+        }
         String state = FaultSupervisorStateV2_1.stateName();
         String event = FaultSupervisorStateV2_1.activeEventId();
         String epoch = FaultSupervisorStateV2_1.activeEpoch();
         long version = FaultSupervisorStateV2_1.activeStateVersion();
+        if (("ROTARY".equals(FaultSupervisorStateV2_1.activeSubsystem()) ||
+            "LID".equals(FaultSupervisorStateV2_1.activeSubsystem())) &&
+            !Member3MachineStateV1.recoverActiveTestFault()) {
+            return false;
+        }
         if ("WAITING_ACK".equals(state)) {
             int attempt = FaultSupervisorStateV2_1.activeAttempt();
             boolean acknowledged = FaultSupervisorStateV2_1.onRecoveryAck(
@@ -150,11 +109,6 @@ public final class FaultGuiActionsV2_1 {
     }
 
     private static boolean sendResume() {
-        return FaultSupervisorStateV2_1.onResumeDecision(
-            "V2|" + FaultSupervisorStateV2_1.activeEventId() + "|" +
-            FaultSupervisorStateV2_1.activeEpoch() +
-            "|RESUME|GUI_TEST_APPROVAL|" +
-            FaultSupervisorStateV2_1.latestStateVersion()
-        );
+        return FaultTestControlStateV2_1.requestResume();
     }
 }

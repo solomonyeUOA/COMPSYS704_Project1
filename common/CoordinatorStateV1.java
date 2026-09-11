@@ -598,6 +598,42 @@ public final class CoordinatorStateV1 {
             isPresentPayload(pendingFtSafeStopRequest);
     }
 
+    /** Test-only operator evidence; production still requires real evidence. */
+    public static synchronized String acceptFtTestControl(String payload) {
+        String[] fields = payload == null ? new String[0] :
+            payload.split("\\|", -1);
+        if (fields.length != 5 || !"V2".equals(fields[0])) {
+            return null;
+        }
+        if ("SAFE_STOP".equals(fields[3])) {
+            if (!payload.equals(pendingFtSafeStopRequest)) {
+                return null;
+            }
+            ftSafeStopEstablished = true;
+            ftVisualSafeStop = "TEST_OPERATOR_CONFIRMED";
+            queueFtVisualEvidence();
+            return "V2|" + fields[1] + "|" + fields[2] +
+                "|SAFE_STOPPED|" + fields[4];
+        }
+        if ("RESUME".equals(fields[3])) {
+            String[] ready = latestFtRecoveryReady.split("\\|", -1);
+            if (ready.length != 5 || !fields[1].equals(ready[1]) ||
+                !fields[2].equals(ready[2]) || !fields[4].equals(ready[4])) {
+                return null;
+            }
+            ftCoordinationHold = false;
+            ftSafeStopEstablished = false;
+            pendingFtSafeStopRequest = "";
+            ftVisualState = "NORMAL";
+            ftVisualSafeStop = "RELEASED";
+            ftVisualRecovery = "RESUMED_BY_TEST_OPERATOR";
+            queueFtVisualEvidence();
+            return "V2|" + fields[1] + "|" + fields[2] +
+                "|RESUME|GUI_TEST_APPROVAL|" + fields[4];
+        }
+        return null;
+    }
+
     public static String ftSnapshot() {
         return "hold=" + ftCoordinationHold +
             " safeStopEstablished=" + ftSafeStopEstablished +

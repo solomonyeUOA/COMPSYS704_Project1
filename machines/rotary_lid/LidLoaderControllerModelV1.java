@@ -125,6 +125,16 @@ public final class LidLoaderControllerModelV1 {
         }
     }
 
+    public boolean injectFault(Fault injectedFault) {
+        if (injectedFault == null || injectedFault == Fault.NONE ||
+            (state != State.PICKING && state != State.PLACING)) {
+            return false;
+        }
+        fail(injectedFault,
+            "injected " + injectedFault.name().toLowerCase().replace('_', ' '));
+        return true;
+    }
+
     public int getStatus() {
         switch (state) {
             case READY:

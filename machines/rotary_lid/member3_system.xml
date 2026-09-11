@@ -89,10 +89,13 @@
             <iSignal Name="WATCHDOG_M4_HEARTBEAT" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="13003" />
             <iSignal Name="WATCHDOG_POS_HEARTBEAT" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="13003" />
             <oSignal Name="TRANSFER_RECOVERY_REQUEST" To="M2TransferFaultAdapterCD.TRANSFER_RECOVERY_REQUEST" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="13002" />
+            <oSignal Name="TEST_TRANSFER_FAULT" To="M2TransferFaultAdapterCD.TEST_TRANSFER_FAULT" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="13002" />
+            <oSignal Name="TEST_TRANSFER_RECOVERY" To="M2TransferFaultAdapterCD.TEST_TRANSFER_RECOVERY" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="13002" />
             <oSignal Name="FT_FAULT_ALERT" To="CoordinatorCD.FT_FAULT_ALERT" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="11001" />
             <oSignal Name="FT_SAFE_STOP_REQUEST" To="CoordinatorCD.FT_SAFE_STOP_REQUEST" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="11001" />
             <oSignal Name="FT_RECOVERY_READY" To="CoordinatorCD.FT_RECOVERY_READY" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="11001" />
             <oSignal Name="FT_RECOVERY_FAILED" To="CoordinatorCD.FT_RECOVERY_FAILED" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="11001" />
+            <oSignal Name="FT_TEST_CONTROL" To="CoordinatorCD.FT_TEST_CONTROL" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="11001" />
             <oSignal Name="M3_SYSTEM_RESET_ACK" To="CoordinatorCD.M3_SYSTEM_RESET_ACK" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="11001" />
             <oSignal Name="SYSTEM_RESET_REQUEST" To="CoordinatorCD.SYSTEM_RESET_REQUEST" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="11001" />
         </ClockDomain>

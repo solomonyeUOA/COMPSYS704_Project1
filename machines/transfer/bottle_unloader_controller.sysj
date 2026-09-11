@@ -13,6 +13,7 @@ BottleUnloaderController(
     output String signal BOTTLE_READY_FOR_SORT;
     output String signal WORKPIECE_TWIN_UPDATE;
     output String signal RESOURCE_TWIN_UPDATE;
+    output String signal LOCAL_TRANSFER_FAULT;
 )
 ->{
     System.out.println("M2 BottleUnloaderControllerCD started");
@@ -66,6 +67,14 @@ BottleUnloaderController(
             System.currentTimeMillis()
         )) {
             emit BOTTLE_DONE;
+        }
+        pause;
+    }}
+    ||
+    {loop {
+        String fault = M2MachineStateV1.takeUnloaderFault();
+        if (fault != null) {
+            emit LOCAL_TRANSFER_FAULT(fault);
         }
         pause;
     }}

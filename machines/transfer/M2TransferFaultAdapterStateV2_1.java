@@ -23,6 +23,40 @@ public final class M2TransferFaultAdapterStateV2_1 {
         return model.onLocalFault(payload);
     }
 
+    public static synchronized boolean armTestFault(String payload) {
+        if (M2SystemResetStateV1.isQuarantined()) {
+            return false;
+        }
+        return M2MachineStateV1.armTransferTestFault(payload);
+    }
+
+    public static synchronized boolean recoverTestFault(String payload) {
+        String[] fields = payload == null ? new String[0] :
+            payload.split("\\|", -1);
+        if (fields.length != 6 || !"V2".equals(fields[0]) ||
+            !"MANUAL_RECOVER".equals(fields[4]) ||
+            !currentEpoch(payload) || !fields[5].matches("0|[1-9][0-9]*")) {
+            return false;
+        }
+        long expectedVersion = Long.parseLong(fields[5]);
+        if (!model.matchesActive(
+            fields[1], fields[2], fields[3], expectedVersion
+        )) {
+            return false;
+        }
+        long resultingVersion = M2MachineStateV1.recoverTransferTestFault(
+            fields[3], expectedVersion
+        );
+        if (resultingVersion < 0L) {
+            return false;
+        }
+        return model.onLocalRecoveryEvidence(
+            "V2|" + fields[1] + "|" + fields[2] +
+            "|1|SUCCESS|motor_off+occupancy_consistent|" +
+            "location_confirmed|" + resultingVersion
+        );
+    }
+
     public static synchronized boolean onRecoveryRequest(String payload) {
         if (!currentEpoch(payload)) { return false; }
         return model.onRecoveryRequest(payload);

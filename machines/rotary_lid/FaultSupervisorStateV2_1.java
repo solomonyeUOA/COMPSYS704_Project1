@@ -12,6 +12,8 @@ public final class FaultSupervisorStateV2_1 {
         new BoundedStringSignalOfferV1(3, 500L, 100L);
     private static final BoundedStringSignalOfferV1 RECOVERY_FAILED_OFFER =
         new BoundedStringSignalOfferV1(3, 500L, 100L);
+    private static long localStateVersion;
+    private static long localEpochGeneration;
 
     private FaultSupervisorStateV2_1() {
     }
@@ -21,7 +23,17 @@ public final class FaultSupervisorStateV2_1 {
             FaultMonitoringStateV2_1.M2_LINK,
             "TRANSFER_FAULT_EVENT"
         );
-        return MODEL.onTransferFault(payload);
+        boolean accepted = MODEL.onTransferFault(payload);
+        if (accepted) {
+            try {
+                FaultInjectionStateV2_1.consumed(
+                    FaultProtocolV2_1.parseFaultEvent(payload).faultCode
+                );
+            }
+            catch (IllegalArgumentException ignored) {
+            }
+        }
+        return accepted;
     }
 
     public static boolean onFaultEvent(String payload) {
@@ -45,6 +57,26 @@ public final class FaultSupervisorStateV2_1 {
             FaultMonitoringStateV2_1.M2_LINK,
             "TRANSFER_RECOVERY_RESULT"
         );
+        if ("LOCKED_OUT".equals(MODEL.getState().name())) {
+            try {
+                FaultProtocolV2_1.RecoveryResult result =
+                    FaultProtocolV2_1.parseRecoveryResult(payload);
+                boolean accepted = MODEL.confirmManualControllerEvidence(
+                    result.eventId,
+                    result.sourceEpoch,
+                    result.safeEvidence,
+                    result.serviceEvidence,
+                    result.resultingStateVersion
+                );
+                if (accepted) {
+                    FaultTestControlStateV2_1.acknowledgeTransfer();
+                }
+                return accepted;
+            }
+            catch (IllegalArgumentException exception) {
+                return false;
+            }
+        }
         return MODEL.onRecoveryResult(payload);
     }
 
@@ -56,6 +88,7 @@ public final class FaultSupervisorStateV2_1 {
         boolean accepted = MODEL.onSafeStopAck(payload);
         if (accepted) {
             SAFE_STOP_OFFER.discard();
+            FaultTestControlStateV2_1.acknowledge();
         }
         return accepted;
     }
@@ -68,6 +101,7 @@ public final class FaultSupervisorStateV2_1 {
         boolean accepted = MODEL.onResumeDecision(payload);
         if (accepted) {
             RECOVERY_READY_OFFER.discard();
+            FaultTestControlStateV2_1.acknowledge();
         }
         return accepted;
     }
@@ -78,7 +112,9 @@ public final class FaultSupervisorStateV2_1 {
             !"FAILED".equals(MODEL.getState().name()),
             MODEL.getState().name()
         );
-        MODEL.tick(System.currentTimeMillis());
+        if (!FaultGuiActionsV2_1.isTestMode()) {
+            MODEL.tick(System.currentTimeMillis());
+        }
         return nextOffer(RECOVERY_REQUEST_OFFER, new PendingValue() {
             public String take() {
                 return MODEL.takeRecoveryRequest();
@@ -118,8 +154,17 @@ public final class FaultSupervisorStateV2_1 {
         });
     }
 
-    public static void observeRotaryFault(String eventId, String reason) {
+    public static void observeRotaryFault(
+        String eventId,
+        String faultCode,
+        String reason
+    ) {
         MODEL.observeRotaryFault(eventId, reason);
+        publishLocalFault(eventId, "ROTARY", faultCode, reason);
+    }
+
+    public static void observeRotaryFault(String eventId, String reason) {
+        observeRotaryFault(eventId, "ALIGNMENT_TIMEOUT", reason);
     }
 
     public static void observeLidFault(
@@ -127,6 +172,7 @@ public final class FaultSupervisorStateV2_1 {
         LidLoaderControllerModelV1.Fault fault
     ) {
         MODEL.observeLidFault(eventId, fault);
+        publishLocalFault(eventId, "LID", fault.name(), fault.name());
     }
 
     public static boolean authorizeRotaryReset(
@@ -264,16 +310,49 @@ public final class FaultSupervisorStateV2_1 {
 
     public static void reset() {
         MODEL.reset();
+        localStateVersion = 0L;
+        FaultInjectionStateV2_1.reset();
+        FaultTestControlStateV2_1.reset();
         discardOffers();
     }
 
     public static void systemReset() {
         MODEL.systemReset();
+        localStateVersion = 0L;
+        localEpochGeneration++;
+        FaultInjectionStateV2_1.reset();
+        FaultTestControlStateV2_1.reset();
         discardOffers();
     }
 
     static FaultSupervisorModelV2_1 modelForTest() {
         return MODEL;
+    }
+
+    private static synchronized void publishLocalFault(
+        String eventId,
+        String subsystem,
+        String faultCode,
+        String detail
+    ) {
+        if (eventId == null || eventId.equals(MODEL.getActiveEventId())) {
+            return;
+        }
+        String severity = "WARNING";
+        if ("MAGAZINE_EMPTY".equals(faultCode)) {
+            severity = "RESOURCE";
+        }
+        else if (!"ALIGNMENT_TIMEOUT".equals(faultCode) &&
+            !"PICK_TIMEOUT".equals(faultCode)) {
+            severity = "CRITICAL";
+        }
+        localStateVersion++;
+        String epoch = localEpochGeneration == 0L ? "M3-E01" :
+            "M3-E01R" + localEpochGeneration;
+        MODEL.onFaultEvent(
+            "V2|" + eventId + "|" + epoch + "|" + subsystem + "|" +
+            faultCode + "|" + severity + "|-|" + localStateVersion
+        );
     }
 
     private static synchronized String nextOffer(

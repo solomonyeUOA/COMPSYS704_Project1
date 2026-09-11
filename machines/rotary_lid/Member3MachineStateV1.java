@@ -17,6 +17,8 @@ public final class Member3MachineStateV1 {
     private static BoundedSignalOfferV1 lidDoneOffer =
         new BoundedSignalOfferV1(3);
     private static long nextCycleId = 1;
+    private static String pendingRotaryTestFault;
+    private static LidLoaderControllerModelV1.Fault pendingLidTestFault;
 
     private Member3MachineStateV1() {
     }
@@ -49,6 +51,12 @@ public final class Member3MachineStateV1 {
         if (started) {
             nextCycleId++;
             lastRotaryTickMs = java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(System.nanoTime());
+            if (pendingRotaryTestFault != null &&
+                rotary.injectFault(pendingRotaryTestFault)) {
+                FaultInjectionStateV2_1.consumed(pendingRotaryTestFault);
+                pendingRotaryTestFault = null;
+                reportRotaryFaultIfPresent();
+            }
         }
         return started;
     }
@@ -129,6 +137,11 @@ public final class Member3MachineStateV1 {
         );
         if (started) {
             lastLidTickMs = java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(System.nanoTime());
+            if (pendingLidTestFault != null &&
+                lidLoader.injectFault(pendingLidTestFault)) {
+                FaultInjectionStateV2_1.consumed(pendingLidTestFault.name());
+                pendingLidTestFault = null;
+            }
         }
         reportLidFaultIfPresent();
         return started;
@@ -213,6 +226,44 @@ public final class Member3MachineStateV1 {
         return reset;
     }
 
+    public static synchronized boolean armTestFault(String faultCode) {
+        if (pendingRotaryTestFault != null || pendingLidTestFault != null ||
+            rotary.getStatus() == FAULT || lidLoader.getStatus() == FAULT) {
+            return false;
+        }
+        if ("ALIGNMENT_TIMEOUT".equals(faultCode) ||
+            "MOTOR_STALL".equals(faultCode) ||
+            "POSITION_SENSOR_FAILURE".equals(faultCode)) {
+            pendingRotaryTestFault = faultCode;
+            return true;
+        }
+        try {
+            LidLoaderControllerModelV1.Fault fault =
+                LidLoaderControllerModelV1.Fault.valueOf(faultCode);
+            if (fault != LidLoaderControllerModelV1.Fault.NONE) {
+                pendingLidTestFault = fault;
+                return true;
+            }
+        }
+        catch (IllegalArgumentException ignored) {
+        }
+        return false;
+    }
+
+    public static synchronized boolean recoverActiveTestFault() {
+        if (rotary.getStatus() == FAULT) {
+            return resetRotaryFault(new RotaryRecoveryEvidenceV1(
+                true, true, true
+            ));
+        }
+        if (lidLoader.getStatus() == FAULT) {
+            return resetLidFault(new LidRecoveryEvidenceV1(
+                true, true, true, true, true
+            ));
+        }
+        return true;
+    }
+
     /** Restores deterministic state before a simulation or test run. */
     public static synchronized void reset() {
         rotary = new RotaryControllerModelV1();
@@ -223,6 +274,9 @@ public final class Member3MachineStateV1 {
         lidDonePublished = false;
         lidDoneOffer = new BoundedSignalOfferV1(3);
         nextCycleId = 1;
+        pendingRotaryTestFault = null;
+        pendingLidTestFault = null;
+        FaultInjectionStateV2_1.reset();
         FaultSupervisorStateV2_1.reset();
     }
 
@@ -240,6 +294,9 @@ public final class Member3MachineStateV1 {
         rotationDonePublished = false;
         lidDonePublished = false;
         lidDoneOffer = new BoundedSignalOfferV1(3);
+        pendingRotaryTestFault = null;
+        pendingLidTestFault = null;
+        FaultInjectionStateV2_1.reset();
         FaultSupervisorStateV2_1.systemReset();
     }
 
@@ -279,6 +336,7 @@ public final class Member3MachineStateV1 {
         if (rotary.getStatus() == FAULT) {
             FaultSupervisorStateV2_1.observeRotaryFault(
                 rotary.getFaultEventId(),
+                rotary.getFaultCode(),
                 rotary.getFaultReason()
             );
         }

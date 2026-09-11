@@ -16,6 +16,7 @@ public final class RotaryControllerModelV1 {
     private int tablePosition = 0;
     private boolean motorEnabled = false;
     private String faultReason = "";
+    private String faultCode = "";
     private long activeCycleId;
     private long lastCompletedCycleId;
     private long faultSequence;
@@ -67,7 +68,7 @@ public final class RotaryControllerModelV1 {
             else {
                 stateElapsedMs += elapsedMs;
                 if (stateElapsedMs >= ALIGNMENT_TIMEOUT_MS) {
-                    fail("table alignment timeout");
+                    fail("ALIGNMENT_TIMEOUT", "table alignment timeout");
                 }
             }
         }
@@ -89,6 +90,7 @@ public final class RotaryControllerModelV1 {
         state = State.READY;
         stateElapsedMs = 0;
         faultReason = "";
+        faultCode = "";
         faultEventId = null;
         return true;
     }
@@ -131,6 +133,23 @@ public final class RotaryControllerModelV1 {
         return faultReason;
     }
 
+    public String getFaultCode() {
+        return faultCode;
+    }
+
+    public boolean injectFault(String code) {
+        if (state != State.ROTATING && state != State.VERIFYING_ALIGNMENT) {
+            return false;
+        }
+        if (!"ALIGNMENT_TIMEOUT".equals(code) &&
+            !"MOTOR_STALL".equals(code) &&
+            !"POSITION_SENSOR_FAILURE".equals(code)) {
+            return false;
+        }
+        fail(code, "injected " + code.toLowerCase().replace('_', ' '));
+        return true;
+    }
+
     public String getFaultEventId() {
         return faultEventId;
     }
@@ -139,9 +158,10 @@ public final class RotaryControllerModelV1 {
         return faultSequence;
     }
 
-    private void fail(String reason) {
+    private void fail(String code, String reason) {
         state = State.FAULT;
         motorEnabled = false;
+        faultCode = code;
         faultReason = reason;
         faultSequence++;
         faultEventId = "ROTARY-" + faultSequence;

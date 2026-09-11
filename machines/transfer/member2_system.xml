@@ -80,6 +80,7 @@
             <oSignal Name="BOTTLE_READY_FOR_SORT" To="SortPackControllerCD.BOTTLE_READY_FOR_SORT" Class="OptionalSimpleClient" IP="127.0.0.1" Port="11012" />
             <oSignal Name="WORKPIECE_TWIN_UPDATE" To="DigitalTwinCD.UNLOADER_WORKPIECE_TWIN_UPDATE" Class="OptionalSimpleClient" IP="127.0.0.1" Port="14002" />
             <oSignal Name="RESOURCE_TWIN_UPDATE" To="DigitalTwinCD.UNLOADER_RESOURCE_TWIN_UPDATE" Class="OptionalSimpleClient" IP="127.0.0.1" Port="14002" />
+            <oSignal Name="LOCAL_TRANSFER_FAULT" To="M2TransferFaultAdapterCD.LOCAL_TRANSFER_FAULT" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="13002" />
         </ClockDomain>
 
         <ClockDomain Name="BottleUnloaderPlantCD" Class="BottleUnloaderPlant">
@@ -93,6 +94,8 @@
             <iSignal Name="M2_SYSTEM_RESET" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="13002" />
             <oSignal Name="M2_SYSTEM_RESET_ACK" To="CoordinatorCD.M2_SYSTEM_RESET_ACK" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="11001" />
             <iSignal Name="LOCAL_TRANSFER_FAULT" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="13002" />
+            <iSignal Name="TEST_TRANSFER_FAULT" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="13002" />
+            <iSignal Name="TEST_TRANSFER_RECOVERY" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="13002" />
             <iSignal Name="TRANSFER_RECOVERY_REQUEST" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="13002" />
             <iSignal Name="LOCAL_RECOVERY_EVIDENCE" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="13002" />
             <oSignal Name="TRANSFER_FAULT_EVENT" To="FaultSupervisorCD.TRANSFER_FAULT_EVENT" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="13003" />

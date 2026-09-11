@@ -46,6 +46,9 @@
             <iSignal Name="FT_RECOVERY_FAILED"
                      Class="com.systemj.ipc.SimpleServer"
                      IP="127.0.0.1" Port="11001" />
+            <iSignal Name="FT_TEST_CONTROL"
+                     Class="com.systemj.ipc.SimpleServer"
+                     IP="127.0.0.1" Port="11001" />
 
             <!-- Member reset acknowledgements -> CoordinatorCD -->
             <iSignal Name="M2_SYSTEM_RESET_ACK"

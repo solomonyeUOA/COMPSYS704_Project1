@@ -26,6 +26,7 @@ Coordinator(
     input String signal FT_RECOVERY_FAILED;
     output String signal FT_SAFE_STOP_ACK;
     output String signal FT_RESUME_DECISION;
+    input String signal FT_TEST_CONTROL;
 
     output Integer signal START_ORDER;
     output Integer signal FILL_A_RATIO;
@@ -521,10 +522,9 @@ Coordinator(
         }
     }
     ||
-    // M3-facing V2.1 safety inputs. The current M1 implementation records
-    // events and holds new order/batch dispatch. It does not have an approved
-    // physical safe-stop confirmation signal, so it deliberately emits
-    // neither FT_SAFE_STOP_ACK nor FT_RESUME_DECISION yet.
+    // M3-facing V2.1 safety inputs. Production records events and holds new
+    // order/batch dispatch. Explicit test controls below let the operator
+    // complete the same M1/M3 handshake during a controlled demonstration.
     {
         {loop {present(FT_FAULT_ALERT) {
             if (CoordinatorStateV1.recordFtFaultAlert(#FT_FAULT_ALERT)) {
@@ -571,6 +571,18 @@ Coordinator(
                     "payload=" + #FT_RECOVERY_FAILED + " " +
                     CoordinatorStateV1.ftSnapshot()
                 );
+            }
+        } pause;}}
+        ||
+        {loop {present(FT_TEST_CONTROL) {
+            String response = CoordinatorStateV1.acceptFtTestControl(
+                #FT_TEST_CONTROL
+            );
+            if (response != null && response.contains("|SAFE_STOPPED|")) {
+                emit FT_SAFE_STOP_ACK(response);
+            }
+            else if (response != null && response.contains("|RESUME|")) {
+                emit FT_RESUME_DECISION(response);
             }
         } pause;}}
     }
