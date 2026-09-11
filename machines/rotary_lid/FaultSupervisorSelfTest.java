@@ -12,12 +12,10 @@ public final class FaultSupervisorSelfTest {
         testEpochAndVersionChecks();
         testInvalidRecoveryEvidence();
         testTimeoutEscalation();
-        testRuntimeWatchdog();
         testLocalGpRecoveryBoundary();
         testConcurrentFaultHold();
         testMalformedAndUnknownEvents();
         testGuiEnablementRules();
-        testMonitoringSnapshot();
         System.out.println("FaultSupervisorSelfTest PASSED");
     }
 
@@ -212,40 +210,6 @@ public final class FaultSupervisorSelfTest {
             "result timeout escalates");
     }
 
-    private static void testRuntimeWatchdog() {
-        FaultSupervisorModelV2_1 safeStop =
-            new FaultSupervisorModelV2_1();
-        safeStop.onFaultEvent(event(
-            "W1", "A", "ROTARY", "MOTOR_STALL", "CRITICAL", 1
-        ));
-        safeStop.tick(safeStop.getStateEnteredAtMs() +
-            FaultSupervisorModelV2_1.SAFE_STOP_TIMEOUT_MS);
-        require(safeStop.getState() ==
-            FaultSupervisorModelV2_1.State.LOCKED_OUT,
-            "runtime watchdog detects missing safe-stop acknowledgement");
-
-        FaultSupervisorModelV2_1 ack = new FaultSupervisorModelV2_1();
-        ack.onTransferFault(event(
-            "W2", "A", "TRANSFER", "ARRIVAL_TIMEOUT", "WARNING", 1
-        ));
-        ack.tick(ack.getStateEnteredAtMs() +
-            FaultSupervisorModelV2_1.ACK_TIMEOUT_MS);
-        require(ack.getState() == FaultSupervisorModelV2_1.State.LOCKED_OUT,
-            "runtime watchdog detects missing recovery acknowledgement");
-
-        FaultSupervisorModelV2_1 result = new FaultSupervisorModelV2_1();
-        result.onTransferFault(event(
-            "W3", "A", "TRANSFER", "ARRIVAL_TIMEOUT", "WARNING", 1
-        ));
-        result.takeRecoveryRequest();
-        result.onRecoveryAck("V2|W3|A|1|ACCEPTED|OK|1");
-        result.tick(result.getStateEnteredAtMs() +
-            FaultSupervisorModelV2_1.RESULT_TIMEOUT_MS);
-        require(result.getState() ==
-            FaultSupervisorModelV2_1.State.LOCKED_OUT,
-            "runtime watchdog detects missing recovery result");
-    }
-
     private static void testLocalGpRecoveryBoundary() {
         FaultSupervisorModelV2_1 model = new FaultSupervisorModelV2_1();
         model.observeRotaryFault("R-GP", "alignment timeout");
@@ -323,109 +287,6 @@ public final class FaultSupervisorSelfTest {
             "newer Controller evidence is enabled after reconciliation");
         require(FaultGuiPolicyV2_1.canResume("RECOVERY_READY"),
             "resume appears only after verified readiness");
-    }
-
-    private static void testMonitoringSnapshot() {
-        FaultSupervisorStateV2_1.reset();
-        FaultMonitoringStateV2_1.heartbeat(
-            FaultMonitoringStateV2_1.SUPERVISOR, true, "IDLE"
-        );
-        FaultMonitoringStateV2_1.heartbeat(
-            FaultMonitoringStateV2_1.GUI_WORKER, true, "TEST"
-        );
-        FaultMonitoringStateV2_1.Snapshot idle =
-            FaultMonitoringStateV2_1.snapshot();
-        require("HEALTHY".equals(idle.systemHealth),
-            "idle monitored M3 scope is healthy");
-        require(idle.components.length == 9,
-            "global monitoring exposes every declared component boundary");
-        require("IDLE".equals(FaultMonitoringPresentationV2_1.displayState(
-            component(idle, FaultMonitoringStateV2_1.SUPERVISOR), idle
-        )), "dynamic view maps idle supervisor state");
-        FaultMonitoringStateV2_1.ComponentSnapshot running =
-            new FaultMonitoringStateV2_1.ComponentSnapshot(
-                "TEST", "M3", "RUNNING", "RESPONSIVE", 0L, 0L, "test"
-            );
-        FaultMonitoringStateV2_1.ComponentSnapshot waiting =
-            new FaultMonitoringStateV2_1.ComponentSnapshot(
-                "TEST", "M3", "WAITING", "RESPONSIVE", 0L, 0L, "test"
-            );
-        FaultMonitoringStateV2_1.ComponentSnapshot unresponsive =
-            new FaultMonitoringStateV2_1.ComponentSnapshot(
-                "TEST", "M3", "RUNNING", "UNRESPONSIVE", 5000L, 1000L,
-                "test"
-            );
-        require("RUNNING".equals(FaultMonitoringPresentationV2_1.displayState(
-            running, idle)), "dynamic view preserves running backend state");
-        require("WAITING".equals(FaultMonitoringPresentationV2_1.displayState(
-            waiting, idle)), "dynamic view preserves waiting backend state");
-        require("UNRESPONSIVE".equals(
-            FaultMonitoringPresentationV2_1.displayState(unresponsive, idle)
-        ), "heartbeat timeout overrides stale running state");
-
-        require(FaultSupervisorStateV2_1.onTransferFault(
-            "V2|MON-1|MONITOR|TRANSFER|ARRIVAL_TIMEOUT|WARNING|B-MON|1"
-        ), "monitoring test accepts transfer fault");
-        FaultMonitoringStateV2_1.Snapshot fault =
-            FaultMonitoringStateV2_1.snapshot();
-        require("DEGRADED".equals(fault.systemHealth),
-            "isolated recoverable fault degrades rather than crashes the system");
-        require(fault.faults == 1 && fault.maximumAttempts == 1,
-            "fault snapshot exposes active fault and bounded retry budget");
-        require("RECOVERING 1/1".equals(FaultMonitoringPresentationV2_1.displayState(
-            component(fault, FaultMonitoringStateV2_1.M2_LINK), fault
-        )), "dynamic view exposes bounded recovery attempt");
-
-        FaultSupervisorStateV2_1.takeRecoveryRequest();
-        require(FaultSupervisorStateV2_1.onRecoveryAck(
-            "V2|MON-1|MONITOR|1|ACCEPTED|route_clear|1"
-        ), "monitoring recovery ACK accepted");
-        FaultMonitoringStateV2_1.Snapshot recovering =
-            FaultMonitoringStateV2_1.snapshot();
-        require("RECOVERING".equals(FaultMonitoringPresentationV2_1.displayState(
-            component(recovering, FaultMonitoringStateV2_1.SUPERVISOR),
-            recovering
-        )), "dynamic view follows recovery-in-progress state");
-        require(FaultSupervisorStateV2_1.onRecoveryResult(
-            "V2|MON-1|MONITOR|1|SUCCESS|motor_off+occupancy_consistent|" +
-            "arrival_confirmed|2"
-        ), "monitoring recovery result accepted");
-        FaultMonitoringStateV2_1.Snapshot verified =
-            FaultMonitoringStateV2_1.snapshot();
-        require("VERIFIED".equals(FaultMonitoringPresentationV2_1.displayState(
-            component(verified, FaultMonitoringStateV2_1.SUPERVISOR), verified
-        )), "dynamic view follows verified recovery state");
-        require(FaultSupervisorStateV2_1.onResumeDecision(
-            "V2|MON-1|MONITOR|RESUME|test|2"
-        ), "M1 resume returns the monitoring flow to idle");
-        FaultMonitoringStateV2_1.Snapshot resumed =
-            FaultMonitoringStateV2_1.snapshot();
-        require("HEALTHY".equals(resumed.systemHealth),
-            "resolved recovery returns system health to healthy");
-
-        require(FaultSupervisorStateV2_1.onTransferFault(
-            "V2|MON-2|MONITOR|TRANSFER|POSITION_CONFLICT|CRITICAL|B-MON|3"
-        ), "second monitoring fault accepted");
-        require(FaultSupervisorStateV2_1.onSafeStopAck(
-            "V2|MON-2|MONITOR|SAFE_STOPPED|3"
-        ), "critical fault enters isolated recovery state");
-        FaultMonitoringStateV2_1.Snapshot failed =
-            FaultMonitoringStateV2_1.snapshot();
-        require("FAULT / ISOLATED".equals(FaultMonitoringPresentationV2_1.displayState(
-            component(failed, FaultMonitoringStateV2_1.M2_LINK), failed
-        )), "dynamic view exposes terminal recovery failure");
-        FaultSupervisorStateV2_1.reset();
-    }
-
-    private static FaultMonitoringStateV2_1.ComponentSnapshot component(
-        FaultMonitoringStateV2_1.Snapshot snapshot,
-        String name
-    ) {
-        for (FaultMonitoringStateV2_1.ComponentSnapshot component :
-            snapshot.components) {
-            if (name.equals(component.name)) return component;
-        }
-        throw new AssertionError("missing monitoring component: " + name);
     }
 
     private static String event(

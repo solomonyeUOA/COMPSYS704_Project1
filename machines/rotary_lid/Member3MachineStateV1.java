@@ -54,7 +54,6 @@ public final class Member3MachineStateV1 {
     ) {
         rotary.tick(elapsedMs, tableAlignedWithSensor);
         reportRotaryFaultIfPresent();
-        recordRotaryHeartbeat();
     }
 
     public static synchronized void tickRotaryNow(
@@ -65,7 +64,6 @@ public final class Member3MachineStateV1 {
             tableAlignedWithSensor);
         lastRotaryTickMs = now;
         reportRotaryFaultIfPresent();
-        recordRotaryHeartbeat();
     }
 
     public static synchronized boolean takeRotationDoneEvent() {
@@ -130,7 +128,6 @@ public final class Member3MachineStateV1 {
     ) {
         lidLoader.tick(elapsedMs, lidPicked, lidPlaced);
         reportLidFaultIfPresent();
-        recordLidHeartbeat();
     }
 
     public static synchronized void tickLidLoaderNow(
@@ -142,7 +139,6 @@ public final class Member3MachineStateV1 {
             lidPicked, lidPlaced);
         lastLidTickMs = now;
         reportLidFaultIfPresent();
-        recordLidHeartbeat();
     }
 
     public static synchronized boolean takeLidDoneEvent() {
@@ -207,29 +203,6 @@ public final class Member3MachineStateV1 {
         FaultSupervisorStateV2_1.reset();
     }
 
-    /** Safe production reset without reusing cycle or fault identities. */
-    public static synchronized void systemReset() {
-        long rotaryFaultSequence = rotary.getFaultSequence();
-        long lidFaultSequence = lidLoader.getFaultSequence();
-        rotary = new RotaryControllerModelV1(rotaryFaultSequence);
-        lidLoader = new LidLoaderControllerModelV1(lidFaultSequence);
-        long now = java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(
-            System.nanoTime()
-        );
-        lastRotaryTickMs = now;
-        lastLidTickMs = now;
-        rotationDonePublished = false;
-        lidDonePublished = false;
-        FaultSupervisorStateV2_1.systemReset();
-    }
-
-    public static synchronized boolean isResetSafe() {
-        return rotary.getStatus() == READY && !rotary.isMotorEnabled() &&
-            lidLoader.getStatus() == READY &&
-            !lidLoader.isPickActuatorEnabled() &&
-            !lidLoader.isPlaceActuatorEnabled();
-    }
-
     public static synchronized long getActiveCycleId() {
         return rotary.getActiveCycleId();
     }
@@ -271,22 +244,6 @@ public final class Member3MachineStateV1 {
                 lidLoader.getFault()
             );
         }
-    }
-
-    private static void recordRotaryHeartbeat() {
-        FaultMonitoringStateV2_1.heartbeat(
-            FaultMonitoringStateV2_1.ROTARY_CONTROLLER,
-            rotary.getStatus() != FAULT,
-            statusName(rotary.getStatus())
-        );
-    }
-
-    private static void recordLidHeartbeat() {
-        FaultMonitoringStateV2_1.heartbeat(
-            FaultMonitoringStateV2_1.LID_CONTROLLER,
-            lidLoader.getStatus() != FAULT,
-            statusName(lidLoader.getStatus())
-        );
     }
 
 }

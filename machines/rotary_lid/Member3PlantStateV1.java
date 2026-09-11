@@ -1,7 +1,5 @@
 /** Shared Plant state used by the Member 3 SystemJ Plant clock-domains. */
 public final class Member3PlantStateV1 {
-    private static final java.util.Set<String> retiredBottleIds =
-        new java.util.HashSet<String>();
     private static RotaryTablePlantModelV1 rotary =
         new RotaryTablePlantModelV1();
     private static LidLoaderPlantModelV1 lid =
@@ -22,39 +20,13 @@ public final class Member3PlantStateV1 {
         fillOffer = new BoundedSignalOfferV1(3);
         labelOffer = new BoundedSignalOfferV1(3);
         capOffer = new BoundedSignalOfferV1(3);
-        retiredBottleIds.clear();
-    }
-
-    /** Clears work in flight while preserving physical lid inventory. */
-    public static synchronized void systemReset() {
-        retiredBottleIds.addAll(rotary.activeBottleIds());
-        int magazineCount = lid.getMagazineCount();
-        rotary.safeStopAndClear();
-        rotary = new RotaryTablePlantModelV1();
-        lid.cancelAction();
-        lid = new LidLoaderPlantModelV1(magazineCount);
-        fillOffer = new BoundedSignalOfferV1(3);
-        labelOffer = new BoundedSignalOfferV1(3);
-        capOffer = new BoundedSignalOfferV1(3);
-    }
-
-    public static synchronized boolean isResetSafe() {
-        return !rotary.isMoving() && rotary.isAligned() &&
-            lid.isActuatorHome() && lid.isNoLidHeld();
     }
 
     public static synchronized boolean loadBottle(String id) {
-        if (retiredBottleIds.contains(id)) {
-            return false;
-        }
         return rotary.loadBottle(id);
     }
 
     public static synchronized boolean registerBottleContext(String payload) {
-        String bottleId = payload == null ? null : payload.split("\\|", -1)[0];
-        if (retiredBottleIds.contains(bottleId)) {
-            return false;
-        }
         return rotary.registerContext(payload);
     }
 
@@ -66,15 +38,7 @@ public final class Member3PlantStateV1 {
     }
 
     public static synchronized boolean updateRotary() {
-        boolean aligned = rotary.tick(
-            java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(System.nanoTime())
-        );
-        FaultMonitoringStateV2_1.heartbeat(
-            FaultMonitoringStateV2_1.ROTARY_PLANT,
-            true,
-            aligned ? "ALIGNED" : "MOVING_OR_WAITING"
-        );
-        return aligned;
+        return rotary.tick(java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(System.nanoTime()));
     }
 
     public static synchronized boolean commitRotation(long cycleId) {
@@ -189,11 +153,6 @@ public final class Member3PlantStateV1 {
 
     public static synchronized void updateLidLoader() {
         lid.tick(java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(System.nanoTime()));
-        FaultMonitoringStateV2_1.heartbeat(
-            FaultMonitoringStateV2_1.LID_PLANT,
-            true,
-            lid.getActionName()
-        );
     }
 
     public static synchronized boolean isLidAvailable() {

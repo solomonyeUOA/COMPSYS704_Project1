@@ -50,10 +50,6 @@ public final class FaultToleranceDemoStateV2_1 {
         }
         if (!readySeen && !"RECOVERY_READY".equals(
             FaultSupervisorStateV2_1.stateName())) {
-            if (!"WAITING_RESULT".equals(
-                FaultSupervisorStateV2_1.stateName())) {
-                return WAIT;
-            }
             if (now >= nextResultOfferAt) {
                 nextResultOfferAt = now + 250;
                 return SEND_RESULT;

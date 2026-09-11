@@ -7,10 +7,6 @@ public final class FaultSupervisorStateV2_1 {
     }
 
     public static boolean onTransferFault(String payload) {
-        FaultMonitoringStateV2_1.peerTraffic(
-            FaultMonitoringStateV2_1.M2_LINK,
-            "TRANSFER_FAULT_EVENT"
-        );
         return MODEL.onTransferFault(payload);
     }
 
@@ -19,44 +15,22 @@ public final class FaultSupervisorStateV2_1 {
     }
 
     public static boolean onRecoveryAck(String payload) {
-        FaultMonitoringStateV2_1.peerTraffic(
-            FaultMonitoringStateV2_1.M2_LINK,
-            "TRANSFER_RECOVERY_ACK"
-        );
         return MODEL.onRecoveryAck(payload);
     }
 
     public static boolean onRecoveryResult(String payload) {
-        FaultMonitoringStateV2_1.peerTraffic(
-            FaultMonitoringStateV2_1.M2_LINK,
-            "TRANSFER_RECOVERY_RESULT"
-        );
         return MODEL.onRecoveryResult(payload);
     }
 
     public static boolean onSafeStopAck(String payload) {
-        FaultMonitoringStateV2_1.peerTraffic(
-            FaultMonitoringStateV2_1.M1_LINK,
-            "FT_SAFE_STOP_ACK"
-        );
         return MODEL.onSafeStopAck(payload);
     }
 
     public static boolean onResumeDecision(String payload) {
-        FaultMonitoringStateV2_1.peerTraffic(
-            FaultMonitoringStateV2_1.M1_LINK,
-            "FT_RESUME_DECISION"
-        );
         return MODEL.onResumeDecision(payload);
     }
 
     public static String takeRecoveryRequest() {
-        FaultMonitoringStateV2_1.heartbeat(
-            FaultMonitoringStateV2_1.SUPERVISOR,
-            !"FAILED".equals(MODEL.getState().name()),
-            MODEL.getState().name()
-        );
-        MODEL.tick(System.currentTimeMillis());
         return MODEL.takeRecoveryRequest();
     }
 
@@ -150,14 +124,6 @@ public final class FaultSupervisorStateV2_1 {
         return MODEL.getActiveAttempt();
     }
 
-    public static int maximumAttempts() {
-        return MODEL.getMaximumAttempts();
-    }
-
-    public static long stateEnteredAtMs() {
-        return MODEL.getStateEnteredAtMs();
-    }
-
     public static String policySummary() {
         return MODEL.getPolicySummary();
     }
@@ -222,10 +188,6 @@ public final class FaultSupervisorStateV2_1 {
 
     public static void reset() {
         MODEL.reset();
-    }
-
-    public static void systemReset() {
-        MODEL.systemReset();
     }
 
     static FaultSupervisorModelV2_1 modelForTest() {
