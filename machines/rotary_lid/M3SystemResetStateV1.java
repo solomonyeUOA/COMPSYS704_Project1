@@ -1,3 +1,5 @@
+import java.util.Iterator;
+import java.util.LinkedHashSet;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -5,11 +7,13 @@ import java.util.regex.Pattern;
 public final class M3SystemResetStateV1 {
     private static final Pattern RESET_ID = Pattern.compile("RST([0-9]{4,})");
     private static final long QUIET_MILLIS = 750L;
+    private static final int RESET_HISTORY_LIMIT = 64;
     private static final BoundedStringSignalOfferV1 ACK =
         new BoundedStringSignalOfferV1(5, 120L, 80L);
+    private static final LinkedHashSet<String> SEEN_RESET_IDS =
+        new LinkedHashSet<String>();
 
     private static volatile String activeResetId;
-    private static long highestSequence = -1L;
     private static long quietUntilMillis;
     private static volatile boolean finalised;
 
@@ -24,31 +28,20 @@ public final class M3SystemResetStateV1 {
             return false;
         }
 
-        final long sequence;
-        try {
-            sequence = Long.parseLong(matcher.group(1));
-        }
-        catch (NumberFormatException invalid) {
-            return false;
-        }
-
         String canonical = resetId.trim();
         long now = nowMillis();
-        if (sequence < highestSequence) {
-            return false;
-        }
-        if (sequence == highestSequence) {
-            if (!canonical.equals(activeResetId)) {
-                return false;
-            }
+        if (canonical.equals(activeResetId)) {
             if (finalised) {
                 ACK.begin(canonical, now);
             }
             return true;
         }
+        if (SEEN_RESET_IDS.contains(canonical)) {
+            return false;
+        }
 
         activeResetId = canonical;
-        highestSequence = sequence;
+        rememberResetId(canonical);
         quietUntilMillis = now + QUIET_MILLIS;
         finalised = false;
         ACK.discard();
@@ -82,6 +75,17 @@ public final class M3SystemResetStateV1 {
         Member3PlantStateV1.systemReset();
         Member3MachineStateV1.systemReset();
         FaultMonitoringStateV2_1.systemReset();
+    }
+
+    private static void rememberResetId(String resetId) {
+        if (SEEN_RESET_IDS.size() >= RESET_HISTORY_LIMIT) {
+            Iterator<String> oldest = SEEN_RESET_IDS.iterator();
+            if (oldest.hasNext()) {
+                oldest.next();
+                oldest.remove();
+            }
+        }
+        SEEN_RESET_IDS.add(resetId);
     }
 
     private static long nowMillis() {

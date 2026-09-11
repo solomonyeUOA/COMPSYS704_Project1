@@ -23,8 +23,13 @@ public final class CoordinatorTwinResetSelfTest {
             CoordinatorStateV1.recordSystemResetAck(member, "RST0002", 5010L);
         for (long now = 5010L; now < 10000L; now += 50L)
             CoordinatorStateV1.nextSystemResetComplete(now);
-        require(!CoordinatorStateV1.beginSystemReset("RST0001", 10000L), "older unseen reset rejected");
-        require(!CoordinatorStateV1.beginSystemReset("RST00002", 10000L), "same numeric reset alias rejected");
+        require(CoordinatorStateV1.beginSystemReset("RST1789167927465", 10000L), "external timestamp reset accepted");
+        for (int member = 2; member <= 4; member++)
+            CoordinatorStateV1.recordSystemResetAck(member, "RST1789167927465", 10010L);
+        for (long now = 10010L; now < 15000L; now += 50L)
+            CoordinatorStateV1.nextSystemResetComplete(now);
+        require(CoordinatorStateV1.beginSystemReset("RST0001", 15000L), "unseen POS reset accepted after timestamp reset");
+        require(!CoordinatorStateV1.beginSystemReset("RST0002", 15010L), "completed reset identity remains rejected");
         require(!CoordinatorStateV1.accept("PO0001|1|P1,L,60,40,1"), "older-than-last order tombstone retained");
         System.out.println("CoordinatorTwinResetSelfTest PASSED");
     }

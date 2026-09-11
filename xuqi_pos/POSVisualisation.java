@@ -95,6 +95,8 @@ public final class POSVisualisation {
     private static int nextResetNumber = 1;
     private static final Set<String> COMPLETED_ORDER_IDS =
         new HashSet<String>();
+    private static final Set<String> COMPLETED_RESET_IDS =
+        new HashSet<String>();
 
     private final JFrame frame;
     private final JTextField orderIdField;
@@ -594,25 +596,43 @@ public final class POSVisualisation {
         return RESET_OFFER.isTransmissionStarted();
     }
 
-    /** Accepts only the completion for the currently active reset identity. */
+    /** Accepts a matching local reset or a first-seen external system reset. */
     public static synchronized String handleSystemResetComplete(String payload) {
-        if (payload == null || !resetInProgress) {
+        final String suffix = "|RESET_COMPLETE";
+        if (payload == null || !payload.endsWith(suffix)) {
             return null;
         }
-        String expected = activeResetId + "|RESET_COMPLETE";
-        if (!expected.equals(payload)) {
-            return "POS ignored SYSTEM_RESET_COMPLETE for non-active reset: " +
-                payload;
+        String completedResetId = payload.substring(
+            0, payload.length() - suffix.length()
+        );
+        if (!completedResetId.matches("RST[0-9]{4,}") ||
+            COMPLETED_RESET_IDS.contains(completedResetId)) {
+            return null;
         }
 
-        String completedResetId = activeResetId;
+        boolean locallyInitiated = resetInProgress &&
+            completedResetId.equals(activeResetId);
+        if (!locallyInitiated) {
+            nextOrderNumber++;
+        }
+        COMPLETED_RESET_IDS.add(completedResetId);
         RESET_OFFER.discard();
+        PENDING_ORDER.set(null);
+        pendingTransmissionPayload = null;
+        orderTransmissionsRemaining = 0;
+        nextOrderTransmissionMillis = 0L;
+        activeTransmissionPayload = null;
+        activeTransmissionUntilMillis = 0L;
+        transmissionStartedThisPoll = false;
+        activeOrderId = null;
         activeResetId = null;
         resetInProgress = false;
         nextTestOrderMillis =
             System.currentTimeMillis() + TEST_ORDER_INTERVAL_MILLIS;
         updateResetUi(
-            "Reset complete - ready for " + nextOrderId(),
+            (locallyInitiated ? "Reset complete" :
+                "External system reset complete") +
+                " - ready for " + nextOrderId(),
             true
         );
         return "POS received system reset completion: " + completedResetId;
@@ -664,6 +684,7 @@ public final class POSVisualisation {
         resetInProgress = false;
         activeResetId = null;
         COMPLETED_ORDER_IDS.clear();
+        COMPLETED_RESET_IDS.clear();
     }
 
     static synchronized boolean isResetInProgressForTest() {
