@@ -9,15 +9,6 @@
                      IP="127.0.0.1" Port="11002" />
             <iSignal Name="FILL_B_RATIO" Class="com.systemj.ipc.SimpleServer"
                      IP="127.0.0.1" Port="11002" />
-            <iSignal Name="M2_SYSTEM_RESET"
-                     Class="com.systemj.ipc.SimpleServer"
-                     IP="127.0.0.1" Port="11002" />
-            <iSignal Name="M3_SYSTEM_RESET"
-                     Class="com.systemj.ipc.SimpleServer"
-                     IP="127.0.0.1" Port="11002" />
-            <iSignal Name="M4_SYSTEM_RESET"
-                     Class="com.systemj.ipc.SimpleServer"
-                     IP="127.0.0.1" Port="11002" />
             <iSignal Name="LOADER_STATUS_REQUEST"
                      Class="com.systemj.ipc.SimpleServer"
                      IP="127.0.0.1" Port="11002" />
@@ -73,18 +64,6 @@
                      Class="com.systemj.ipc.SimpleClient"
                      IP="127.0.0.1" Port="11001" />
             <oSignal Name="BOTTLE_DONE" To="CoordinatorCD.BOTTLE_DONE"
-                     Class="com.systemj.ipc.SimpleClient"
-                     IP="127.0.0.1" Port="11001" />
-            <oSignal Name="M2_SYSTEM_RESET_ACK"
-                     To="CoordinatorCD.M2_SYSTEM_RESET_ACK"
-                     Class="com.systemj.ipc.SimpleClient"
-                     IP="127.0.0.1" Port="11001" />
-            <oSignal Name="M3_SYSTEM_RESET_ACK"
-                     To="CoordinatorCD.M3_SYSTEM_RESET_ACK"
-                     Class="com.systemj.ipc.SimpleClient"
-                     IP="127.0.0.1" Port="11001" />
-            <oSignal Name="M4_SYSTEM_RESET_ACK"
-                     To="CoordinatorCD.M4_SYSTEM_RESET_ACK"
                      Class="com.systemj.ipc.SimpleClient"
                      IP="127.0.0.1" Port="11001" />
         </ClockDomain>

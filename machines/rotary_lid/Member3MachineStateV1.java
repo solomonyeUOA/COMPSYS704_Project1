@@ -10,12 +10,10 @@ public final class Member3MachineStateV1 {
         new RotaryControllerModelV1();
     private static LidLoaderControllerModelV1 lidLoader =
         new LidLoaderControllerModelV1();
-    private static long lastRotaryTickMs = java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(System.nanoTime());
-    private static long lastLidTickMs = java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(System.nanoTime());
+    private static long lastRotaryTickMs = System.currentTimeMillis();
+    private static long lastLidTickMs = System.currentTimeMillis();
     private static boolean rotationDonePublished;
     private static boolean lidDonePublished;
-    private static BoundedSignalOfferV1 lidDoneOffer =
-        new BoundedSignalOfferV1(3);
     private static long nextCycleId = 1;
 
     private Member3MachineStateV1() {
@@ -39,16 +37,13 @@ public final class Member3MachineStateV1 {
     public static synchronized boolean requestRotation(
         boolean stationBarrierSatisfied
     ) {
-        if (M3SystemResetStateV1.isQuarantined()) {
-            return false;
-        }
         boolean started = rotary.requestRotation(
             nextCycleId,
             stationBarrierSatisfied
         );
         if (started) {
             nextCycleId++;
-            lastRotaryTickMs = java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(System.nanoTime());
+            lastRotaryTickMs = System.currentTimeMillis();
         }
         return started;
     }
@@ -59,18 +54,16 @@ public final class Member3MachineStateV1 {
     ) {
         rotary.tick(elapsedMs, tableAlignedWithSensor);
         reportRotaryFaultIfPresent();
-        recordRotaryHeartbeat();
     }
 
     public static synchronized void tickRotaryNow(
         boolean tableAlignedWithSensor
     ) {
-        long now = java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(System.nanoTime());
+        long now = System.currentTimeMillis();
         rotary.tick(Math.max(0, now - lastRotaryTickMs),
             tableAlignedWithSensor);
         lastRotaryTickMs = now;
         reportRotaryFaultIfPresent();
-        recordRotaryHeartbeat();
     }
 
     public static synchronized boolean takeRotationDoneEvent() {
@@ -92,9 +85,6 @@ public final class Member3MachineStateV1 {
     public static synchronized boolean resetRotaryFault(
         RotaryRecoveryEvidenceV1 evidence
     ) {
-        if (M3SystemResetStateV1.isQuarantined()) {
-            return false;
-        }
         String eventId = rotary.getFaultEventId();
         if (!FaultSupervisorStateV2_1.authorizeRotaryReset(
             eventId,
@@ -117,9 +107,6 @@ public final class Member3MachineStateV1 {
         String bottleId,
         boolean lidAvailable
     ) {
-        if (M3SystemResetStateV1.isQuarantined()) {
-            return false;
-        }
         if (lidLoader.getStatus() == DONE) {
             return false;
         }
@@ -128,7 +115,7 @@ public final class Member3MachineStateV1 {
             lidAvailable
         );
         if (started) {
-            lastLidTickMs = java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(System.nanoTime());
+            lastLidTickMs = System.currentTimeMillis();
         }
         reportLidFaultIfPresent();
         return started;
@@ -141,19 +128,17 @@ public final class Member3MachineStateV1 {
     ) {
         lidLoader.tick(elapsedMs, lidPicked, lidPlaced);
         reportLidFaultIfPresent();
-        recordLidHeartbeat();
     }
 
     public static synchronized void tickLidLoaderNow(
         boolean lidPicked,
         boolean lidPlaced
     ) {
-        long now = java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(System.nanoTime());
+        long now = System.currentTimeMillis();
         lidLoader.tick(Math.max(0, now - lastLidTickMs),
             lidPicked, lidPlaced);
         lastLidTickMs = now;
         reportLidFaultIfPresent();
-        recordLidHeartbeat();
     }
 
     public static synchronized boolean takeLidDoneEvent() {
@@ -161,17 +146,14 @@ public final class Member3MachineStateV1 {
     }
 
     public static synchronized String takeLidDoneBottleId() {
-        if (lidLoader.getStatus() != DONE) {
+        if (lidLoader.getStatus() != DONE || lidDonePublished) {
             return null;
         }
-        if (!lidDonePublished) {
-            String bottleId = lidLoader.takeCompletedBottleId();
-            if (bottleId != null) {
-                lidDoneOffer.arm(bottleId, bottleId);
-                lidDonePublished = true;
-            }
+        String bottleId = lidLoader.takeCompletedBottleId();
+        if (bottleId != null) {
+            lidDonePublished = true;
         }
-        return lidDoneOffer.nextReactionValue();
+        return bottleId;
     }
 
     public static synchronized boolean isLidPickEnabled() {
@@ -186,7 +168,6 @@ public final class Member3MachineStateV1 {
         boolean acknowledged = lidLoader.acknowledgeDone();
         if (acknowledged) {
             lidDonePublished = false;
-            lidDoneOffer = new BoundedSignalOfferV1(3);
         }
         return acknowledged;
     }
@@ -194,9 +175,6 @@ public final class Member3MachineStateV1 {
     public static synchronized boolean resetLidFault(
         LidRecoveryEvidenceV1 evidence
     ) {
-        if (M3SystemResetStateV1.isQuarantined()) {
-            return false;
-        }
         String eventId = lidLoader.getFaultEventId();
         LidLoaderControllerModelV1.Fault fault = lidLoader.getFault();
         if (!FaultSupervisorStateV2_1.authorizeLidReset(
@@ -217,37 +195,12 @@ public final class Member3MachineStateV1 {
     public static synchronized void reset() {
         rotary = new RotaryControllerModelV1();
         lidLoader = new LidLoaderControllerModelV1();
-        lastRotaryTickMs = java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(System.nanoTime());
-        lastLidTickMs = java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(System.nanoTime());
+        lastRotaryTickMs = System.currentTimeMillis();
+        lastLidTickMs = System.currentTimeMillis();
         rotationDonePublished = false;
         lidDonePublished = false;
-        lidDoneOffer = new BoundedSignalOfferV1(3);
         nextCycleId = 1;
         FaultSupervisorStateV2_1.reset();
-    }
-
-    /** Safe production reset without reusing cycle or fault identities. */
-    public static synchronized void systemReset() {
-        long rotaryFaultSequence = rotary.getFaultSequence();
-        long lidFaultSequence = lidLoader.getFaultSequence();
-        rotary = new RotaryControllerModelV1(rotaryFaultSequence);
-        lidLoader = new LidLoaderControllerModelV1(lidFaultSequence);
-        long now = java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(
-            System.nanoTime()
-        );
-        lastRotaryTickMs = now;
-        lastLidTickMs = now;
-        rotationDonePublished = false;
-        lidDonePublished = false;
-        lidDoneOffer = new BoundedSignalOfferV1(3);
-        FaultSupervisorStateV2_1.systemReset();
-    }
-
-    public static synchronized boolean isResetSafe() {
-        return rotary.getStatus() == READY && !rotary.isMotorEnabled() &&
-            lidLoader.getStatus() == READY &&
-            !lidLoader.isPickActuatorEnabled() &&
-            !lidLoader.isPlaceActuatorEnabled();
     }
 
     public static synchronized long getActiveCycleId() {
@@ -291,22 +244,6 @@ public final class Member3MachineStateV1 {
                 lidLoader.getFault()
             );
         }
-    }
-
-    private static void recordRotaryHeartbeat() {
-        FaultMonitoringStateV2_1.heartbeat(
-            FaultMonitoringStateV2_1.ROTARY_CONTROLLER,
-            rotary.getStatus() != FAULT,
-            statusName(rotary.getStatus())
-        );
-    }
-
-    private static void recordLidHeartbeat() {
-        FaultMonitoringStateV2_1.heartbeat(
-            FaultMonitoringStateV2_1.LID_CONTROLLER,
-            lidLoader.getStatus() != FAULT,
-            statusName(lidLoader.getStatus())
-        );
     }
 
 }

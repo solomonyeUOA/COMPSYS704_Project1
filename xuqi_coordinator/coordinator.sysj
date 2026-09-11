@@ -6,18 +6,6 @@
 Coordinator(
     input String signal ORDER;
     output String signal ORDER_COMPLETE;
-    input String signal SYSTEM_RESET_REQUEST;
-    output String signal SYSTEM_RESET_COMPLETE;
-
-    // M1-owned whole-system reset orchestration boundary. Teammates ACK only
-    // after their local runtime has reached its defined safe initial state.
-    output String signal M2_SYSTEM_RESET;
-    output String signal M3_SYSTEM_RESET;
-    output String signal M4_SYSTEM_RESET;
-    output String signal VIZ_SYSTEM_RESET;
-    input String signal M2_SYSTEM_RESET_ACK;
-    input String signal M3_SYSTEM_RESET_ACK;
-    input String signal M4_SYSTEM_RESET_ACK;
 
     // Frozen M3-facing V2.1 safety-coordination boundary.
     input String signal FT_FAULT_ALERT;
@@ -30,9 +18,6 @@ Coordinator(
     output Integer signal START_ORDER;
     output Integer signal FILL_A_RATIO;
     output Integer signal FILL_B_RATIO;
-
-    // SIMULATION / FULL-INTEGRATION ONLY. Not a Controller interface.
-    output String signal M4_SIM_BATCH_REQUEST;
 
     output signal LOADER_STATUS_REQUEST;
     output signal CONVEYOR_STATUS_REQUEST;
@@ -54,8 +39,6 @@ Coordinator(
     output Integer signal VIZ_UNLOADER_STATUS;
     output Integer signal VIZ_REQUIRED_BOTTLES;
     output Integer signal VIZ_COMPLETED_BOTTLES;
-    // M1 IP-only read-only projection; not a frozen Controller signal.
-    output String signal VIZ_FT_EVIDENCE;
 
     input Integer signal LOADER_STATUS;
     input Integer signal CONVEYOR_STATUS;
@@ -82,13 +65,6 @@ Coordinator(
                         "Coordinator rejected ORDER while FT HOLD is active: " +
                         receivedOrder + " [COORD-FT] " +
                         CoordinatorStateV1.ftSnapshot()
-                    );
-                }
-                else if (CoordinatorStateV1.isSystemResetBlockingOrders()) {
-                    System.out.println(
-                        "Coordinator rejected ORDER while reset ACKs are " +
-                        "pending: " + receivedOrder + " [COORD-RESET] " +
-                        CoordinatorStateV1.systemResetSnapshot()
                     );
                 }
                 else if (CoordinatorStateV1.orderActive) {
@@ -118,6 +94,12 @@ Coordinator(
                 }
                 else {
                     emit START_ORDER(CoordinatorStateV1.requiredBottles);
+                    emit FILL_A_RATIO(
+                        CoordinatorStateV1.currentLiquidARatio
+                    );
+                    emit FILL_B_RATIO(
+                        CoordinatorStateV1.currentLiquidBRatio
+                    );
                     emit VIZ_REQUIRED_BOTTLES(
                         CoordinatorStateV1.requiredBottles
                     );
@@ -125,13 +107,9 @@ Coordinator(
 
                     System.out.println(
                         "Coordinator accepted ORDER " +
-                        CoordinatorStateV1.currentOrderId() +
+                        CoordinatorStateV1.activeOrder.orderId +
                         ", product=" +
                         CoordinatorStateV1.currentProductId() +
-                        ", size=" +
-                        CoordinatorStateV1.currentSizeCode() +
-                        ", capacityMl=" +
-                        CoordinatorStateV1.currentCapacityMl() +
                         ", quantity=" +
                         CoordinatorStateV1.requiredBottles +
                         ", A=" +
@@ -142,115 +120,6 @@ Coordinator(
                     System.out.println(
                         "[COORD-LIFECYCLE] accepted " +
                         CoordinatorStateV1.lifecycleSnapshot()
-                    );
-                }
-            }
-            pause;
-        }
-    }
-    ||
-    // One accepted reset identity clears all M1-owned runtime state, fans out
-    // bounded copies and blocks completion until M2, M3 and M4 all ACK it.
-    {
-        {loop {present(SYSTEM_RESET_REQUEST) {
-            if (CoordinatorStateV1.beginSystemReset(
-                #SYSTEM_RESET_REQUEST
-            )) {
-                System.out.println(
-                    "[COORD-RESET] accepted SYSTEM_RESET_REQUEST " +
-                    #SYSTEM_RESET_REQUEST + " " +
-                    CoordinatorStateV1.systemResetSnapshot()
-                );
-            }
-        } pause;}}
-        ||
-        {loop {
-            String m2Reset = CoordinatorStateV1.nextM2SystemReset();
-            if (m2Reset != null) {
-                emit M2_SYSTEM_RESET(m2Reset);
-            }
-            pause;
-        }}
-        ||
-        {loop {
-            String m3Reset = CoordinatorStateV1.nextM3SystemReset();
-            if (m3Reset != null) {
-                emit M3_SYSTEM_RESET(m3Reset);
-            }
-            pause;
-        }}
-        ||
-        {loop {
-            String m4Reset = CoordinatorStateV1.nextM4SystemReset();
-            if (m4Reset != null) {
-                emit M4_SYSTEM_RESET(m4Reset);
-            }
-            pause;
-        }}
-        ||
-        {loop {
-            String vizReset =
-                CoordinatorStateV1.nextVisualisationSystemReset();
-            if (vizReset != null) {
-                emit VIZ_SYSTEM_RESET(vizReset);
-            }
-            pause;
-        }}
-        ||
-        {loop {present(M2_SYSTEM_RESET_ACK) {
-            CoordinatorStateV1.recordM2SystemResetAck(
-                #M2_SYSTEM_RESET_ACK
-            );
-        } pause;}}
-        ||
-        {loop {present(M3_SYSTEM_RESET_ACK) {
-            CoordinatorStateV1.recordM3SystemResetAck(
-                #M3_SYSTEM_RESET_ACK
-            );
-        } pause;}}
-        ||
-        {loop {present(M4_SYSTEM_RESET_ACK) {
-            CoordinatorStateV1.recordM4SystemResetAck(
-                #M4_SYSTEM_RESET_ACK
-            );
-        } pause;}}
-        ||
-        {loop {
-            String resetComplete =
-                CoordinatorStateV1.nextSystemResetComplete();
-            if (resetComplete != null) {
-                emit SYSTEM_RESET_COMPLETE(resetComplete);
-                if (CoordinatorStateV1.
-                    systemResetCompletionTransmissionStarted) {
-                    System.out.println(
-                        "[COORD-RESET] SYSTEM_RESET_COMPLETE attempt=" +
-                        CoordinatorStateV1.
-                            lastSystemResetCompletionAttempt + " " +
-                        resetComplete
-                    );
-                }
-            }
-            pause;
-        }}
-    }
-    ||
-    // Bounded simulation-only product-batch publication. The helper retains
-    // one stable batchId|quantity|sizeCode payload for 3 copies about 600 ms
-    // apart and inserts an ABSENT reaction between copies.
-    {
-        loop {
-            String simulationBatchRequest =
-                CoordinatorStateV1.nextM4SimulationBatchRequest();
-            if (simulationBatchRequest != null) {
-                emit M4_SIM_BATCH_REQUEST(simulationBatchRequest);
-                if (
-                    CoordinatorStateV1.
-                        m4SimulationBatchTransmissionStarted
-                ) {
-                    System.out.println(
-                        "[M1-M4-SIM] batch request " +
-                        simulationBatchRequest + " attempt=" +
-                        CoordinatorStateV1.lastM4SimulationBatchAttempt
                     );
                 }
             }
@@ -440,6 +309,12 @@ Coordinator(
                             emit START_ORDER(
                                 CoordinatorStateV1.requiredBottles
                             );
+                            emit FILL_A_RATIO(
+                                CoordinatorStateV1.currentLiquidARatio
+                            );
+                            emit FILL_B_RATIO(
+                                CoordinatorStateV1.currentLiquidBRatio
+                            );
                             emit VIZ_REQUIRED_BOTTLES(
                                 CoordinatorStateV1.requiredBottles
                             );
@@ -456,7 +331,7 @@ Coordinator(
                             CoordinatorStateV1.completeOrder();
                             System.out.println(
                                 "Coordinator completed final bottle for " +
-                                CoordinatorStateV1.currentOrderId()
+                                CoordinatorStateV1.activeOrder.orderId
                             );
                             System.out.println(
                                 "[COORD-LIFECYCLE] completeOrder " +
@@ -468,26 +343,6 @@ Coordinator(
             }
             else {
                 CoordinatorStateV1.consumeBottleDoneEdge(false);
-            }
-            pause;
-        }
-    }
-    ||
-    // Keep the active product recipe PRESENT in every logical reaction.
-    // This branch deliberately sits outside the one-second status poll and
-    // runs after order/product state transitions above, so a delayed M4 read
-    // still observes the current Integer ratios. completeOrder() clears
-    // orderActive before this branch runs, ending recipe publication without
-    // changing START_ORDER or completion semantics.
-    {
-        loop {
-            if (CoordinatorStateV1.orderActive) {
-                emit FILL_A_RATIO(
-                    CoordinatorStateV1.currentLiquidARatio
-                );
-                emit FILL_B_RATIO(
-                    CoordinatorStateV1.currentLiquidBRatio
-                );
             }
             pause;
         }
@@ -546,15 +401,4 @@ Coordinator(
             }
         } pause;}}
     }
-    ||
-    // Single display-only publisher for Coordinator-observed FT evidence.
-    // It cannot acknowledge, resume or command any Controller.
-    {loop {
-        String ftVisualEvidence =
-            CoordinatorStateV1.takeFtVisualEvidence();
-        if (ftVisualEvidence != null) {
-            emit VIZ_FT_EVIDENCE(ftVisualEvidence);
-        }
-        pause;
-    }}
 }

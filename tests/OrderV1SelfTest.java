@@ -36,11 +36,6 @@ public final class OrderV1SelfTest {
             CoordinatorStateV1.requiredBottles == 2,
             "first batch quantity must be loaded"
         );
-        require(
-            "S".equals(CoordinatorStateV1.currentSizeCode()) &&
-            CoordinatorStateV1.currentCapacityMl() == 200,
-            "legacy V1 product must default to S/200 mL"
-        );
         require(!CoordinatorStateV1.recordBottleDone(), "first bottle only");
         require(CoordinatorStateV1.recordBottleDone(), "first batch complete");
         require(CoordinatorStateV1.hasNextProduct(), "second product exists");
