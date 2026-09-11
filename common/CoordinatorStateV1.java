@@ -371,6 +371,10 @@ public final class CoordinatorStateV1 {
         lastSystemResetCompletionAttempt = 0;
         systemResetCompletionTransmissionStarted = false;
         resetCompletionOffer.discard();
+        m2ResetOffer.discard();
+        m3ResetOffer.discard();
+        m4ResetOffer.discard();
+        visualisationResetOffer.discard();
         m2ResetOffer.begin(resetId, nowMillis);
         m3ResetOffer.begin(resetId, nowMillis);
         m4ResetOffer.begin(resetId, nowMillis);

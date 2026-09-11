@@ -1,9 +1,13 @@
 import java.math.BigInteger;
+import java.util.Iterator;
+import java.util.LinkedHashSet;
 
 /** Reset barrier owner. ACK follows simulated actuator evidence, never receipt. */
 public final class M4SystemResetStateV1 {
     private static String latestId;
-    private static BigInteger latestNumber;
+    private static final int RESET_HISTORY_LIMIT = 64;
+    private static final LinkedHashSet<String> seenResetIds =
+        new LinkedHashSet<String>();
     private static boolean resetting;
     private static long resetCount;
     private static final M4BoundedEventV1 ack = new M4BoundedEventV1(10, 100L);
@@ -19,15 +23,15 @@ public final class M4SystemResetStateV1 {
             return false;
         }
         BigInteger number = new BigInteger(resetId.substring(3));
-        if (latestNumber != null && number.compareTo(latestNumber) <= 0) {
-            if (!resetId.equals(latestId)) { return false; }
+        if (resetId.equals(latestId)) {
             if (!resetting) { ack.publish(resetId, now); }
             return true;
         }
-        // A newer reset can supersede an in-progress request. Safety motion
-        // continues and only the newest correlation ID can be acknowledged.
+        if (hasSeenReset(resetId, number)) { return false; }
+        rememberReset(resetId);
+        // A new reset can supersede an in-progress request. Safety motion
+        // continues and only the active correlation ID can be acknowledged.
         latestId = resetId;
-        latestNumber = number;
         ack.cancel();
         if (!resetting) {
             resetting = true;
@@ -66,4 +70,25 @@ public final class M4SystemResetStateV1 {
     }
 
     public static synchronized long resetCount() { return resetCount; }
+
+    private static boolean hasSeenReset(String resetId, BigInteger number) {
+        for (String seen : seenResetIds) {
+            if (seen.equals(resetId) ||
+                new BigInteger(seen.substring(3)).equals(number)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static void rememberReset(String resetId) {
+        if (seenResetIds.size() >= RESET_HISTORY_LIMIT) {
+            Iterator<String> oldest = seenResetIds.iterator();
+            if (oldest.hasNext()) {
+                oldest.next();
+                oldest.remove();
+            }
+        }
+        seenResetIds.add(resetId);
+    }
 }
