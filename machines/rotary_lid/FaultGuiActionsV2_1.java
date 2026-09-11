@@ -52,6 +52,11 @@ public final class FaultGuiActionsV2_1 {
 
     private static boolean returnControllerEvidence() {
         if ("TRANSFER".equals(FaultSupervisorStateV2_1.activeSubsystem())) {
+            if ("LOCKED_OUT".equals(
+                FaultSupervisorStateV2_1.stateName()) &&
+                FaultSupervisorStateV2_1.applyDeferredControllerEvidence()) {
+                return true;
+            }
             return FaultTestControlStateV2_1.requestTransferRecovery();
         }
         String state = FaultSupervisorStateV2_1.stateName();

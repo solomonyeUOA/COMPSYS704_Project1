@@ -61,6 +61,13 @@ public final class FaultInjectionIntegrationSelfTest {
         String request = FaultInjectionStateV2_1.nextTransferRequest();
         require(request != null && request.endsWith("|ARRIVAL_TIMEOUT"),
             "transfer fault crosses the M3 SystemJ boundary");
+        FaultInjectionStateV2_1.consumed("ARRIVAL_TIMEOUT");
+        require(FaultInjectionStateV2_1.arm("ARRIVAL_TIMEOUT"),
+            "same transfer fault can be armed again immediately");
+        String repeated = FaultInjectionStateV2_1.nextTransferRequest();
+        require(repeated != null && repeated.endsWith("|ARRIVAL_TIMEOUT") &&
+            !repeated.equals(request),
+            "repeated injection uses a new request identity");
     }
 
     private static void require(boolean condition, String message) {

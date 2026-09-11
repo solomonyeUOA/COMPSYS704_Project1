@@ -67,6 +67,7 @@ public final class Member3PlantStateV1 {
 
     public static synchronized boolean loadBottle(String id) {
         if (M3SystemResetStateV1.isQuarantined() ||
+            FaultSupervisorStateV2_1.isOperationHeld() ||
             retiredBottleIds.contains(id)) {
             return false;
         }
@@ -83,13 +84,22 @@ public final class Member3PlantStateV1 {
             return false;
         }
         if (rotary.hasActiveBottle(id) || pendingLoadIds.contains(id)) {
+            FaultSupervisorStateV2_1.onRecoveredTransferHandoff(id);
             return true;
         }
-        if (rotary.loadBottle(id)) {
+        boolean recoveryHandoff = isRecoveryHandoff(id);
+        if ((!FaultSupervisorStateV2_1.isOperationHeld() || recoveryHandoff) &&
+            rotary.loadBottle(id)) {
+            if (recoveryHandoff) {
+                FaultSupervisorStateV2_1.onRecoveredTransferHandoff(id);
+            }
             return true;
         }
         pendingLoadQueue.add(id);
         pendingLoadIds.add(id);
+        if (recoveryHandoff) {
+            FaultSupervisorStateV2_1.onRecoveredTransferHandoff(id);
+        }
         return true;
     }
 
@@ -97,6 +107,9 @@ public final class Member3PlantStateV1 {
     public static synchronized boolean drainPendingLoad() {
         if (M3SystemResetStateV1.isQuarantined()) {
             return false;
+        }
+        if (FaultSupervisorStateV2_1.isOperationHeld()) {
+            return drainRecoveryHandoff();
         }
         while (!pendingLoadQueue.isEmpty()) {
             String id = pendingLoadQueue.peek();
@@ -113,6 +126,39 @@ public final class Member3PlantStateV1 {
             return true;
         }
         return false;
+    }
+
+    private static boolean drainRecoveryHandoff() {
+        java.util.Iterator<String> iterator = pendingLoadQueue.iterator();
+        while (iterator.hasNext()) {
+            String id = iterator.next();
+            if (!isRecoveryHandoff(id)) {
+                continue;
+            }
+            if (rotary.hasActiveBottle(id)) {
+                iterator.remove();
+                pendingLoadIds.remove(id);
+                return true;
+            }
+            if (!rotary.loadBottle(id)) {
+                return false;
+            }
+            iterator.remove();
+            pendingLoadIds.remove(id);
+            FaultSupervisorStateV2_1.onRecoveredTransferHandoff(id);
+            return true;
+        }
+        return false;
+    }
+
+    private static boolean isRecoveryHandoff(String id) {
+        String state = FaultSupervisorStateV2_1.stateName();
+        return ("WAITING_RESULT".equals(state) ||
+            "LOCKED_OUT".equals(state)) &&
+            "TRANSFER".equals(FaultSupervisorStateV2_1.activeSubsystem()) &&
+            "ARRIVAL_TIMEOUT".equals(
+                FaultSupervisorStateV2_1.activeFaultCode()) &&
+            id != null && id.equals(FaultSupervisorStateV2_1.activeBottleId());
     }
 
     static synchronized int pendingLoadCount() {
@@ -144,7 +190,8 @@ public final class Member3PlantStateV1 {
         boolean enabled,
         long cycleId
     ) {
-        if (M3SystemResetStateV1.isQuarantined()) {
+        if (M3SystemResetStateV1.isQuarantined() ||
+            FaultSupervisorStateV2_1.isOperationHeld()) {
             enabled = false;
             cycleId = 0L;
         }
@@ -164,7 +211,8 @@ public final class Member3PlantStateV1 {
     }
 
     public static synchronized boolean commitRotation(long cycleId) {
-        if (M3SystemResetStateV1.isQuarantined()) {
+        if (M3SystemResetStateV1.isQuarantined() ||
+            FaultSupervisorStateV2_1.isOperationHeld()) {
             return false;
         }
         return rotary.commitRotation(cycleId);
@@ -249,7 +297,9 @@ public final class Member3PlantStateV1 {
     }
 
     public static synchronized boolean canRotate() {
-        return !M3SystemResetStateV1.isQuarantined() && rotary.canRotate();
+        return !M3SystemResetStateV1.isQuarantined() &&
+            !FaultSupervisorStateV2_1.isOperationHeld() &&
+            rotary.canRotate();
     }
 
     public static synchronized String getBottleWaitingForLidId() {

@@ -41,7 +41,8 @@ public final class Member3MachineStateV1 {
     public static synchronized boolean requestRotation(
         boolean stationBarrierSatisfied
     ) {
-        if (M3SystemResetStateV1.isQuarantined()) {
+        if (M3SystemResetStateV1.isQuarantined() ||
+            FaultSupervisorStateV2_1.isOperationHeld()) {
             return false;
         }
         boolean started = rotary.requestRotation(
@@ -125,7 +126,8 @@ public final class Member3MachineStateV1 {
         String bottleId,
         boolean lidAvailable
     ) {
-        if (M3SystemResetStateV1.isQuarantined()) {
+        if (M3SystemResetStateV1.isQuarantined() ||
+            FaultSupervisorStateV2_1.isOperationHeld()) {
             return false;
         }
         if (lidLoader.getStatus() == DONE) {

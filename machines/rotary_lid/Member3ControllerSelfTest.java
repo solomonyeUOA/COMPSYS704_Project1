@@ -128,6 +128,11 @@ public final class Member3ControllerSelfTest {
         require(Member3MachineStateV1.resetRotaryFault(
             new RotaryRecoveryEvidenceV1(true, true, true)),
             "supervisor authorizes reconciled rotary reset");
+        require(FaultSupervisorStateV2_1.isOperationHeld(),
+            "verified rotary recovery remains held for M1 approval");
+        require(!Member3MachineStateV1.requestLidLoad("B003", false),
+            "recovery hold blocks the next machine operation");
+        FaultSupervisorStateV2_1.reset();
 
         require(!Member3MachineStateV1.requestLidLoad("B003", false),
             "shared lid controller detects missing resource");
