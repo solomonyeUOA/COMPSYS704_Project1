@@ -155,6 +155,15 @@ public final class Member4ModelSelfTest {
         require(controller.acceptBottleAtCap(
             "CAP-L|L|500|GEOM_L|PACK_L", 0
         ), "large bottle accepted by Capper");
+        M4CapperTelemetryV1 positioning = M4CapperTelemetryV1.parse(
+            controller.telemetryPayload()
+        );
+        require("CAP-L".equals(positioning.getBottleId()) &&
+            "L".equals(positioning.getSizeCode()) &&
+            "GEOM_L".equals(positioning.getGeometryProfile()) &&
+            "POSITIONING".equals(positioning.getStage()) &&
+            positioning.getStatus() == M4StatusV1.BUSY,
+            "Capper publishes correlated large-geometry telemetry");
         for (long now = 0; now <= 300; now += 10) {
             transferCapper(controller, plant, now);
         }
@@ -164,6 +173,9 @@ public final class Member4ModelSelfTest {
             "Capper selects the large geometry profile");
         require(!plant.isClamped() && !plant.isLowered(),
             "Capper ends raised and unclamped");
+        require("DONE".equals(M4CapperTelemetryV1.parse(
+            controller.telemetryPayload()
+        ).getStage()), "Capper telemetry reaches DONE");
         require(!controller.acceptBottleAtCap(
             "CAP-L|L|500|GEOM_L|PACK_L", 400
         ), "completed duplicate does not restart capping");
@@ -179,6 +191,9 @@ public final class Member4ModelSelfTest {
         }
         require(faulty.getStatus() == M4StatusV1.FAULT,
             "Capper actuator fault enters FAULT");
+        require("FAULT".equals(M4CapperTelemetryV1.parse(
+            faulty.telemetryPayload()
+        ).getStage()), "Capper telemetry exposes actuator fault state");
         require(faulty.takeCompletion() == null,
             "Capper fault suppresses MARK_CAPPED");
     }
@@ -187,14 +202,57 @@ public final class Member4ModelSelfTest {
         SortPackControllerModelV1 controller =
             new SortPackControllerModelV1(2, 2, 1000);
         SortPackPlantModelV1 plant = new SortPackPlantModelV1(10, 10);
-        runSortPack(controller, plant, "SP1|S|200|GEOM_S|PACK_S", 0);
-        runSortPack(controller, plant, "SP2|S|200|GEOM_S|PACK_S", 100);
+        runSortPack(
+            controller, plant,
+            "ORDER-A-P01-B001|S|200|GEOM_S|PACK_S", 0
+        );
+        require(controller.getSmallPackageCount() == 0,
+            "partial batch remains open before M1 batch end");
+        require(controller.acceptBatchEnd("ORDER-A-P01|1|S", 90),
+            "first order batch end is accepted");
+        require(controller.isBatchFinalised("ORDER-A-P01") &&
+            controller.getBatchPackageCount("ORDER-A-P01") == 1,
+            "one-bottle remainder closes as its own package");
+        require("ORDER-A-P01|BATCH_PACK_COMPLETE|S|1|1".equals(
+            controller.takeBatchCompletion()
+        ), "batch completion reports the partial package");
+        require(controller.acceptBatchEnd("ORDER-A-P01|1|S", 91) &&
+            controller.getSmallPackageCount() == 1 &&
+            controller.takeBatchCompletion() == null,
+            "duplicate batch end is idempotent");
+
+        runSortPack(
+            controller, plant,
+            "ORDER-B-P01-B001|S|200|GEOM_S|PACK_S", 100
+        );
         require(controller.getSmallBottleCount() == 2,
-            "two small bottles are placed");
+            "two small bottles from different orders are placed");
         require(controller.getSmallPackageCount() == 1,
-            "configured small package closes after two bottles");
+            "different order cannot fill the previous order's package");
+        require(controller.acceptBatchEnd("ORDER-B-P01|1|S", 190) &&
+            controller.getSmallPackageCount() == 2,
+            "second order closes a separate partial package");
         require("LANE_S".equals(plant.getLane()),
             "small bottles select LANE_S");
+
+        SortPackControllerModelV1 earlyEnd =
+            new SortPackControllerModelV1(2, 2, 1000);
+        SortPackPlantModelV1 earlyPlant =
+            new SortPackPlantModelV1(10, 10);
+        require(earlyEnd.acceptBatchEnd("ORDER-C-P01|3|L", 0),
+            "batch end may arrive before its final physical placements");
+        runSortPack(earlyEnd, earlyPlant,
+            "ORDER-C-P01-B001|L|500|GEOM_L|PACK_L", 10);
+        runSortPack(earlyEnd, earlyPlant,
+            "ORDER-C-P01-B002|L|500|GEOM_L|PACK_L", 100);
+        require(!earlyEnd.isBatchFinalised("ORDER-C-P01") &&
+            earlyEnd.getLargePackageCount() == 1,
+            "one full package does not prematurely finalise a three-bottle batch");
+        runSortPack(earlyEnd, earlyPlant,
+            "ORDER-C-P01-B003|L|500|GEOM_L|PACK_L", 200);
+        require(earlyEnd.isBatchFinalised("ORDER-C-P01") &&
+            earlyEnd.getLargePackageCount() == 2,
+            "last bottle closes the remaining partial large package");
 
         SortPackControllerModelV1 faulty =
             new SortPackControllerModelV1(2, 2, 1000);

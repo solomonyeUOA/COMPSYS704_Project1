@@ -6,6 +6,7 @@
             <iSignal Name="VIZ_SORT_PACK_STATUS" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="11008" />
             <iSignal Name="VIZ_LABELLER_STATUS" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="11008" />
             <iSignal Name="VIZ_TWIN_SNAPSHOT" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="11008" />
+            <iSignal Name="M4_CAPPER_STATE" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="11008" />
             <iSignal Name="VIZ_LOADER_STATUS"
                      Class="com.systemj.ipc.SimpleServer"
                      IP="127.0.0.1" Port="11008" />

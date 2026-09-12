@@ -125,6 +125,8 @@ public final class ABSVisualisation {
     private static String lastTwinEvidence = "";
     private static int labellerStatus;
     private static boolean hasLabellerStatus;
+    private static M4CapperTelemetryV1 m4CapperTelemetry;
+    private static String lastM4CapperTelemetry = "";
 
     private final JFrame frame;
     private final ProductionLinePanel productionLinePanel;
@@ -548,6 +550,32 @@ public final class ABSVisualisation {
         }
     }
 
+    /** Accepts optional M4 arm telemetry for display only. */
+    public static synchronized boolean updateM4CapperState(String payload) {
+        final M4CapperTelemetryV1 parsed;
+        try {
+            parsed = M4CapperTelemetryV1.parse(payload);
+        }
+        catch (IllegalArgumentException invalid) {
+            return false;
+        }
+        String canonical = parsed.encode();
+        if (canonical.equals(lastM4CapperTelemetry)) {
+            return true;
+        }
+        m4CapperTelemetry = parsed;
+        lastM4CapperTelemetry = canonical;
+        updateStatus("Capper", parsed.getStatus());
+        System.out.println(
+            "ABS Visualisation M4 Capper stage=" + parsed.getStage() +
+            " bottle=" + parsed.getBottleId() +
+            " size=" + parsed.getSizeCode() +
+            " geometry=" + parsed.getGeometryProfile()
+        );
+        refreshStatusOnSwing();
+        return true;
+    }
+
     /** Resets only this read-only M1 projection; it never commands a Plant. */
     public static synchronized void resetSystem(String resetId) {
         if (resetId == null || !resetId.matches("RST[0-9]{4,}") ||
@@ -561,6 +589,8 @@ public final class ABSVisualisation {
         TEAM_IP_MODEL.acceptTwinEvidence(LIVE_TWIN.snapshot());
         hasLabellerStatus = false;
         labellerStatus = 0;
+        m4CapperTelemetry = null;
+        lastM4CapperTelemetry = "";
         requiredBottles = 0;
         completedBottles = 0;
         requiredBottlesReceived = true;
@@ -749,6 +779,28 @@ public final class ABSVisualisation {
         int index
     ) {
         return renderSnapshot.getModule(index);
+    }
+
+    private static synchronized M4CapperTelemetryV1 capperTelemetry() {
+        return m4CapperTelemetry;
+    }
+
+    private static double capperTelemetryProgress(double fallback) {
+        M4CapperTelemetryV1 telemetry = capperTelemetry();
+        if (telemetry == null) { return fallback; }
+        String stage = telemetry.getStage();
+        if ("WAITING".equals(stage)) { return 0.0; }
+        if ("POSITIONING".equals(stage)) { return 8.0; }
+        if ("CLAMPING".equals(stage)) { return 18.0; }
+        if ("LOWERING".equals(stage)) { return 28.0; }
+        if ("GRIPPING".equals(stage)) { return 38.0; }
+        if ("TWISTING".equals(stage)) { return 52.0; }
+        if ("RELEASING".equals(stage)) { return 62.0; }
+        if ("RETURNING".equals(stage)) { return 70.0; }
+        if ("RAISING".equals(stage)) { return 82.0; }
+        if ("UNCLAMPING".equals(stage)) { return 94.0; }
+        if ("DONE".equals(stage)) { return 100.0; }
+        return fallback;
     }
 
     private void applyProgress(
@@ -2788,7 +2840,12 @@ public final class ABSVisualisation {
             boolean done = isDone(CAPPER, statuses, received);
             ABSVisualisationFlowModel.ModuleSnapshot shared =
                 renderModule(CAPPER);
-            double capProgress = shared.getProgress();
+            double capProgress = capperTelemetryProgress(
+                shared.getProgress()
+            );
+            M4CapperTelemetryV1 telemetry = capperTelemetry();
+            boolean largeGeometry = telemetry != null &&
+                "GEOM_L".equals(telemetry.getGeometryProfile());
             int motion = capProgress < 30.0 ?
                 (int)Math.round(capProgress / 30.0 * 20.0) :
                 (capProgress < 72.0 ? 20 :
@@ -2800,9 +2857,16 @@ public final class ABSVisualisation {
             g2.fillRect(centreX - 3, y + 35, 6, 31 + motion);
             g2.setColor(busy ? statusColor(BUSY_STATUS) :
                 new Color(143, 156, 169));
-            g2.fillRoundRect(centreX - 22, headY + 18, 44, 17, 7, 7);
+            int headHalfWidth = largeGeometry ? 27 : 22;
+            g2.fillRoundRect(
+                centreX - headHalfWidth, headY + 18,
+                headHalfWidth * 2, 17, 7, 7
+            );
             g2.setColor(new Color(72, 84, 98));
-            g2.drawRoundRect(centreX - 22, headY + 18, 44, 17, 7, 7);
+            g2.drawRoundRect(
+                centreX - headHalfWidth, headY + 18,
+                headHalfWidth * 2, 17, 7, 7
+            );
             g2.drawLine(centreX - 31, y + 128, centreX + 31, y + 128);
 
             drawLayeredBottle(
@@ -3444,13 +3508,16 @@ public final class ABSVisualisation {
             information.add(realStatusValue);
             information.add(Box.createVerticalStrut(6));
             JLabel realSource = createWrappedInformationLabel(
-                "Source: Coordinator -> ABSVisualisationPlantCD -> " +
-                "shared ABSVisualisation state"
+                index == CAPPER ?
+                    "Source: M4 CapperControllerCD -> " +
+                        "ABSVisualisationPlantCD (read-only IP telemetry)" :
+                    "Source: Coordinator -> ABSVisualisationPlantCD -> " +
+                        "shared ABSVisualisation state"
             );
             information.add(realSource);
             information.add(Box.createVerticalStrut(6));
             realBatchValue = createWrappedInformationLabel("");
-            realBatchValue.setVisible(index == UNLOADER);
+            realBatchValue.setVisible(index == UNLOADER || index == CAPPER);
             information.add(realBatchValue);
 
             information.add(Box.createVerticalStrut(18));
@@ -3670,19 +3737,7 @@ public final class ABSVisualisation {
                     );
                     break;
                 case CAPPER:
-                    primaryMetricValue.setText(
-                        wrapInformationText(
-                            "Head-cycle progress: " +
-                            oneDecimal(detailModel.getProgress()) + "%"
-                        )
-                    );
-                    secondaryMetricValue.setText(
-                        wrapInformationText(
-                            "Tightening cue: " +
-                            Math.round(detailModel.getTighteningAngle()) +
-                            " deg"
-                        )
-                    );
+                    updateCapperInformation();
                     break;
                 case LABELLER:
                 case SORT_PACK:
@@ -3737,6 +3792,48 @@ public final class ABSVisualisation {
                     "identity is not available."
                 )
             );
+        }
+
+        private void updateCapperInformation() {
+            M4CapperTelemetryV1 telemetry = capperTelemetry();
+            if (telemetry == null) {
+                realBatchValue.setText(wrapInformationText(
+                    "M4 arm telemetry: <b>waiting</b>"
+                ));
+                primaryMetricValue.setText(wrapInformationText(
+                    "Head-cycle progress: " +
+                    oneDecimal(detailModel.getProgress()) + "%"
+                ));
+                secondaryMetricValue.setText(wrapInformationText(
+                    "Tightening cue: " +
+                    Math.round(detailModel.getTighteningAngle()) + " deg"
+                ));
+                return;
+            }
+            realBatchValue.setText(wrapInformationText(
+                "M4 bottle: <b>" + html(telemetry.getBottleId()) +
+                "</b><br>Size: <b>" + telemetry.getSizeCode() +
+                "</b><br>Geometry: <b>" +
+                telemetry.getGeometryProfile() + "</b>"
+            ));
+            primaryMetricValue.setText(wrapInformationText(
+                "Live arm stage: <b>" + telemetry.getStage() +
+                "</b><br>Mapped position: " +
+                oneDecimal(capperTelemetryProgress(
+                    detailModel.getProgress()
+                )) + "%"
+            ));
+            secondaryMetricValue.setText(wrapInformationText(
+                "Display follows M4 geometry and stage telemetry. " +
+                "This path cannot issue actuator commands."
+            ));
+        }
+
+        private static String html(String value) {
+            return value.replace("&", "&amp;")
+                .replace("<", "&lt;")
+                .replace(">", "&gt;")
+                .replace("\"", "&quot;");
         }
 
         private String rotaryOccupancyText() {
@@ -4431,7 +4528,12 @@ public final class ABSVisualisation {
             }
 
             private void drawCapperDetail(Graphics2D g2) {
-                double progress = detailModel.getProgress();
+                double progress = capperTelemetryProgress(
+                    detailModel.getProgress()
+                );
+                M4CapperTelemetryV1 telemetry = capperTelemetry();
+                boolean largeGeometry = telemetry != null &&
+                    "GEOM_L".equals(telemetry.getGeometryProfile());
                 double headY;
                 if (progress < 30.0) {
                     headY = 82.0 + progress / 30.0 * 145.0;
@@ -4447,10 +4549,12 @@ public final class ABSVisualisation {
                 g2.setColor(new Color(72, 87, 102));
                 g2.fillRect(244, 48, 12, (int)Math.round(headY - 25.0));
                 g2.setColor(new Color(207, 216, 226));
+                int liveHeadWidth = largeGeometry ? 188 : 160;
+                int liveHeadX = 250 - liveHeadWidth / 2;
                 g2.fillRoundRect(
-                    165,
+                    liveHeadX,
                     (int)Math.round(headY),
-                    170,
+                    liveHeadWidth,
                     53,
                     16,
                     16
@@ -4458,19 +4562,21 @@ public final class ABSVisualisation {
                 g2.setColor(new Color(67, 82, 97));
                 g2.setStroke(new BasicStroke(4.0f));
                 g2.drawRoundRect(
-                    165,
+                    liveHeadX,
                     (int)Math.round(headY),
-                    170,
+                    liveHeadWidth,
                     53,
                     16,
                     16
                 );
+                int bottleWidth = largeGeometry ? 84 : 68;
+                int bottleHeight = largeGeometry ? 132 : 112;
                 ProductionLinePanel.drawLayeredBottle(
                     g2,
-                    213,
-                    268,
-                    74,
-                    132,
+                    250 - bottleWidth / 2,
+                    400 - bottleHeight,
+                    bottleWidth,
+                    bottleHeight,
                     LIQUID_A_COLOR,
                     (int)Math.round(DEMO_LIQUID_A_PERCENT),
                     LIQUID_B_COLOR,
@@ -4500,6 +4606,17 @@ public final class ABSVisualisation {
                 g2.drawString("VERTICAL GUIDE SHAFT", 268, 62);
                 g2.drawString("CAPPING HEAD", 190,
                     (int)Math.round(headY - 9.0));
+                if (telemetry != null) {
+                    g2.setColor(new Color(36, 92, 158));
+                    g2.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 12));
+                    g2.drawString(
+                        "LIVE " + telemetry.getSizeCode() + " / " +
+                            telemetry.getGeometryProfile() + " / " +
+                            telemetry.getStage(),
+                        42,
+                        420
+                    );
+                }
             }
 
             private void drawFinishingDetail(Graphics2D g2) {

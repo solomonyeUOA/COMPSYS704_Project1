@@ -81,10 +81,27 @@ public final class ProductionOverviewSelfTest {
         ABSVisualisationFlowModel flow = flowModel();
         for (int stage = 0; stage <= ABSVisualisationFlowModel.CAPPER; stage++) complete(stage, flow);
         ABSVisualisation.ModuleDetailPanel label = new ABSVisualisation.ModuleDetailPanel(7);
+        ABSVisualisation.ModuleDetailPanel capper = new ABSVisualisation.ModuleDetailPanel(6);
         ABSVisualisation.ModuleDetailPanel sort = new ABSVisualisation.ModuleDetailPanel(9);
-        require(buttons(label) == 0 && buttons(sort) == 0, "new detail panels have no control buttons");
+        require(buttons(label) == 0 && buttons(capper) == 0 &&
+            buttons(sort) == 0, "detail panels have no control buttons");
         require(text(label).contains("LABELLER"), "labeller detail title");
+        require(text(capper).contains("CAPPER"), "capper detail title");
         require(text(sort).contains("SORT / PACK"), "sort/pack detail title");
+
+        require(ABSVisualisation.updateM4CapperState(
+            "V1|LIVE-L-B001|L|GEOM_L|LOWERING|2"
+        ), "valid M4 Capper telemetry accepted");
+        capper.syncRealState();
+        require(capper.getDisplayedRealStatus() == 2,
+            "M4 Capper telemetry updates real status");
+        require(text(capper).contains("LIVE-L-B001") &&
+            text(capper).contains("GEOM_L") &&
+            text(capper).contains("LOWERING"),
+            "Capper detail displays live bottle, geometry and arm stage");
+        require(!ABSVisualisation.updateM4CapperState(
+            "V1|LIVE-L-B001|S|GEOM_L|LOWERING|2"
+        ), "mismatched M4 size and geometry rejected");
 
         ABSVisualisation.updateLabellerStatus(2);
         tick(flow, 20);
@@ -148,6 +165,7 @@ public final class ProductionOverviewSelfTest {
             render(sort, output, "sort-pack-detail-fixture.png", 820, 620);
         }
         label.stopAnimation();
+        capper.stopAnimation();
         sort.stopAnimation();
     }
 

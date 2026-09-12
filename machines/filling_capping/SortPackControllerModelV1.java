@@ -1,9 +1,11 @@
 import java.util.ArrayDeque;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Queue;
 import java.util.Set;
 
-/** Downstream S/L sorting and package counting; never owns BOTTLE_DONE. */
+/** Batch-isolated S/L sorting and package counting; never owns BOTTLE_DONE. */
 public final class SortPackControllerModelV1 {
     private enum Stage {
         WAITING,
@@ -13,13 +15,33 @@ public final class SortPackControllerModelV1 {
         FAULT
     }
 
+    private static final class BatchState {
+        private final String batchId;
+        private String sizeCode;
+        private int expectedQuantity;
+        private int placed;
+        private int packages;
+        private boolean endReceived;
+        private boolean finalised;
+
+        private BatchState(String id, String size) {
+            batchId = id;
+            sizeCode = size;
+        }
+    }
+
     private final int smallPackageCapacity;
     private final int largePackageCapacity;
     private final long timeoutMs;
     private final Queue<String> plantCommands = new ArrayDeque<String>();
+    private final Queue<String> batchCompletions =
+        new ArrayDeque<String>();
     private final Set<String> completedBottleIds = new HashSet<String>();
+    private final Map<String, BatchState> batches =
+        new LinkedHashMap<String, BatchState>();
     private Stage stage = Stage.WAITING;
     private M4BottleContextV1 activeContext;
+    private String activeBatchId;
     private int status = M4StatusV1.READY;
     private int smallBottleCount;
     private int largeBottleCount;
@@ -66,7 +88,24 @@ public final class SortPackControllerModelV1 {
             fail("ACTIVE_BOTTLE_MISMATCH", nowMs);
             return false;
         }
+
+        String batchId = batchIdForBottle(context.getBottleId());
+        BatchState batch = batch(batchId, context.getSizeCode());
+        if (batch.finalised) {
+            fail("BATCH_ALREADY_FINALISED", nowMs);
+            return false;
+        }
+        if (!context.getSizeCode().equals(batch.sizeCode)) {
+            fail("BATCH_SIZE_MISMATCH", nowMs);
+            return false;
+        }
+        if (batch.endReceived && batch.placed >= batch.expectedQuantity) {
+            fail("BATCH_QUANTITY_EXCEEDED", nowMs);
+            return false;
+        }
+
         activeContext = context;
+        activeBatchId = batchId;
         stage = Stage.ROUTING;
         status = M4StatusV1.BUSY;
         completion = null;
@@ -74,6 +113,48 @@ public final class SortPackControllerModelV1 {
         lastPlantFeedback = null;
         stageStartMs = nowMs;
         queue("SET_LANE", expectedLane());
+        return true;
+    }
+
+    /**
+     * Accepts M1's batchId|quantity|size boundary. The boundary may arrive
+     * before the last bottle; partial packaging waits for all expected
+     * physical placements and duplicate boundaries are idempotent.
+     */
+    public boolean acceptBatchEnd(String payload, long nowMs) {
+        final String[] fields;
+        final int quantity;
+        try {
+            fields = M4ProtocolV1.fields(payload, 3);
+            M4ProtocolV1.validateBottleId(fields[0]);
+            quantity = M4ProtocolV1.unsignedInteger(fields[1], "quantity");
+            if (quantity < 1 ||
+                (!M4BottleContextV1.SMALL.equals(fields[2]) &&
+                 !M4BottleContextV1.LARGE.equals(fields[2]))) {
+                throw new IllegalArgumentException("invalid batch end");
+            }
+        }
+        catch (IllegalArgumentException invalid) {
+            return false;
+        }
+
+        BatchState batch = batch(fields[0], fields[2]);
+        if (!fields[2].equals(batch.sizeCode)) {
+            fail("BATCH_SIZE_MISMATCH", nowMs);
+            return false;
+        }
+        if (batch.endReceived) {
+            return batch.expectedQuantity == quantity;
+        }
+        if (batch.placed > quantity) {
+            fail("BATCH_QUANTITY_EXCEEDED", nowMs);
+            return false;
+        }
+        batch.expectedQuantity = quantity;
+        batch.endReceived = true;
+        if (batch.placed == quantity) {
+            finaliseBatch(batch);
+        }
         return true;
     }
 
@@ -135,6 +216,10 @@ public final class SortPackControllerModelV1 {
         return result;
     }
 
+    public String takeBatchCompletion() {
+        return batchCompletions.poll();
+    }
+
     public int getStatus() {
         return status;
     }
@@ -155,12 +240,31 @@ public final class SortPackControllerModelV1 {
         return largePackageCount;
     }
 
+    public int getBatchBottleCount(String batchId) {
+        BatchState batch = batches.get(batchId);
+        return batch == null ? 0 : batch.placed;
+    }
+
+    public int getBatchPackageCount(String batchId) {
+        BatchState batch = batches.get(batchId);
+        return batch == null ? 0 : batch.packages;
+    }
+
+    public boolean isBatchFinalised(String batchId) {
+        BatchState batch = batches.get(batchId);
+        return batch != null && batch.finalised;
+    }
+
     public String getStageName() {
         return stage.name();
     }
 
     public String getActiveBottleId() {
         return activeContext == null ? "-" : activeContext.getBottleId();
+    }
+
+    public String getActiveBatchId() {
+        return activeBatchId == null ? "-" : activeBatchId;
     }
 
     public String getFaultReason() {
@@ -170,6 +274,7 @@ public final class SortPackControllerModelV1 {
     public String snapshot() {
         return "SortPack[status=" + M4StatusV1.nameOf(status) +
             ",stage=" + stage + ",bottle=" + getActiveBottleId() +
+            ",batch=" + getActiveBatchId() +
             ",S=" + smallBottleCount + "/packages=" + smallPackageCount +
             ",L=" + largeBottleCount + "/packages=" + largePackageCount +
             ",fault=" + faultReason + "]";
@@ -180,6 +285,7 @@ public final class SortPackControllerModelV1 {
             return false;
         }
         activeContext = null;
+        activeBatchId = null;
         stage = Stage.WAITING;
         status = M4StatusV1.READY;
         completion = null;
@@ -189,6 +295,15 @@ public final class SortPackControllerModelV1 {
         return true;
     }
 
+    private BatchState batch(String batchId, String sizeCode) {
+        BatchState current = batches.get(batchId);
+        if (current == null) {
+            current = new BatchState(batchId, sizeCode);
+            batches.put(batchId, current);
+        }
+        return current;
+    }
+
     private String expectedLane() {
         return M4BottleContextV1.SMALL.equals(activeContext.getSizeCode()) ?
             "LANE_S" : "LANE_L";
@@ -196,22 +311,71 @@ public final class SortPackControllerModelV1 {
 
     private void recordPlacement() {
         completedBottleIds.add(activeContext.getBottleId());
+        BatchState batch = batches.get(activeBatchId);
+        batch.placed++;
         if (M4BottleContextV1.SMALL.equals(activeContext.getSizeCode())) {
             smallBottleCount++;
-            if (smallBottleCount % smallPackageCapacity == 0) {
-                smallPackageCount++;
-            }
         }
         else {
             largeBottleCount++;
-            if (largeBottleCount % largePackageCapacity == 0) {
-                largePackageCount++;
-            }
         }
+
+        int capacity = packageCapacity(batch.sizeCode);
+        if (batch.placed % capacity == 0) {
+            addPackage(batch);
+        }
+        if (batch.endReceived && batch.placed == batch.expectedQuantity) {
+            finaliseBatch(batch);
+        }
+
         stage = Stage.DONE;
         status = M4StatusV1.DONE;
         completion = activeContext.getBottleId() + "|SORT_PACK_COMPLETE|" +
             activeContext.getPackagingProfileId();
+    }
+
+    private void finaliseBatch(BatchState batch) {
+        if (batch.finalised || !batch.endReceived ||
+            batch.placed != batch.expectedQuantity) {
+            return;
+        }
+        if (batch.placed % packageCapacity(batch.sizeCode) != 0) {
+            addPackage(batch);
+        }
+        batch.finalised = true;
+        batchCompletions.add(
+            batch.batchId + "|BATCH_PACK_COMPLETE|" + batch.sizeCode +
+            "|" + batch.placed + "|" + batch.packages
+        );
+    }
+
+    private void addPackage(BatchState batch) {
+        batch.packages++;
+        if (M4BottleContextV1.SMALL.equals(batch.sizeCode)) {
+            smallPackageCount++;
+        }
+        else {
+            largePackageCount++;
+        }
+    }
+
+    private int packageCapacity(String sizeCode) {
+        return M4BottleContextV1.SMALL.equals(sizeCode) ?
+            smallPackageCapacity : largePackageCapacity;
+    }
+
+    /** Unknown bottle formats are isolated as one-bottle batches, never mixed. */
+    private static String batchIdForBottle(String bottleId) {
+        int marker = bottleId.lastIndexOf("-B");
+        if (marker <= 0 || marker + 2 >= bottleId.length()) {
+            return bottleId;
+        }
+        for (int index = marker + 2; index < bottleId.length(); index++) {
+            if (!Character.isDigit(bottleId.charAt(index))) {
+                return bottleId;
+            }
+        }
+        return bottleId.substring(0, marker);
     }
 
     private void queue(String action, String value) {

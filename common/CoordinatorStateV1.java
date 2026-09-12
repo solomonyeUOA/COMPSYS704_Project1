@@ -11,6 +11,9 @@ public final class CoordinatorStateV1 {
     private static final long COMPLETION_RETRY_MILLIS = 500L;
     private static final int SIMULATION_BATCH_TRANSMISSION_ATTEMPTS = 3;
     private static final long SIMULATION_BATCH_RETRY_MILLIS = 600L;
+    private static final int SORT_PACK_BATCH_END_TRANSMISSION_ATTEMPTS = 3;
+    private static final long SORT_PACK_BATCH_END_HOLD_MILLIS = 200L;
+    private static final long SORT_PACK_BATCH_END_RETRY_MILLIS = 600L;
     private static final int RESET_TRANSMISSION_ATTEMPTS = 3;
     private static final long RESET_SIGNAL_HOLD_MILLIS = 500L;
     private static final long RESET_RETRY_MILLIS = 250L;
@@ -78,6 +81,21 @@ public final class CoordinatorStateV1 {
         );
     public static boolean m4SimulationBatchTransmissionStarted = false;
     public static int lastM4SimulationBatchAttempt = 0;
+
+    // M1 -> M4 product-batch boundary. The queue prevents a later product
+    // from replacing an earlier batch end while its bounded copies are still
+    // being transmitted.
+    private static final BoundedStringSignalOfferV1 sortPackBatchEndOffer =
+        new BoundedStringSignalOfferV1(
+            SORT_PACK_BATCH_END_TRANSMISSION_ATTEMPTS,
+            SORT_PACK_BATCH_END_HOLD_MILLIS,
+            SORT_PACK_BATCH_END_RETRY_MILLIS
+        );
+    private static final java.util.Queue<String> pendingSortPackBatchEnds =
+        new java.util.ArrayDeque<String>();
+    private static final java.util.Set<String> completedSortPackBatches =
+        new java.util.HashSet<String>();
+    public static boolean sortPackBatchEndTransmissionStarted = false;
 
     // Whole-system reset orchestration. M1 clears its own state immediately,
     // then remains pending until M2, M3 and M4 independently acknowledge the
@@ -250,6 +268,51 @@ public final class CoordinatorStateV1 {
         m4SimulationBatchTransmissionStarted = payload != null &&
             lastM4SimulationBatchAttempt > before;
         return payload;
+    }
+
+    /** Queues the current product boundary before M1 advances its recipe. */
+    public static synchronized boolean finishCurrentSortPackBatch() {
+        return finishCurrentSortPackBatch(System.currentTimeMillis());
+    }
+
+    static synchronized boolean finishCurrentSortPackBatch(long nowMillis) {
+        String payload = currentM4SimulationBatchPayload();
+        if (payload == null) {
+            return false;
+        }
+        String batchId = payload.split("\\|", -1)[0];
+        if (!completedSortPackBatches.add(batchId)) {
+            return true;
+        }
+        pendingSortPackBatchEnds.add(payload);
+        return true;
+    }
+
+    /** Returns bounded copies of each queued batchId|quantity|size boundary. */
+    public static synchronized String nextSortPackBatchEnd() {
+        return nextSortPackBatchEnd(System.currentTimeMillis());
+    }
+
+    static synchronized String nextSortPackBatchEnd(long nowMillis) {
+        sortPackBatchEndTransmissionStarted = false;
+        String current = sortPackBatchEndOffer.nextValue(nowMillis);
+        if (current != null) {
+            sortPackBatchEndTransmissionStarted =
+                sortPackBatchEndOffer.isTransmissionStarted();
+            return current;
+        }
+        if (sortPackBatchEndOffer.isPending() ||
+            pendingSortPackBatchEnds.isEmpty()) {
+            return null;
+        }
+        sortPackBatchEndOffer.discard();
+        sortPackBatchEndOffer.begin(
+            pendingSortPackBatchEnds.remove(), nowMillis
+        );
+        current = sortPackBatchEndOffer.nextValue(nowMillis);
+        sortPackBatchEndTransmissionStarted =
+            sortPackBatchEndOffer.isTransmissionStarted();
+        return current;
     }
 
     /** Builds the frozen completion payload and releases the order slot. */
@@ -789,6 +852,9 @@ public final class CoordinatorStateV1 {
         m4SimulationBatchOffer.discard();
         m4SimulationBatchTransmissionStarted = false;
         lastM4SimulationBatchAttempt = 0;
+        sortPackBatchEndOffer.discard();
+        pendingSortPackBatchEnds.clear();
+        sortPackBatchEndTransmissionStarted = false;
 
         latestFtFaultAlert = "";
         pendingFtSafeStopRequest = "";
@@ -824,6 +890,7 @@ public final class CoordinatorStateV1 {
         processedSystemResetIds.clear();
         lastAcceptedOrderId = "";
         acceptedOrderIds.clear();
+        completedSortPackBatches.clear();
         observedFtKeys.clear();
         retiredFtKeys.clear();
         m2ResetEpoch = 0;

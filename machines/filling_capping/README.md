@@ -44,12 +44,23 @@ different bottle.
 | `FillerBControllerCD` | 11005 | `FILL_B_RATIO`, `FILLER_B_STATUS_REQUEST`, `FILL_A_DONE`, Plant feedback |
 | `CapperControllerCD` | 11007 | `CAPPER_STATUS_REQUEST`, `BOTTLE_AT_CAP`, Plant feedback |
 | `BottleContextRegistryCD` | 11011 | `BOTTLE_RECOGNISED`, `M4_SYSTEM_RESET` |
-| `SortPackControllerCD` | 11012 | `BOTTLE_READY_FOR_SORT`, Plant feedback |
+| `SortPackControllerCD` | 11012 | `BOTTLE_READY_FOR_SORT`, `SORT_PACK_BATCH_END`, Plant feedback |
 | `FillerAPlantCD` | 12004 | Filler A commands / test fault injection |
 | `FillerBPlantCD` | 12005 | Filler B commands / test fault injection |
 | `CapperPlantCD` | 12007 | Capper commands / test fault injection |
 | `RecognitionPlantCD` | 12011 | `RECOGNITION_REQUEST` |
 | `SortPackPlantCD` | 12012 | Sort/Pack commands / test fault injection |
+
+`CapperControllerCD` also publishes optional, display-only
+`M4_CAPPER_STATE` telemetry directly to `ABSVisualisationPlantCD:11008`:
+
+```text
+V1|bottleId|sizeCode|geometryProfile|stage|status
+```
+
+The M1 IP uses it to show the actual `GEOM_S`/`GEOM_L` selection and Capper
+arm stage. The signal is read-only, has bounded repeated copies, and cannot
+issue commands or change Controller state.
 
 M3 sends the full canonical context as `BOTTLE_AT_FILL` at Position 2 and as
 `BOTTLE_AT_CAP` at Position 4. M4 emits `MARK_FILLED(bottleId)` and
@@ -81,8 +92,11 @@ uses the real M2 peers.
 - Capper completion requires the full clamp, lower, grip, twist, release,
   return-home, raise and unclamp feedback sequence.
 - Sort/Pack selects `LANE_S`/`LANE_L`, confirms placement into
-  `PACK_S`/`PACK_L`, and counts packages internally. It does not replace M2's
-  unloading or `BOTTLE_DONE` responsibility.
+  `PACK_S`/`PACK_L`, and counts packages by `order-product` batch. M1 sends
+  `SORT_PACK_BATCH_END=batchId|quantity|sizeCode`; M4 waits for every declared
+  placement before closing a non-empty partial package. Repeated boundaries
+  are idempotent, and bottles from different batches never share a package.
+  This does not replace M2's unloading or `BOTTLE_DONE` responsibility.
 - Completion and command transport uses bounded repeated copies with absent
   gaps for the course runtime; state models de-duplicate them by bottle and
   payload, so they represent one logical idempotent event.

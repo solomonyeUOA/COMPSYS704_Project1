@@ -50,6 +50,7 @@
             <oSignal Name="CAPPER_STATUS" To="Member4DemoDriverCD.CAPPER_STATUS" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="12114" />
             <oSignal Name="CAPPER_PLANT_COMMAND" To="CapperPlantCD.CAPPER_PLANT_COMMAND" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="12007" />
             <oSignal Name="MARK_CAPPED" To="Member4DemoDriverCD.MARK_CAPPED" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="12114" />
+            <oSignal Name="M4_CAPPER_STATE" To="ABSVisualisationPlantCD.M4_CAPPER_STATE" Class="OptionalSimpleClient" IP="127.0.0.1" Port="11008" />
         </ClockDomain>
         <ClockDomain Name="CapperPlantCD" Class="CapperPlant">
             <iSignal Name="CAPPER_PLANT_COMMAND" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="12007" />
@@ -58,6 +59,7 @@
         </ClockDomain>
         <ClockDomain Name="SortPackControllerCD" Class="SortPackController">
             <iSignal Name="BOTTLE_READY_FOR_SORT" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="11012" />
+            <iSignal Name="SORT_PACK_BATCH_END" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="11012" />
             <iSignal Name="SORT_PACK_PLANT_FEEDBACK" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="11012" />
             <oSignal Name="SORT_PACK_PLANT_COMMAND" To="SortPackPlantCD.SORT_PACK_PLANT_COMMAND" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="12012" />
         </ClockDomain>
