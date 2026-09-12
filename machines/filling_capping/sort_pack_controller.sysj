@@ -2,6 +2,7 @@
 
 SortPackController(
     input String signal BOTTLE_READY_FOR_SORT;
+    input String signal SORT_PACK_BATCH_END;
     input String signal SORT_PACK_PLANT_FEEDBACK;
 
     output String signal SORT_PACK_PLANT_COMMAND;
@@ -19,6 +20,17 @@ SortPackController(
                     M4BottleContextV1.parse(context).getBottleId()
                 );
             }
+        }
+        pause;
+    }}
+    ||
+    {loop {
+        present(SORT_PACK_BATCH_END) {
+            // The transport deliberately holds and retries this value. The
+            // model de-duplicates it; only final batch completion is logged.
+            Member4MachineStateV1.acceptSortPackBatchEnd(
+                #SORT_PACK_BATCH_END
+            );
         }
         pause;
     }}
@@ -43,6 +55,11 @@ SortPackController(
         String completed = Member4MachineStateV1.takeSortPackCompletion();
         if (completed != null) {
             System.out.println("M4 internal " + completed);
+        }
+        String batchComplete =
+            Member4MachineStateV1.takeSortPackBatchCompletion();
+        if (batchComplete != null) {
+            System.out.println("M4 internal " + batchComplete);
         }
         pause;
     }}

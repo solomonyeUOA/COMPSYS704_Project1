@@ -8,6 +8,8 @@ CapperController(
     output Integer signal CAPPER_STATUS;
     output String signal CAPPER_PLANT_COMMAND;
     output String signal MARK_CAPPED;
+    // M1 IP-only, read-only arm/geometry telemetry.
+    output String signal M4_CAPPER_STATE;
 )
 ->{
     System.out.println("M4 CapperControllerCD started");
@@ -44,6 +46,10 @@ CapperController(
         String completed = Member4MachineStateV1.takeMarkCapped();
         if (completed != null) {
             emit MARK_CAPPED(completed);
+        }
+        String telemetry = Member4MachineStateV1.nextCapperTelemetry();
+        if (telemetry != null) {
+            emit M4_CAPPER_STATE(telemetry);
         }
         pause;
     }}

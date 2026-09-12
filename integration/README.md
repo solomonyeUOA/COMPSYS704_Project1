@@ -49,6 +49,7 @@ separate reset subsystem.
 | M4 -> Coordinator | `M4_SYSTEM_RESET_ACK` | Matching safe-state acknowledgement |
 | Coordinator -> Visualisation | `VIZ_SYSTEM_RESET` | Display-state reset notification |
 | Coordinator -> M4 simulator | `M4_SIM_BATCH_REQUEST` | Simulation-only `batchId|quantity|sizeCode` publication |
+| Coordinator -> M4 Sort/Pack | `SORT_PACK_BATCH_END` | `batchId|quantity|sizeCode`; closes the batch's partial package after every declared placement |
 
 M1's Coordinator-side reset orchestration and ACK barrier are implemented.
 This integration branch also implements the M2/M3/M4 safe-state receivers

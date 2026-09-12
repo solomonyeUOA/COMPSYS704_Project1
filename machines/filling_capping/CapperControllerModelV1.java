@@ -167,6 +167,21 @@ public final class CapperControllerModelV1 {
             activeContext.getGeometryProfileId();
     }
 
+    public String getSizeCode() {
+        return activeContext == null ? "-" : activeContext.getSizeCode();
+    }
+
+    /** Read-only state used by the M1 IP visualisation; never a command path. */
+    public String telemetryPayload() {
+        return M4CapperTelemetryV1.of(
+            getActiveBottleId(),
+            getSizeCode(),
+            getGeometryProfile(),
+            getStageName(),
+            getStatus()
+        ).encode();
+    }
+
     public String getFaultReason() {
         return faultReason;
     }

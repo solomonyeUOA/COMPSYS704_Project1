@@ -75,6 +75,10 @@
                      To="FaultSupervisorCD.FT_RESUME_DECISION"
                      Class="OptionalSimpleClient"
                      IP="127.0.0.1" Port="13003" />
+            <oSignal Name="SORT_PACK_BATCH_END"
+                     To="SortPackControllerCD.SORT_PACK_BATCH_END"
+                     Class="OptionalSimpleClient"
+                     IP="127.0.0.1" Port="11012" />
 
             <oSignal Name="START_ORDER" To="MockControllerCD.START_ORDER"
                      Class="com.systemj.ipc.SimpleClient"

@@ -15,6 +15,8 @@ public final class Member4MachineStateV1 {
     private static M4BoundedEventV1 rotaryContextEvent;
     private static M4BoundedEventV1 loadProfileEvent;
     private static M4BoundedEventV1 unloadProfileEvent;
+    private static M4BoundedEventV1 capperTelemetryEvent;
+    private static String lastCapperTelemetry;
     private static final java.util.Queue<String> twinObservations =
         new java.util.ArrayDeque<String>();
     private static final M4BoundedEventV1 twinObservationEvent =
@@ -61,6 +63,8 @@ public final class Member4MachineStateV1 {
         rotaryContextEvent = new M4BoundedEventV1(10, 50L);
         loadProfileEvent = new M4BoundedEventV1(10, 50L);
         unloadProfileEvent = new M4BoundedEventV1(10, 50L);
+        capperTelemetryEvent = new M4BoundedEventV1(5, 50L);
+        lastCapperTelemetry = null;
     }
 
     public static synchronized boolean acceptRecognition(String payload) {
@@ -144,6 +148,16 @@ public final class Member4MachineStateV1 {
         if (!M4ResetFenceV1.accept(context)) { return false; }
         return sortPack.acceptBottleReady(
             context,
+            System.currentTimeMillis()
+        );
+    }
+
+    public static synchronized boolean acceptSortPackBatchEnd(
+        String batchEnd
+    ) {
+        if (M4ResetFenceV1.isQuarantined()) { return false; }
+        return sortPack.acceptBatchEnd(
+            batchEnd,
             System.currentTimeMillis()
         );
     }
@@ -239,6 +253,23 @@ public final class Member4MachineStateV1 {
         return completed;
     }
 
+    public static synchronized String takeSortPackBatchCompletion() {
+        if (M4ResetFenceV1.isQuarantined()) { return null; }
+        return sortPack.takeBatchCompletion();
+    }
+
+    /** Latest Capper arm state for the read-only M1 IP visualisation. */
+    public static synchronized String nextCapperTelemetry() {
+        if (M4ResetFenceV1.isQuarantined()) { return null; }
+        long now = System.currentTimeMillis();
+        String current = capper.telemetryPayload();
+        if (!current.equals(lastCapperTelemetry)) {
+            capperTelemetryEvent.publish(current, now);
+            lastCapperTelemetry = current;
+        }
+        return capperTelemetryEvent.take(now);
+    }
+
     private static void observe(String bottle, String stage, String resource) {
         bottle = bottle.split("\\|", -1)[0];
         twinObservations.add("V1|W|M4-E01-" + (++twinSequence) + "|" +
@@ -264,6 +295,7 @@ public final class Member4MachineStateV1 {
         fillerBCommandEvent.cancel(); capperCommandEvent.cancel();
         sortPackCommandEvent.cancel(); rotaryContextEvent.cancel();
         loadProfileEvent.cancel(); unloadProfileEvent.cancel();
+        capperTelemetryEvent.cancel(); lastCapperTelemetry = null;
         twinObservations.clear(); twinObservationEvent.cancel();
     }
 

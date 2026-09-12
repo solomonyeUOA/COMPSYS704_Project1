@@ -1,7 +1,8 @@
 // Overall ABS Visualisation Plant.
 //
-// This Clock Domain displays Coordinator-aggregated state only. It never
-// connects to Machine Controllers and it does not control a physical Plant.
+// This Clock Domain displays read-only state. Statuses come through the
+// Coordinator; optional IP telemetry may arrive directly from a Controller.
+// It never emits a machine command or controls a physical Plant.
 
 ABSVisualisationPlant(
     input Integer signal VIZ_LOADER_STATUS;
@@ -20,6 +21,7 @@ ABSVisualisationPlant(
     input Integer signal VIZ_LABELLER_STATUS;
     input Integer signal VIZ_SORT_PACK_STATUS;
     input String signal VIZ_TWIN_SNAPSHOT;
+    input String signal M4_CAPPER_STATE;
 )
 ->{
     ABSVisualisation.start();
@@ -103,5 +105,9 @@ ABSVisualisationPlant(
     ||
     {loop {present(VIZ_TWIN_SNAPSHOT) {
         ABSVisualisation.updateTwinSnapshot(#VIZ_TWIN_SNAPSHOT);
+    } pause;}}
+    ||
+    {loop {present(M4_CAPPER_STATE) {
+        ABSVisualisation.updateM4CapperState(#M4_CAPPER_STATE);
     } pause;}}
 }

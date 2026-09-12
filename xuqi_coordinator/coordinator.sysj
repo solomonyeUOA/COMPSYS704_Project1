@@ -34,6 +34,8 @@ Coordinator(
 
     // SIMULATION / FULL-INTEGRATION ONLY. Not a Controller interface.
     output String signal M4_SIM_BATCH_REQUEST;
+    // Product-batch boundary used by M4 to close partial packages.
+    output String signal SORT_PACK_BATCH_END;
     output String signal TWIN_BATCH_CONTEXT;
     output signal LABELLER_STATUS_REQUEST;
     input Integer signal LABELLER_STATUS;
@@ -148,6 +150,25 @@ Coordinator(
                     System.out.println(
                         "[COORD-LIFECYCLE] accepted " +
                         CoordinatorStateV1.lifecycleSnapshot()
+                    );
+                }
+            }
+            pause;
+        }
+    }
+    ||
+    // A batch end remains available after the Coordinator advances to the
+    // next product or releases the completed order.
+    {
+        loop {
+            String sortPackBatchEnd =
+                CoordinatorStateV1.nextSortPackBatchEnd();
+            if (sortPackBatchEnd != null) {
+                emit SORT_PACK_BATCH_END(sortPackBatchEnd);
+                if (CoordinatorStateV1.
+                    sortPackBatchEndTransmissionStarted) {
+                    System.out.println(
+                        "[M1-M4-PACK] batch end " + sortPackBatchEnd
                     );
                 }
             }
@@ -447,6 +468,7 @@ Coordinator(
                     );
 
                     if (productComplete) {
+                        CoordinatorStateV1.finishCurrentSortPackBatch();
                         if (CoordinatorStateV1.hasNextProduct() &&
                             CoordinatorStateV1.ftCoordinationHold) {
                             CoordinatorStateV1.ftBatchTransitionHeld = true;

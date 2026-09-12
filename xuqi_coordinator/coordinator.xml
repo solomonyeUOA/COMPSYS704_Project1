@@ -105,6 +105,10 @@
                      To="RecognitionSimulatorCD.M4_SIM_BATCH_REQUEST"
                      Class="OptionalSimpleClient"
                      IP="127.0.0.1" Port="11014" />
+            <oSignal Name="SORT_PACK_BATCH_END"
+                     To="SortPackControllerCD.SORT_PACK_BATCH_END"
+                     Class="OptionalSimpleClient"
+                     IP="127.0.0.1" Port="11012" />
 
             <!-- Coordinator -> Bottle Loader Controller -->
             <oSignal Name="START_ORDER"
