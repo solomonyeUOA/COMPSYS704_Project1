@@ -64,6 +64,19 @@ public final class LiveTwinPanelSelfTest {
             render(m2, "Live resources", output, "live-resources-fixture.png");
         }
 
+        // ResourceTwin is one latest row per machine, not a first-bottle cache.
+        // Both M2 and M4 tabs must advance when the next bottles use the resources.
+        ABSVisualisation.updateTwinSnapshot(secondBottleFixture("9001", 2L));
+        m2.syncState();
+        m4.syncState();
+        assertSecondBottle(m2);
+        assertSecondBottle(m4);
+        ABSVisualisation.updateTwinSnapshot(fixture);
+        m2.syncState();
+        m4.syncState();
+        assertSecondBottle(m2);
+        assertSecondBottle(m4);
+
         ABSVisualisation.resetSystem("RST9001");
         m2.syncState();
         m4.syncState();
@@ -106,7 +119,8 @@ public final class LiveTwinPanelSelfTest {
         assertColumns(bottles, new String[] {
             "Bottle", "Stage", "Resource", "Version", "Size", "Capacity mL"});
         assertColumns(resources, new String[] {
-            "Resource", "Type", "Bottle", "Status", "Operation", "Fault", "Version"});
+            "Resource", "Type", "Current / last bottle", "Status", "Operation",
+            "Fault", "Version", "Evidence"});
         require(bottles.getModel().getRowCount() == 2, "both bottle rows displayed");
         require(resources.getModel().getRowCount() == 3, "all resource rows displayed");
         assertRow(bottles.getModel(), 0, new String[] {
@@ -114,15 +128,54 @@ public final class LiveTwinPanelSelfTest {
         assertRow(bottles.getModel(), 1, new String[] {
             "TEST-L-B001", "COMPLETE", "SORT_PACK", "11", "L", "500"});
         assertRow(resources.getModel(), 0, new String[] {
-            "CONVEYOR-1", "CONVEYOR", "TEST-S-B001", "BUSY", "TRANSFER", "-", "4"});
+            "CONVEYOR-1", "CONVEYOR", "TEST-S-B001", "BUSY", "TRANSFER", "-", "4",
+            "Controller observation"});
         assertRow(resources.getModel(), 1, new String[] {
-            "LABELLER-1", "LABELLER", "TEST-S-B001", "DONE", "LABEL_VERIFIED", "-", "5"});
+            "LABELLER-1", "LABELLER", "TEST-S-B001", "DONE", "LABEL_VERIFIED", "-", "5",
+            "Controller observation"});
         assertRow(resources.getModel(), 2, new String[] {
-            "SORT_PACK", "SORTPACK", "TEST-L-B001", "DONE", "OBSERVED_SORTED", "-", "6"});
+            "SORT_PACK", "SORTPACK", "TEST-L-B001", "DONE", "OBSERVED_SORTED", "-", "6",
+            "Last confirmed operation"});
         assertReadOnly(bottles);
         assertReadOnly(resources);
         require(bottles.getRowSorter() != null && resources.getRowSorter() != null,
             "both views support read-only sorting");
+    }
+
+    private static String secondBottleFixture(String generation, long sequence) {
+        return "V2|TWIN|" + generation + "|" + sequence +
+            "|W=4|R=3|REJECTED=0|WORKPIECES=" +
+            "TEST-S-B001,COMPLETE,SORT_PACK,11,S,200;" +
+            "TEST-L-B001,COMPLETE,SORT_PACK,11,L,500;" +
+            "TEST-S-B002,LABELLED,LABELLER-1,8,S,200;" +
+            "TEST-L-B002,COMPLETE,SORT_PACK,11,L,500|RESOURCES=" +
+            "CONVEYOR-1,CONVEYOR,TEST-S-B002,2,TRANSFER,-,14;" +
+            "LABELLER-1,LABELLER,TEST-S-B002,3,LABEL_VERIFIED,-,15;" +
+            "SORT_PACK,SORTPACK,TEST-L-B002,3,OBSERVED_SORTED,-,16";
+    }
+
+    private static void assertSecondBottle(ABSVisualisation.TeamIpDetailPanel panel) {
+        JTable bottles = table(panel, "Live workpieces");
+        JTable resources = table(panel, "Live resources");
+        require(bottles.getModel().getRowCount() == 4,
+            "old bottle history and second bottles each remain once");
+        require(resources.getModel().getRowCount() == 3,
+            "resources stay one current/latest row per machine");
+        assertRow(bottles.getModel(), 2, new String[] {
+            "TEST-S-B002", "LABELLED", "LABELLER-1", "8", "S", "200"});
+        assertRow(bottles.getModel(), 3, new String[] {
+            "TEST-L-B002", "COMPLETE", "SORT_PACK", "11", "L", "500"});
+        assertRow(resources.getModel(), 0, new String[] {
+            "CONVEYOR-1", "CONVEYOR", "TEST-S-B002", "BUSY", "TRANSFER", "-", "14",
+            "Controller observation"});
+        assertRow(resources.getModel(), 1, new String[] {
+            "LABELLER-1", "LABELLER", "TEST-S-B002", "DONE", "LABEL_VERIFIED", "-", "15",
+            "Controller observation"});
+        assertRow(resources.getModel(), 2, new String[] {
+            "SORT_PACK", "SORTPACK", "TEST-L-B002", "DONE", "OBSERVED_SORTED", "-", "16",
+            "Last confirmed operation"});
+        assertReadOnly(bottles);
+        assertReadOnly(resources);
     }
 
     private static void assertEmpty(ABSVisualisation.TeamIpDetailPanel panel) {

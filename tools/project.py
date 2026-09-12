@@ -172,9 +172,9 @@ def run(args):
         completions = set(re.findall(r"received completion: orderId=([^,\s]+), status=COMPLETED", pos_log))
         checks = []
         if args.expect_visual_completions is not None:
-            visual_done = set(re.findall(r"ABS_VIZ_MODEL batch=(\d+) bottle=(B\d+) stage=COMPLETED", viz_log))
+            visual_done = set(re.findall(r"ABS_VIZ_MODEL batch=(\d+) bottle=(B\d+) stage=(?:COMPLETED|TWIN_COMPLETE)\b", viz_log))
             checks.append((len(visual_done) == args.expect_visual_completions,
-                           f"GUI animated {len(visual_done)} full journeys through Sort / Pack (expected {args.expect_visual_completions})"))
+                           f"Overview observed {len(visual_done)} completions (confirmed twins, or legacy symbolic replay; expected {args.expect_visual_completions})"))
         if args.expect_completions is not None:
             checks.append((len(completions) == args.expect_completions,
                            f"POS completed {len(completions)} distinct orders (expected {args.expect_completions})"))
@@ -217,8 +217,8 @@ def main():
     parser.add_argument("--expect-reset", action="store_true", help="Require the real three-member reset ACK barrier and POS completion")
     parser.add_argument("--expect-twins", action="store_true", help="Require live workpiece AND resource rows at the visualization")
     parser.add_argument("--expect-workpieces", type=int, help="Require exactly N completed bottle twins")
-    parser.add_argument("--trace-visualisation", action="store_true", help="Log symbolic-flow reconciliation for UI diagnostics")
-    parser.add_argument("--expect-visual-completions", type=int, help="Require N actual GUI animation completions through Sort / Pack; enables tracing")
+    parser.add_argument("--trace-visualisation", action="store_true", help="Log confirmed-twin or legacy symbolic-flow reconciliation for UI diagnostics")
+    parser.add_argument("--expect-visual-completions", type=int, help="Require N overview completion records (confirmed twins, or legacy replay); requires GUI and enables tracing")
     args = parser.parse_args()
     if args.expect_workpieces is not None and args.expect_workpieces < 1:
         parser.error("--expect-workpieces must be at least 1 (use --expect-reset for an empty reset)")
