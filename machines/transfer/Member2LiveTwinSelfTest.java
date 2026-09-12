@@ -4,6 +4,7 @@ public final class Member2LiveTwinSelfTest {
         testLocalOutboxAndResources();
         testReorderedStages();
         testConfirmedSortAndValidation();
+        testResourcesFollowSuccessiveBottles();
         System.out.println("Member2LiveTwinSelfTest PASSED");
     }
 
@@ -89,6 +90,106 @@ public final class Member2LiveTwinSelfTest {
         String viz = DigitalTwinStateV1.nextVisualisationSnapshot(2000L);
         check(viz.contains("CONVEYOR%2C2,CONVEYOR,-,4,STOP%3BSAFE,SENSOR%3DFAIL"), "resource wire cells escaped");
         check(viz.contains("ROUTE-B001,COMPLETE") && viz.contains(",L,500"), "bottle size and completion exported");
+    }
+
+    /** Resource rows identify a machine, not the first bottle processed. */
+    private static void testResourcesFollowSuccessiveBottles() {
+        M2MachineStateV1.reset();
+        DigitalTwinStateV1.reset();
+        check(M2MachineStateV1.startLoaderBatch(2), "start two-bottle telemetry batch");
+        String[] oldObservations = new String[4];
+        String[] resources = {"FILLER_B", "LID-1", "CAPPER", "SORT_PACK"};
+        String[] stages = {"FILLED", "LIDDED", "CAPPED", "SORTED"};
+        long[] versions = new long[8];
+        for (int index = 0; index < 2; index++) {
+            String bottle = "RESOURCE-B00" + (index + 1);
+            String profile = bottle + (index == 0 ? "|S|200|GEOM_S|PACK_S" :
+                "|L|500|GEOM_L|PACK_L");
+            long now = index * 3000L;
+            check(M2MachineStateV1.acceptLoadProfile(profile), "context for " + bottle);
+            check(bottle.equals(M2MachineStateV1.takeLoadCommand(true)), "loader starts " + bottle);
+            versions[0] = checkResource("LOADER-1", bottle, M2StatusV1.BUSY, "PICK_PLACE", versions[0]);
+            check(M2MachineStateV1.confirmLoaded(bottle), "load evidence");
+            check(profile.equals(M2MachineStateV1.nextBottleAtConveyorOffer(now)), "loader handoff");
+            checkResource("LOADER-1", "-", index == 0 ? M2StatusV1.READY : M2StatusV1.DONE,
+                index == 0 ? "AWAIT_BOTTLE" : "BATCH_COMPLETE", versions[0]);
+            check(M2MachineStateV1.offerConveyorBottle(profile), "conveyor accepts " + bottle);
+            check(bottle.equals(M2MachineStateV1.takeConveyorTransferContext()), "transfer context");
+            check(M2MachineStateV1.startConveyor(now), "conveyor starts");
+            versions[1] = checkResource("CONVEYOR-1", bottle, M2StatusV1.BUSY, "MOVE_TO_P1", versions[1]);
+            check(M2MachineStateV1.acceptP1Feedback(bottle + "|true|true|true|true|true"), "P1 evidence");
+            check(bottle.equals(M2MachineStateV1.nextLoadBottleOffer(now)), "P1 handoff");
+            checkResource("CONVEYOR-1", "-", M2StatusV1.READY, "AWAIT_BOTTLE", versions[1]);
+            for (int stage = 0; stage < 3; stage++) {
+                String payload = upstreamObservation(bottle, stages[stage], resources[stage]);
+                check(DigitalTwinStateV1.acceptExternalWorkpieceObservation(payload), "upstream operation");
+                if (index == 0) { oldObservations[stage] = payload; }
+                versions[stage + 4] = checkResource(resources[stage], bottle, M2StatusV1.DONE,
+                    "OBSERVED_" + stages[stage], versions[stage + 4]);
+            }
+            check(M2MachineStateV1.offerBottleAtLabel(bottle), "labeller accepts " + bottle);
+            check((bottle + "|LABEL_" + bottle).equals(M2MachineStateV1.takeLabelCommand()), "label command");
+            versions[2] = checkResource("LABELLER-1", bottle, M2StatusV1.BUSY, "APPLY_LABEL", versions[2]);
+            check(M2MachineStateV1.acceptLabelVerification(bottle + "|PASS"), "label verified");
+            check(bottle.equals(M2MachineStateV1.nextMarkLabelledOffer(now)), "label handoff");
+            check(bottle.equals(M2MachineStateV1.nextUnloadReadyOffer(now)), "unloader permission handoff");
+            checkResource("LABELLER-1", "-", M2StatusV1.READY, "AWAIT_BOTTLE", versions[2]);
+            check(M2MachineStateV1.acceptUnloadProfile(profile), "unloader profile");
+            check(M2MachineStateV1.acceptUnloadReady(bottle), "unloader permission");
+            check(bottle.equals(M2MachineStateV1.takeUnloadCommand()), "unloader starts " + bottle);
+            versions[3] = checkResource("UNLOADER-1", bottle, M2StatusV1.BUSY, "REMOVE_FROM_P6", versions[3]);
+            check(M2MachineStateV1.acceptRemovalConfirmed(bottle + "|true", now), "removal evidence");
+            checkResource("UNLOADER-1", bottle, M2StatusV1.DONE, "REMOVAL_CONFIRMED", versions[3]);
+            check(bottle.equals(M2MachineStateV1.nextP6ClearOffer(now)), "P6 handoff");
+            check(profile.equals(M2MachineStateV1.nextBottleReadyForSortOffer(now)), "size-aware sort handoff");
+            check(snapshot("W:" + bottle).contains("|UNLOADED|"), "unload cannot invent sort completion");
+            String sorted = upstreamObservation(bottle, stages[3], resources[3]);
+            check(DigitalTwinStateV1.acceptExternalWorkpieceObservation(sorted), "sort evidence");
+            if (index == 0) { oldObservations[3] = sorted; }
+            versions[7] = checkResource(resources[3], bottle, M2StatusV1.DONE, "OBSERVED_SORTED", versions[7]);
+            check(snapshot("W:" + bottle).contains("|COMPLETE|"), "complete independent bottle " + bottle);
+
+            // Advance real held handoffs and the BOTTLE_DONE absent gap. No
+            // reset between bottles and no synthetic READY telemetry.
+            for (long tick = now; tick <= now + 2000L; tick += 10L) {
+                M2MachineStateV1.nextLoadBottleOffer(tick);
+                M2MachineStateV1.nextMarkLabelledOffer(tick);
+                M2MachineStateV1.nextP6ClearOffer(tick);
+                M2MachineStateV1.nextBottleReadyForSortOffer(tick);
+                M2MachineStateV1.isBottleDonePresent(tick);
+            }
+            checkResource("UNLOADER-1", "-", M2StatusV1.READY, "AWAIT_BOTTLE", versions[3]);
+        }
+        for (int stage = 0; stage < resources.length; stage++) {
+            String before = snapshot("R:" + resources[stage]);
+            check(DigitalTwinStateV1.acceptExternalWorkpieceObservation(oldObservations[stage]),
+                "late first-bottle retry is idempotent");
+            check(before.equals(snapshot("R:" + resources[stage])),
+                "late retry cannot replace second-bottle resource or increase its version");
+        }
+        String viz = DigitalTwinStateV1.nextVisualisationSnapshot(10000L);
+        check(viz.contains("|W=2|R=8|REJECTED=0|"), "two bottles share the same eight resource identities");
+        check(viz.contains("RESOURCE-B001,COMPLETE") && viz.contains("RESOURCE-B002,COMPLETE"),
+            "both workpieces remain independently visible after completion");
+        check(viz.contains("FILLER_B,FILLER,RESOURCE-B002,3,OBSERVED_FILLED"),
+            "replaceable UI snapshot contains the second bottle's latest filler observation");
+        check(DigitalTwinStateV1.getPendingObservationCount() == 0, "all route evidence drained");
+    }
+
+    private static String upstreamObservation(String bottle, String stage, String resource) {
+        return M2TwinUpdateV1.workpiece("UPSTREAM-" + bottle + "-" + stage,
+            bottle, stage, resource, "-", System.currentTimeMillis());
+    }
+
+    private static long checkResource(String id, String bottle, int status,
+            String operation, long previousVersion) {
+        String[] fields = snapshot("R:" + id).split("\\|", -1);
+        check(fields.length == 10 && id.equals(fields[2]) && bottle.equals(fields[4]) &&
+            Integer.toString(status).equals(fields[5]) && operation.equals(fields[6]),
+            id + " reflects " + bottle + " / " + operation);
+        long version = Long.parseLong(fields[8]);
+        check(version > previousVersion, id + " version advances for this observation");
+        return version;
     }
 
     private static boolean observe(String event, String stage, String resource, String details, long time) {

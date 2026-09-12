@@ -50,9 +50,9 @@ import javax.swing.table.DefaultTableModel;
  *
  * It receives data only through ABSVisualisationPlantCD. It has no Controller
  * connections and contains no machine or Plant control logic. This view is
- * intentionally symbolic: it shows Controller state, batch progress and
- * shared visual-only bottle records. Separate read-only twin tables display
- * actual Controller/Plant observations, not the symbolic animation records.
+ * schematic: Controller badges remain raw telemetry, but identified bottles
+ * and the M2/M4 tables share the same confirmed twin snapshot. The legacy
+ * symbolic timeline is used only when no twin connection has been observed.
  */
 public final class ABSVisualisation {
     private static final int LOADER = 0;
@@ -146,7 +146,7 @@ public final class ABSVisualisation {
 
     private ABSVisualisation() {
         frame = new JFrame(
-            "Automated Bottling System - Symbolic Visualisation"
+            "Automated Bottling System - Live Twin Visualisation"
         );
         frame.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
         frame.setLayout(new BorderLayout(12, 10));
@@ -171,7 +171,7 @@ public final class ABSVisualisation {
         header.add(title);
 
         JLabel subtitle = new JLabel(
-            "Real-state-anchored production flow and shared detail timeline",
+            "Confirmed bottle events shared by overview, details and digital twins",
             SwingConstants.CENTER
         );
         subtitle.setAlignmentX(Component.CENTER_ALIGNMENT);
@@ -190,7 +190,7 @@ public final class ABSVisualisation {
         );
         JPanel schematicPanel = new JPanel(new BorderLayout());
         schematicPanel.setBorder(BorderFactory.createCompoundBorder(
-            BorderFactory.createTitledBorder("Live symbolic plant schematic"),
+            BorderFactory.createTitledBorder("Live twin plant schematic (not measured positions)"),
             BorderFactory.createEmptyBorder(5, 5, 5, 5)
         ));
         schematicPanel.add(productionLinePanel, BorderLayout.CENTER);
@@ -401,7 +401,7 @@ public final class ABSVisualisation {
         );
         dialog.setDefaultCloseOperation(JDialog.DISPOSE_ON_CLOSE);
         dialog.setContentPane(detailPanel);
-        dialog.setSize(new Dimension(900, 650));
+        dialog.setSize(new Dimension(1080, 650));
         dialog.setMinimumSize(new Dimension(760, 560));
         dialog.setLocationRelativeTo(frame);
         dialog.addWindowListener(new WindowAdapter() {
@@ -539,6 +539,8 @@ public final class ABSVisualisation {
     public static synchronized void updateTwinSnapshot(String payload) {
         if (!LIVE_TWIN.accept(payload)) return;
         ABSLiveTwinModel.Snapshot snapshot = LIVE_TWIN.snapshot();
+        VISUAL_MODEL.acceptTwinSnapshot(snapshot);
+        renderSnapshot = VISUAL_MODEL.getSnapshot();
         TEAM_IP_MODEL.acceptTwinEvidence(snapshot);
         teamIpSnapshot = TEAM_IP_MODEL.getSnapshot();
         System.out.println("[VIZ-TWIN] generation=" + snapshot.generation +
@@ -547,7 +549,16 @@ public final class ABSVisualisation {
         if (!evidence.equals(lastTwinEvidence)) {
             lastTwinEvidence = evidence;
             System.out.println("[VIZ-TWIN-DATA] " + payload);
+            System.out.println("[VIZ-TWIN-FLOW] generation=" + snapshot.generation +
+                " sequence=" + snapshot.sequence + " batch=" + renderSnapshot.getTwinBatchKey() +
+                " observed=" + renderSnapshot.getTwinBottleCount() +
+                " complete=" + renderSnapshot.getTwinCompleted() +
+                " mode=" + renderSnapshot.getMode());
         }
+        final ABSVisualisation ui = instance;
+        if (ui != null) SwingUtilities.invokeLater(new Runnable() {
+            public void run() { ui.refreshAll(); }
+        });
     }
 
     /** Accepts optional M4 arm telemetry for display only. */
@@ -599,7 +610,10 @@ public final class ABSVisualisation {
             STATUSES[index] = 0;
             HAS_STATUS[index] = true;
         }
-        VISUAL_MODEL.resetSystem();
+        VISUAL_MODEL.resetSystem(resetId);
+        // The new-generation snapshot can overtake the Coordinator reset signal.
+        // Keep that already-validated evidence rather than waiting for a retry.
+        VISUAL_MODEL.acceptTwinSnapshot(LIVE_TWIN.snapshot());
         TEAM_IP_MODEL.acceptM3Evidence(
             "V1|NORMAL|M1_RESET|" + resetId +
             "|RESET_REQUESTED|RESET_PENDING_EXTERNAL_ACK"
@@ -649,7 +663,7 @@ public final class ABSVisualisation {
         legend.add(createLegendChip("DONE", 3));
         legend.add(createLegendChip("FAULT", 4));
         JLabel note = new JLabel(
-            "  REAL status anchors one shared IDEALISED model; BUSY holds before completion."
+            "  Bottle locations follow confirmed twin events; controller badges are separate observations."
         );
         note.setForeground(new Color(75, 82, 92));
         legend.add(note);
@@ -781,12 +795,42 @@ public final class ABSVisualisation {
         return renderSnapshot.getModule(index);
     }
 
+    /** Idle schematics must not draw an unobserved process bottle. */
+    private static boolean hasObservedBottle(int index) {
+        return !renderSnapshot.isTwinDriven() || renderModule(index).getCurrentBottleId() > 0;
+    }
+
     private static synchronized M4CapperTelemetryV1 capperTelemetry() {
         return m4CapperTelemetry;
     }
 
-    private static double capperTelemetryProgress(double fallback) {
+    private static M4CapperTelemetryV1 capperTelemetryForCurrentBottle() {
         M4CapperTelemetryV1 telemetry = capperTelemetry();
+        if (!renderSnapshot.isTwinDriven() || telemetry == null) return telemetry;
+        String key = renderModule(CAPPER).getCurrentBottleKey();
+        if (key.isEmpty() || !key.equals(telemetry.getBottleId())) return null;
+        for (ABSVisualisationFlowModel.BottleSnapshot bottle : renderSnapshot.getBottles()) {
+            if (key.equals(bottle.getBottleKey()) && "CAPPED".equals(bottle.getTwinStage()) &&
+                telemetry.getStatus() == BUSY_STATUS) return null;
+        }
+        return telemetry;
+    }
+
+    private static boolean currentBottleIsLarge(int index) {
+        if (renderSnapshot.isTwinDriven()) {
+            String key = renderModule(index).getCurrentBottleKey();
+            ABSLiveTwinModel.Snapshot snapshot = LIVE_TWIN.snapshot();
+            if (snapshot != null) for (String[] row : snapshot.workpieces()) {
+                if (key.equals(row[0])) return "L".equals(row[4]);
+            }
+            return false;
+        }
+        M4CapperTelemetryV1 telemetry = capperTelemetry();
+        return index == CAPPER && telemetry != null && "GEOM_L".equals(telemetry.getGeometryProfile());
+    }
+
+    private static double capperTelemetryProgress(double fallback) {
+        M4CapperTelemetryV1 telemetry = capperTelemetryForCurrentBottle();
         if (telemetry == null) { return fallback; }
         String stage = telemetry.getStage();
         if ("WAITING".equals(stage)) { return 0.0; }
@@ -833,12 +877,20 @@ public final class ABSVisualisation {
                 " bottles completed";
         }
 
-        int idealised = VISUAL_MODEL.getVisualCompleted();
-        String mode = displayModeName(VISUAL_MODEL.getModeName());
-        progressLabel.setText(
-            summary + "  |  IDEALISED: " + idealised +
-            (requiredReceived ? " / " + required : "") + " (" + mode + ")"
-        );
+        ABSVisualisationFlowModel.FlowSnapshot flow = renderSnapshot;
+        String mode = displayModeName(flow.getMode());
+        if (flow.isTwinDriven()) {
+            progressLabel.setText("GP unloaded: " + (completedReceived ? completed : "--") +
+                " / " + (requiredReceived ? required : "--") +
+                "  |  Twin COMPLETE: " + flow.getTwinCompleted() +
+                " / " + flow.getTwinBottleCount() + " observed (" + mode + ")");
+            progressLabel.setToolTipText("Twin batch: " + flow.getTwinBatchKey() +
+                ". GP counts and twin snapshots arrive asynchronously. COMPLETE requires Sort / Pack.");
+        } else {
+            progressLabel.setText(summary + "  |  SYMBOLIC FALLBACK: " + flow.getVisualCompleted() +
+                (requiredReceived ? " / " + required : "") + " (no twin feed)");
+            progressLabel.setToolTipText("Status-only schematic: individual bottles are not confirmed.");
+        }
         int maximum = requiredReceived ? Math.max(1, required) :
             Math.max(1, completed);
         int value = completedReceived ? completed : 0;
@@ -1230,7 +1282,8 @@ public final class ABSVisualisation {
         private final DefaultTableModel workpieceRows = readOnlyTable(new String[] {
             "Bottle", "Stage", "Resource", "Version", "Size", "Capacity mL"});
         private final DefaultTableModel resourceRows = readOnlyTable(new String[] {
-            "Resource", "Type", "Bottle", "Status", "Operation", "Fault", "Version"});
+            "Resource", "Type", "Current / last bottle", "Status", "Operation", "Fault", "Version", "Evidence"});
+        private final JLabel twinState = new JLabel("Awaiting confirmed twin snapshot");
         private ABSLiveTwinModel.Snapshot displayedTwin;
 
         private static DefaultTableModel readOnlyTable(String[] columns) {
@@ -1255,6 +1308,12 @@ public final class ABSVisualisation {
             heading.add(title);
             heading.add(Box.createVerticalStrut(3));
             heading.add(owner);
+            if (index != ABSVisualisationTeamIpModel.M3_FAULT_TOLERANCE) {
+                twinState.setAlignmentX(Component.CENTER_ALIGNMENT);
+                twinState.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 11));
+                heading.add(Box.createVerticalStrut(6));
+                heading.add(twinState);
+            }
             add(heading, BorderLayout.NORTH);
 
             if (index == ABSVisualisationTeamIpModel.M2_DIGITAL_TWIN ||
@@ -1266,6 +1325,11 @@ public final class ABSVisualisation {
                 tabs.addTab("Live workpieces", new JScrollPane(workpieces));
                 JTable resources = new JTable(resourceRows);
                 resources.setAutoCreateRowSorter(true);
+                resources.setAutoResizeMode(JTable.AUTO_RESIZE_OFF);
+                int[] widths = {105, 95, 180, 65, 160, 80, 55, 165};
+                for (int column = 0; column < widths.length; column++)
+                    resources.getColumnModel().getColumn(column).setPreferredWidth(widths[column]);
+                resources.setToolTipText("One row per resource, refreshed for every bottle. OBSERVED_* is the last completed operation; '-' means no linked bottle.");
                 tabs.addTab("Live resources", new JScrollPane(resources));
                 tabs.setSelectedIndex(1);
                 add(tabs, BorderLayout.CENTER);
@@ -1288,13 +1352,19 @@ public final class ABSVisualisation {
             ABSLiveTwinModel.Snapshot live = LIVE_TWIN.snapshot();
             if (displayedTwin != live) {
                 displayedTwin = live;
+                twinState.setText(live == null ? "Awaiting confirmed twin snapshot" :
+                    "Snapshot " + live.generation + ":" + live.sequence +
+                    " | One row per resource; '-' = no linked bottle; OBSERVED_* = last completed operation");
                 workpieceRows.setRowCount(0);
                 resourceRows.setRowCount(0);
                 if (live != null) {
                     for (String[] row : live.workpieces()) workpieceRows.addRow(row);
                     for (String[] row : live.resources()) {
-                        row[3] = statusName(Integer.parseInt(row[3]));
-                        resourceRows.addRow(row);
+                        String[] display = java.util.Arrays.copyOf(row, 8);
+                        display[3] = statusName(Integer.parseInt(row[3]));
+                        display[7] = row[4].startsWith("OBSERVED_") ?
+                            "Last confirmed operation" : "Controller observation";
+                        resourceRows.addRow(display);
                     }
                 }
             }
@@ -2145,7 +2215,9 @@ public final class ABSVisualisation {
             }
             ABSVisualisationFlowModel.ModuleSnapshot module =
                 renderModule(index);
-            String bottle = module.getCurrentBottleId() > 0 ?
+            String bottle = renderSnapshot.isTwinDriven() ?
+                (module.getCurrentBottleKey().isEmpty() ? "No bottle at this confirmed waypoint" :
+                    "Confirmed bottle " + ModuleDetailPanel.html(module.getCurrentBottleKey())) : module.getCurrentBottleId() > 0 ?
                 "Symbolic Bottle B" + module.getCurrentBottleId() :
                 "No active symbolic bottle";
             return "<html><b>" + MACHINE_NAMES[index] + "</b><br>" +
@@ -2251,7 +2323,9 @@ public final class ABSVisualisation {
             g2.setColor(new Color(62, 72, 84));
             drawCenteredText(
                 g2,
-                "LIVE Controller status + shared SYMBOLIC bottle flow  |  actual bottle records in Digital Twin",
+                renderSnapshot.isTwinDriven() ?
+                    "LIVE confirmed bottle events | Same snapshot as M2 / M4 twins | Positions are schematic" :
+                    "SYMBOLIC FALLBACK - awaiting twin feed | Controller status is live; bottle identities are not confirmed",
                 DESIGN_WIDTH / 2,
                 27
             );
@@ -2281,7 +2355,7 @@ public final class ABSVisualisation {
             g2.setColor(new Color(78, 86, 98));
             drawCenteredText(
                 g2,
-                "Symbolic positions only. Unloader confirms GP bottle completion; Sort / Pack has its own status and confirmed twin event.",
+                "Completed twins leave upstream stations immediately. GP unloading and confirmed Sort / Pack completion are distinct events.",
                 DESIGN_WIDTH / 2,
                 400
             );
@@ -2451,7 +2525,7 @@ public final class ABSVisualisation {
                 bottleX += (int)Math.round(38.0 * transfer);
                 bottleY += 21;
             }
-            drawBottle(g2, bottleX, bottleY, 14, 28,
+            if (hasObservedBottle(LOADER)) drawBottle(g2, bottleX, bottleY, 14, 28,
                 null, 0, false, false);
             drawBottleIdentity(
                 g2,
@@ -2530,7 +2604,7 @@ public final class ABSVisualisation {
             );
             int bottleX = beltX + 4 + travel;
             int bottleY = beltY - 28;
-            drawBottle(
+            if (hasObservedBottle(CONVEYOR)) drawBottle(
                 g2,
                 bottleX,
                 bottleY,
@@ -2721,7 +2795,7 @@ public final class ABSVisualisation {
                 (received[index] ?
                     (int)Math.round(DEMO_LIQUID_A_PERCENT) : 0);
             int liquidBLevel = index == FILLER_B ? componentLevel : 0;
-            drawLayeredBottle(
+            if (hasObservedBottle(index)) drawLayeredBottle(
                 g2,
                 nozzleX - 8,
                 y + 73,
@@ -2794,7 +2868,7 @@ public final class ABSVisualisation {
             g2.setColor(busy ? statusColor(BUSY_STATUS) :
                 new Color(118, 132, 146));
             g2.fillRoundRect(x + 61, lidY, 24, 7, 5, 5);
-            drawLayeredBottle(
+            if (hasObservedBottle(LID)) drawLayeredBottle(
                 g2,
                 x + 63,
                 y + 88,
@@ -2843,9 +2917,7 @@ public final class ABSVisualisation {
             double capProgress = capperTelemetryProgress(
                 shared.getProgress()
             );
-            M4CapperTelemetryV1 telemetry = capperTelemetry();
-            boolean largeGeometry = telemetry != null &&
-                "GEOM_L".equals(telemetry.getGeometryProfile());
+            boolean largeGeometry = currentBottleIsLarge(CAPPER);
             int motion = capProgress < 30.0 ?
                 (int)Math.round(capProgress / 30.0 * 20.0) :
                 (capProgress < 72.0 ? 20 :
@@ -2869,7 +2941,7 @@ public final class ABSVisualisation {
             );
             g2.drawLine(centreX - 31, y + 128, centreX + 31, y + 128);
 
-            drawLayeredBottle(
+            if (hasObservedBottle(CAPPER)) drawLayeredBottle(
                 g2,
                 centreX - 11,
                 y + 88,
@@ -2920,14 +2992,16 @@ public final class ABSVisualisation {
             g2.drawOval(x + 16, y + 48, 30, 30);
             g2.drawOval(x + 27, y + 59, 8, 8);
             g2.drawLine(x + 43, y + 72, x + 80, y + 92);
-            drawLayeredBottle(g2, x + 72, y + 70, 24, 46,
-                LIQUID_A_COLOR, 60, LIQUID_B_COLOR, 40, true, true);
-            g2.setColor(isDone(LABELLER, statuses, received) ? new Color(207, 239, 217) : Color.WHITE);
-            g2.fillRect(x + 75, y + 92, 18, 13);
-            g2.setColor(new Color(56, 77, 94));
-            g2.drawRect(x + 75, y + 92, 18, 13);
-            for (int offset = 2; offset < 15; offset += 3)
-                g2.drawLine(x + 75 + offset, y + 95, x + 75 + offset, y + 102);
+            if (hasObservedBottle(LABELLER)) {
+                drawLayeredBottle(g2, x + 72, y + 70, 24, 46,
+                    LIQUID_A_COLOR, 60, LIQUID_B_COLOR, 40, true, true);
+                g2.setColor(isDone(LABELLER, statuses, received) ? new Color(207, 239, 217) : Color.WHITE);
+                g2.fillRect(x + 75, y + 92, 18, 13);
+                g2.setColor(new Color(56, 77, 94));
+                g2.drawRect(x + 75, y + 92, 18, 13);
+                for (int offset = 2; offset < 15; offset += 3)
+                    g2.drawLine(x + 75 + offset, y + 95, x + 75 + offset, y + 102);
+            }
             g2.drawLine(x + 15, y + 119, x + width - 15, y + 119);
             drawBottleIdentity(g2, x + 83, y + 122, shared.getCurrentBottleId());
             if (isDone(LABELLER, statuses, received)) drawDoneTick(g2, x + width - 15, y + 40);
@@ -2948,7 +3022,7 @@ public final class ABSVisualisation {
             g2.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 9));
             drawCenteredText(g2, "S / 200", x + 112, y + 61);
             drawCenteredText(g2, "L / 500", x + 112, y + 112);
-            drawLayeredBottle(g2, x + 19, y + 59, 18, 36,
+            if (hasObservedBottle(SORT_PACK)) drawLayeredBottle(g2, x + 19, y + 59, 18, 36,
                 LIQUID_A_COLOR, 60, LIQUID_B_COLOR, 40, true, true);
             drawBottleIdentity(g2, x + 28, y + 101, renderModule(SORT_PACK).getCurrentBottleId());
             if (isDone(SORT_PACK, statuses, received)) drawDoneTick(g2, x + width - 15, y + 40);
@@ -2998,7 +3072,7 @@ public final class ABSVisualisation {
             );
             int bottleX = x + 27 + travel;
             int bottleY = y + 73 + Math.min(19, travel / 3);
-            drawLayeredBottle(
+            if (hasObservedBottle(UNLOADER)) drawLayeredBottle(
                 g2,
                 bottleX,
                 bottleY,
@@ -3083,7 +3157,7 @@ public final class ABSVisualisation {
             g2.setFont(new Font(Font.SANS_SERIF, Font.BOLD, fontSize));
             drawCenteredText(g2, title, x + width / 2, y + 21);
 
-            String visualPhase = module.getCurrentBottleId() > 0 ?
+            String visualPhase = renderSnapshot.isTwinDriven() ? module.getPhase() : module.getCurrentBottleId() > 0 ?
                 "VISUAL B" + module.getCurrentBottleId() + ": " +
                     module.getPhase() :
                 "VISUAL: " + module.getPhase();
@@ -3252,6 +3326,15 @@ public final class ABSVisualisation {
                 return;
             }
             String text = "B" + bottleId;
+            if (renderSnapshot.isTwinDriven()) {
+                for (ABSVisualisationFlowModel.BottleSnapshot bottle : renderSnapshot.getBottles()) {
+                    if (bottle.getDisplayId() == bottleId) {
+                        String key = bottle.getBottleKey();
+                        text = key.substring(key.lastIndexOf('-') + 1);
+                        break;
+                    }
+                }
+            }
             Font originalFont = g2.getFont();
             g2.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 8));
             FontMetrics metrics = g2.getFontMetrics();
@@ -3522,7 +3605,7 @@ public final class ABSVisualisation {
 
             information.add(Box.createVerticalStrut(18));
             JLabel idealisedHeading = createInformationHeading(
-                "IDEALISED PROCESS MODEL",
+                "READ-ONLY BOTTLE OBSERVATION",
                 new Color(176, 93, 8)
             );
             information.add(idealisedHeading);
@@ -3539,9 +3622,9 @@ public final class ABSVisualisation {
             information.add(secondaryMetricValue);
             information.add(Box.createVerticalGlue());
             JLabel boundaryNote = createWrappedInformationLabel(
-                "The mechanism motion and numeric process values are " +
-                "generated locally for visualisation. They are not " +
-                "Controller telemetry and never affect machine control."
+                "Bottle identity and stage follow confirmed twin events. " +
+                "Geometry is schematic, not measured position or fill level. " +
+                "This display never affects machine control."
             );
             boundaryNote.setForeground(new Color(98, 73, 39));
             information.add(boundaryNote);
@@ -3614,14 +3697,25 @@ public final class ABSVisualisation {
                 wrapInformationText(
                     "Lifecycle: <b>" + detailModel.getLifecycle() +
                     "</b><br>Phase: <b>" + detailModel.getPhase() +
-                    "</b><br>Current symbolic bottle: <b>" +
-                    (detailModel.getCurrentBottleId() > 0 ?
+                    "</b><br>" + (renderSnapshot.isTwinDriven() ? "Confirmed bottle" : "Symbolic bottle") + ": <b>" +
+                    (renderSnapshot.isTwinDriven() ? html(detailModel.getCurrentBottleKey()) : detailModel.getCurrentBottleId() > 0 ?
                         "B" + detailModel.getCurrentBottleId() : "--") +
                     "</b><br>Reconciliation: <b>" +
                     displayModeName(VISUAL_MODEL.getModeName()) + "</b>"
                 )
             );
 
+            if (renderSnapshot.isTwinDriven()) {
+                primaryMetricValue.setText(wrapInformationText(
+                    "Snapshot batch: <b>" + html(renderSnapshot.getTwinBatchKey()) +
+                    "</b><br>Completed twins: " + renderSnapshot.getTwinCompleted() +
+                    " / " + renderSnapshot.getTwinBottleCount() + " observed"));
+                secondaryMetricValue.setText(wrapInformationText(
+                    "Last confirmed stage, not a timed replay. No measured cycle percentage, fill level or rotary angle is provided by the twin feed."));
+                if (machineIndex == CAPPER) updateCapperInformation();
+                if (machineIndex == UNLOADER) updateRealBatchInformation();
+                return;
+            }
             switch (machineIndex) {
                 case LOADER:
                     primaryMetricValue.setText(
@@ -3788,8 +3882,9 @@ public final class ABSVisualisation {
             realBatchValue.setText(
                 wrapInformationText(
                     "REAL batch completed: <b>" + completedText +
-                " / " + requiredText + "</b><br>Individual bottle " +
-                    "identity is not available."
+                    " / " + requiredText + "</b><br>" +
+                    (renderSnapshot.isTwinDriven() ? "Bottle identity is supplied by the twin snapshot." :
+                    "Individual bottle identity is not available without twin telemetry.")
                 )
             );
         }
@@ -3800,6 +3895,7 @@ public final class ABSVisualisation {
                 realBatchValue.setText(wrapInformationText(
                     "M4 arm telemetry: <b>waiting</b>"
                 ));
+                if (renderSnapshot.isTwinDriven()) return;
                 primaryMetricValue.setText(wrapInformationText(
                     "Head-cycle progress: " +
                     oneDecimal(detailModel.getProgress()) + "%"
@@ -3811,17 +3907,16 @@ public final class ABSVisualisation {
                 return;
             }
             realBatchValue.setText(wrapInformationText(
-                "M4 bottle: <b>" + html(telemetry.getBottleId()) +
+                "Latest raw arm bottle: <b>" + html(telemetry.getBottleId()) +
                 "</b><br>Size: <b>" + telemetry.getSizeCode() +
                 "</b><br>Geometry: <b>" +
                 telemetry.getGeometryProfile() + "</b>"
             ));
             primaryMetricValue.setText(wrapInformationText(
-                "Live arm stage: <b>" + telemetry.getStage() +
-                "</b><br>Mapped position: " +
-                oneDecimal(capperTelemetryProgress(
-                    detailModel.getProgress()
-                )) + "%"
+                "Latest raw arm stage: <b>" + telemetry.getStage() +
+                "</b><br>" + (capperTelemetryForCurrentBottle() == null ?
+                    "Not applied to the current twin bottle." :
+                    "Matched to displayed bottle; geometry is schematic.")
             ));
             secondaryMetricValue.setText(wrapInformationText(
                 "Display follows M4 geometry and stage telemetry. " +
@@ -3953,7 +4048,7 @@ public final class ABSVisualisation {
                 g2.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 12));
                 ProductionLinePanel.drawCenteredText(
                     g2,
-                    "IDEALISED PROCESS DETAIL - READ-ONLY OBSERVER",
+                    "SCHEMATIC DETAIL - CONFIRMED BOTTLES, READ-ONLY OBSERVER",
                     DETAIL_WIDTH / 2,
                     25
                 );
@@ -3993,7 +4088,7 @@ public final class ABSVisualisation {
                 g2.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 11));
                 ProductionLinePanel.drawCenteredText(
                     g2,
-                    "Local animation values are not real Controller telemetry.",
+                    "Schematic geometry is not measured position. Bottle state follows confirmed events.",
                     DETAIL_WIDTH / 2,
                     DETAIL_HEIGHT - 12
                 );
@@ -4060,7 +4155,7 @@ public final class ABSVisualisation {
                     bottleY = 286.0;
                     bottleX = 188.0 + step * 225.0;
                 }
-                ProductionLinePanel.drawBottle(
+                if (hasObservedBottle(machineIndex)) ProductionLinePanel.drawBottle(
                     g2,
                     (int)Math.round(bottleX),
                     (int)Math.round(bottleY),
@@ -4128,7 +4223,7 @@ public final class ABSVisualisation {
                 int bottleX = 62 + (int)Math.round(
                     detailModel.getConveyorBottlePosition() * 345.0
                 );
-                ProductionLinePanel.drawBottle(
+                if (hasObservedBottle(machineIndex)) ProductionLinePanel.drawBottle(
                     g2,
                     bottleX,
                     beltY - 71,
@@ -4427,7 +4522,7 @@ public final class ABSVisualisation {
                 g2.setColor(new Color(67, 82, 97));
                 g2.drawLine(290, 103, 290, 160);
 
-                ProductionLinePanel.drawLayeredBottle(
+                if (hasObservedBottle(machineIndex)) ProductionLinePanel.drawLayeredBottle(
                     g2,
                     318,
                     270,
@@ -4507,7 +4602,7 @@ public final class ABSVisualisation {
                     7,
                     7
                 );
-                ProductionLinePanel.drawLayeredBottle(
+                if (hasObservedBottle(machineIndex)) ProductionLinePanel.drawLayeredBottle(
                     g2,
                     343,
                     278,
@@ -4531,9 +4626,8 @@ public final class ABSVisualisation {
                 double progress = capperTelemetryProgress(
                     detailModel.getProgress()
                 );
-                M4CapperTelemetryV1 telemetry = capperTelemetry();
-                boolean largeGeometry = telemetry != null &&
-                    "GEOM_L".equals(telemetry.getGeometryProfile());
+                M4CapperTelemetryV1 telemetry = capperTelemetryForCurrentBottle();
+                boolean largeGeometry = currentBottleIsLarge(CAPPER);
                 double headY;
                 if (progress < 30.0) {
                     headY = 82.0 + progress / 30.0 * 145.0;
@@ -4571,7 +4665,7 @@ public final class ABSVisualisation {
                 );
                 int bottleWidth = largeGeometry ? 84 : 68;
                 int bottleHeight = largeGeometry ? 132 : 112;
-                ProductionLinePanel.drawLayeredBottle(
+                if (hasObservedBottle(machineIndex)) ProductionLinePanel.drawLayeredBottle(
                     g2,
                     250 - bottleWidth / 2,
                     400 - bottleHeight,
@@ -4610,7 +4704,7 @@ public final class ABSVisualisation {
                     g2.setColor(new Color(36, 92, 158));
                     g2.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 12));
                     g2.drawString(
-                        "LIVE " + telemetry.getSizeCode() + " / " +
+                        "MATCHED " + telemetry.getSizeCode() + " / " +
                             telemetry.getGeometryProfile() + " / " +
                             telemetry.getStage(),
                         42,
@@ -4662,7 +4756,7 @@ public final class ABSVisualisation {
                     bottleX = 288.0 + step * 95.0;
                     bottleY = 274.0 - step * 30.0;
                 }
-                ProductionLinePanel.drawLayeredBottle(
+                if (hasObservedBottle(machineIndex)) ProductionLinePanel.drawLayeredBottle(
                     g2,
                     (int)Math.round(bottleX),
                     (int)Math.round(bottleY),

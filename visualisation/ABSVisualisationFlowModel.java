@@ -1,14 +1,19 @@
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.math.BigInteger;
+import java.util.HashSet;
+import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * Deterministic, read-only visual reconciliation model for ABSVisualisation.
  *
  * The model consumes read-only GP status/count and IP telemetry. It never sends
- * commands and deliberately does not claim to know physical bottle positions,
- * bottle identifiers, recipe ratios, or timing. Status edges are evidence for
- * a symbolic stage; the published geometry is an immutable UI snapshot.
+ * commands or claim measured positions, recipe ratios, or timing. Once complete
+ * live twin snapshots arrive, their real identities and last confirmed stages
+ * are authoritative. Status-edge animation remains a legacy fallback only.
  */
 final class ABSVisualisationFlowModel {
     static final int LOADER = 0;
@@ -64,6 +69,8 @@ final class ABSVisualisationFlowModel {
         private int stage;
         private double progress;
         private BottleLifecycle lifecycle;
+        private String bottleKey = "";
+        private String twinStage = "";
 
         BottleState(int id, int generation) {
             displayId = id;
@@ -114,6 +121,8 @@ final class ABSVisualisationFlowModel {
         private final int stage;
         private final double progress;
         private final BottleLifecycle lifecycle;
+        private final String bottleKey;
+        private final String twinStage;
 
         BottleSnapshot(BottleState state) {
             displayId = state.displayId;
@@ -121,6 +130,8 @@ final class ABSVisualisationFlowModel {
             stage = state.stage;
             progress = state.progress;
             lifecycle = state.lifecycle;
+            bottleKey = state.bottleKey;
+            twinStage = state.twinStage;
         }
 
         int getDisplayId() {
@@ -142,6 +153,10 @@ final class ABSVisualisationFlowModel {
         BottleLifecycle getLifecycle() {
             return lifecycle;
         }
+
+        String getBottleKey() { return bottleKey; }
+
+        String getTwinStage() { return twinStage; }
     }
 
     /** Immutable rendering data for one symbolic module. */
@@ -165,6 +180,7 @@ final class ABSVisualisationFlowModel {
         private final ModuleLifecycle lifecycle;
         private final int currentBottleId;
         private final boolean running;
+        private final String currentBottleKey;
 
         ModuleSnapshot(
             long snapshotVersion,
@@ -185,7 +201,8 @@ final class ABSVisualisationFlowModel {
             String currentPhase,
             ModuleLifecycle currentLifecycle,
             int bottleId,
-            boolean isRunning
+            boolean isRunning,
+            String bottleKey
         ) {
             version = snapshotVersion;
             moduleIndex = index;
@@ -206,6 +223,7 @@ final class ABSVisualisationFlowModel {
             lifecycle = currentLifecycle;
             currentBottleId = bottleId;
             running = isRunning;
+            currentBottleKey = bottleKey;
         }
 
         long getVersion() {
@@ -306,6 +324,8 @@ final class ABSVisualisationFlowModel {
             return currentBottleId;
         }
 
+        String getCurrentBottleKey() { return currentBottleKey; }
+
         boolean isRunning() {
             return running;
         }
@@ -321,6 +341,9 @@ final class ABSVisualisationFlowModel {
         private final String mode;
         private final ModuleSnapshot[] modules;
         private final List<BottleSnapshot> bottles;
+        private final boolean twinDriven;
+        private final String twinBatchKey;
+        private final int twinBottleCount;
 
         FlowSnapshot(
             long snapshotVersion,
@@ -330,7 +353,10 @@ final class ABSVisualisationFlowModel {
             int displayedCompleted,
             String currentMode,
             ModuleSnapshot[] moduleSnapshots,
-            List<BottleSnapshot> bottleSnapshots
+            List<BottleSnapshot> bottleSnapshots,
+            boolean liveTwins,
+            String batchKey,
+            int currentBatchTwins
         ) {
             version = snapshotVersion;
             batchGeneration = generation;
@@ -340,6 +366,9 @@ final class ABSVisualisationFlowModel {
             mode = currentMode;
             modules = moduleSnapshots.clone();
             bottles = Collections.unmodifiableList(bottleSnapshots);
+            twinDriven = liveTwins;
+            twinBatchKey = batchKey;
+            twinBottleCount = currentBatchTwins;
         }
 
         long getVersion() {
@@ -361,6 +390,14 @@ final class ABSVisualisationFlowModel {
         int getVisualCompleted() {
             return visualCompleted;
         }
+
+        boolean isTwinDriven() { return twinDriven; }
+
+        int getTwinCompleted() { return twinDriven ? visualCompleted : 0; }
+
+        int getTwinBottleCount() { return twinDriven ? twinBottleCount : 0; }
+
+        String getTwinBatchKey() { return twinBatchKey; }
 
         String getMode() {
             return mode;
@@ -401,6 +438,7 @@ final class ABSVisualisationFlowModel {
 
     private RotaryCycleState rotaryCycle;
     private int required;
+    private int requestedRequired;
     private int realCompleted;
     private int visualCompleted;
     private int nextBottleToAdmit;
@@ -414,13 +452,252 @@ final class ABSVisualisationFlowModel {
     private long version;
     private long lastRealtimeTickNanos;
     private FlowSnapshot published;
+    private boolean twinDriven;
+    private BigInteger twinGeneration;
+    private BigInteger minimumTwinGeneration = BigInteger.ZERO;
+    private long twinSequence = -1L;
+    private String twinBatchKey = "";
+    private int twinBottleCount;
+    private int nextTwinDisplayId = 1;
+    private final BottleState[] twinModuleBottles = new BottleState[MODULE_COUNT];
+    private final boolean[] twinModuleBusy = new boolean[MODULE_COUNT];
+    private final boolean[] twinModuleFault = new boolean[MODULE_COUNT];
+    private static final Pattern BATCH_KEY = Pattern.compile("^(PO[0-9]+-P[0-9]+)-B[0-9]+$");
 
     ABSVisualisationFlowModel() {
         publish();
     }
 
+    /**
+     * Reconcile one validated complete snapshot immediately. Stage confirmations
+     * are waypoints, not measured positions or progress. The timer is deliberately
+     * irrelevant in this mode, including when status pulses were missed entirely.
+     */
+    synchronized void acceptTwinSnapshot(ABSLiveTwinModel.Snapshot snapshot) {
+        if (snapshot == null || snapshot.generation.compareTo(minimumTwinGeneration) < 0) return;
+        if (twinGeneration != null && (snapshot.generation.compareTo(twinGeneration) < 0 ||
+            (snapshot.generation.equals(twinGeneration) && snapshot.sequence <= twinSequence))) return;
+        boolean newGeneration = twinGeneration == null || !snapshot.generation.equals(twinGeneration);
+        if (newGeneration) nextTwinDisplayId = 1;
+        String[][] rows = snapshot.workpieces();
+        String[][] resources = snapshot.resources();
+        String latestBatch = latestBatch(rows);
+        boolean newBatch = newGeneration || !latestBatch.equals(twinBatchKey);
+        if (newBatch) {
+            batchGeneration++;
+            twinBatchKey = latestBatch;
+            required = requestedRequired;
+        }
+        twinGeneration = snapshot.generation;
+        twinSequence = snapshot.sequence;
+        twinDriven = true;
+        pendingRequired = -1;
+        batchTransitionTicks = 0;
+        rotaryCycle = null;
+        clearTwinModules();
+        for (int index = 0; index < MODULE_COUNT; index++) work[index] = null;
+        for (int index = 0; index < rotaryStations.length; index++) rotaryStations[index] = null;
+        List<BottleState> previous = new ArrayList<BottleState>(bottles);
+        bottles.clear();
+        visualCompleted = 0;
+        twinBottleCount = 0;
+        for (String[] row : rows) {
+            boolean currentBatch = batchKey(row[0]).equals(twinBatchKey);
+            BottleState oldBottle = null;
+            if (!newGeneration) {
+                for (BottleState old : previous) {
+                    if (old.bottleKey.equals(row[0])) { oldBottle = old; break; }
+                }
+            }
+            if (!currentBatch && "COMPLETE".equals(row[1])) {
+                // A next product may start after UNLOADED, before the previous
+                // bottle's sort observation arrives. Keep it until COMPLETE,
+                // then retire the old icon without hiding that final evidence.
+                if (oldBottle != null && oldBottle.lifecycle != BottleLifecycle.COMPLETED) {
+                    traceModel(oldBottle, "TWIN_COMPLETE");
+                }
+                continue;
+            }
+            if (currentBatch) twinBottleCount++;
+            BottleState bottle = new BottleState(oldBottle == null ? nextTwinDisplayId++ : oldBottle.displayId,
+                oldBottle == null ? batchGeneration : oldBottle.batchGeneration);
+            bottle.bottleKey = row[0];
+            bottle.twinStage = row[1];
+            bottle.stage = confirmedStage(row[1], row[2]);
+            bottle.progress = bottle.stage < 0 ? 0.0 : 100.0;
+            bottle.lifecycle = bottle.stage < 0 ? BottleLifecycle.QUEUED :
+                BottleLifecycle.WAITING_FOR_REAL_CONFIRMATION;
+            if ("COMPLETE".equals(row[1])) {
+                bottle.stage = MODULE_COUNT;
+                bottle.lifecycle = BottleLifecycle.COMPLETED;
+                if (currentBatch) visualCompleted++;
+            }
+            else {
+                boolean busy = false;
+                boolean fault = "FAULT".equals(row[1]);
+                for (String[] resource : resources) {
+                    if (!bottle.bottleKey.equals(resource[2]) || resource[4].startsWith("OBSERVED_")) continue;
+                    int station = resourceStage(resource[1], resource[0]);
+                    if (station < 0) continue;
+                    // DONE/IDLE's linked identity is the last bottle, not current work.
+                    if (!fault && "2".equals(resource[3]) && (station > bottle.stage ||
+                        ("P6".equals(row[1]) && station == LABELLER))) {
+                        bottle.stage = station;
+                        bottle.progress = 0.0; // No continuous progress measurement exists.
+                        bottle.lifecycle = BottleLifecycle.PROCESSING;
+                        busy = true;
+                    }
+                    if ("4".equals(resource[3]) && station >= bottle.stage) {
+                        bottle.stage = station;
+                        fault = true;
+                        busy = false;
+                    }
+                }
+                if (bottle.stage >= 0 && bottle.stage < MODULE_COUNT) {
+                    int station = bottle.stage;
+                    // All workpieces remain in the immutable list. A module icon
+                    // shows active work preferentially when several wait at a waypoint.
+                    if (twinModuleBottles[station] == null || busy || fault || !twinModuleBusy[station]) {
+                        twinModuleBottles[station] = bottle;
+                        twinModuleBusy[station] = busy && !fault;
+                        twinModuleFault[station] = fault;
+                    }
+                }
+            }
+            bottles.add(bottle);
+            boolean changed = newBatch;
+            if (!changed) {
+                changed = true;
+                for (BottleState old : previous) {
+                    if (old.bottleKey.equals(bottle.bottleKey) && old.twinStage.equals(bottle.twinStage) &&
+                        old.stage == bottle.stage) { changed = false; break; }
+                }
+            }
+            if (changed) traceModel(bottle, "TWIN_" + bottle.twinStage);
+        }
+        // Snapshot rows, not aggregate counters, are the source of identities.
+        // GP required may include not-yet-created bottles, so retain that expectation.
+        required = Math.max(requestedRequired, twinBottleCount);
+        publish();
+    }
+
+    private void clearTwinModules() {
+        for (int index = 0; index < MODULE_COUNT; index++) {
+            twinModuleBottles[index] = null;
+            twinModuleBusy[index] = false;
+            twinModuleFault[index] = false;
+        }
+    }
+
+    private String latestBatch(String[][] rows) {
+        String selected = "";
+        for (String[] row : rows) {
+            String key = batchKey(row[0]);
+            if (selected.isEmpty() || compareBatch(key, selected) > 0) selected = key;
+        }
+        return selected;
+    }
+
+    private static String batchKey(String bottleKey) {
+        Matcher match = BATCH_KEY.matcher(bottleKey);
+        if (match.matches()) return match.group(1);
+        // Standalone lab/test identities are not assigned invented order IDs.
+        int suffix = bottleKey.lastIndexOf("-B");
+        return suffix > 0 && bottleKey.substring(suffix + 2).matches("[0-9]+") ?
+            bottleKey.substring(0, suffix) : bottleKey;
+    }
+
+    private static int compareBatch(String left, String right) {
+        if (left.matches("PO[0-9]+-P[0-9]+") && right.matches("PO[0-9]+-P[0-9]+")) {
+            String[] a = left.substring(2).split("-P");
+            String[] b = right.substring(2).split("-P");
+            int order = new BigInteger(a[0]).compareTo(new BigInteger(b[0]));
+            return order != 0 ? order : new BigInteger(a[1]).compareTo(new BigInteger(b[1]));
+        }
+        return left.compareTo(right);
+    }
+
+    private static int confirmedStage(String stage, String resource) {
+        if ("LOADED".equals(stage)) return LOADER;
+        if ("P1".equals(stage)) return ROTARY;
+        if ("FILLED".equals(stage)) return FILLER_B; // Combined A+B completion only.
+        if ("LIDDED".equals(stage)) return LID;
+        if ("CAPPED".equals(stage)) return CAPPER;
+        if ("P6".equals(stage)) return LABELLER; // Observed labeller input, not LABELLED.
+        if ("LABELLED".equals(stage)) return LABELLER;
+        if ("UNLOADED".equals(stage)) return UNLOADER;
+        if ("SORTED".equals(stage)) return SORT_PACK;
+        if ("COMPLETE".equals(stage)) return MODULE_COUNT;
+        if ("FAULT".equals(stage)) return resourceStage(resource, resource);
+        return -1;
+    }
+
+    private static int resourceStage(String type, String resourceId) {
+        String name = (type + " " + resourceId).toUpperCase(java.util.Locale.ROOT);
+        if (name.contains("SORT")) return SORT_PACK;
+        if (name.contains("UNLOAD")) return UNLOADER;
+        if (name.contains("LABEL")) return LABELLER;
+        if (name.contains("CAPP")) return CAPPER;
+        if (name.contains("LID")) return LID;
+        if (name.contains("FILLER_B")) return FILLER_B;
+        if (name.contains("FILLER_A")) return FILLER_A;
+        if (name.contains("ROTARY")) return ROTARY;
+        if (name.contains("CONVEYOR")) return CONVEYOR;
+        if (name.contains("LOADER")) return LOADER;
+        // Generic FILLER does not identify A versus B and cannot anchor live work.
+        return -1;
+    }
+
+    private void publishTwins() {
+        version++;
+        ModuleSnapshot[] modules = new ModuleSnapshot[MODULE_COUNT];
+        boolean busy = false;
+        boolean fault = false;
+        for (int index = 0; index < MODULE_COUNT; index++) {
+            BottleState bottle = twinModuleBottles[index];
+            boolean moduleFault = twinModuleFault[index] ||
+                (bottle != null && hasStatus[index] && statuses[index] == FAULT_STATUS);
+            boolean moduleBusy = bottle != null && twinModuleBusy[index] && !moduleFault;
+            ModuleLifecycle lifecycle = moduleFault ? ModuleLifecycle.FAULTED :
+                moduleBusy ? ModuleLifecycle.ACTIVE :
+                bottle == null ? ModuleLifecycle.WAITING : ModuleLifecycle.HOLDING;
+            String phase = moduleFault ? "FAULT - AWAITING NEW TWIN EVIDENCE" :
+                bottle == null ? "NO CURRENT BOTTLE IN TWIN SNAPSHOT" :
+                moduleBusy ? "RESOURCE BUSY - PROGRESS NOT MEASURED" :
+                bottle.twinStage + " CONFIRMED - AWAITING NEXT TWIN EVENT";
+            double progress = bottle == null ? 0.0 : bottle.progress;
+            int[] stationIds = new int[ROTARY_STATION_COUNT];
+            // Schematic waypoint, not a measured pocket or reconstructed rotation.
+            if (index == ROTARY && bottle != null) stationIds[0] = bottle.displayId;
+            modules[index] = new ModuleSnapshot(version, index, progress,
+                bottle == null ? 0.0 : 0.5, 0.0, 0.0, 0.0, 0.0,
+                stationIds, 0, 0, 0.0, 0.0, 0.0,
+                phase, phase, lifecycle, bottle == null ? 0 : bottle.displayId,
+                moduleBusy, bottle == null ? "" : bottle.bottleKey);
+            busy |= moduleBusy;
+            fault |= moduleFault;
+        }
+        String mode = fault ? "TWIN FAULT HOLD" :
+            bottles.isEmpty() ? "AWAITING TWIN TELEMETRY" :
+            visualCompleted == required && required > 0 ?
+                (bottles.size() > twinBottleCount ? "LATEST BATCH COMPLETE - EARLIER TWIN EVENTS PENDING" :
+                    "TWIN BATCH COMPLETE") :
+            realCompleted > visualCompleted ? "AWAITING TWIN TELEMETRY" :
+            busy ? "LIVE TWIN RESOURCE STATE" : "LAST CONFIRMED TWIN STAGE";
+        List<BottleSnapshot> snapshots = new ArrayList<BottleSnapshot>(bottles.size());
+        for (BottleState bottle : bottles) snapshots.add(new BottleSnapshot(bottle));
+        published = new FlowSnapshot(version, batchGeneration, required, realCompleted,
+            visualCompleted, mode, modules, snapshots, true, twinBatchKey, twinBottleCount);
+    }
+
     synchronized void acceptRequired(int value) {
         int safeValue = Math.max(0, value);
+        requestedRequired = safeValue;
+        if (twinDriven) {
+            required = Math.max(safeValue, twinBottleCount);
+            publish();
+            return;
+        }
         if (bottles.isEmpty() && required == 0 && pendingRequired < 0) {
             resetBatchNow(safeValue);
         }
@@ -433,6 +710,12 @@ final class ABSVisualisationFlowModel {
 
     synchronized void acceptCompleted(int value) {
         int safeValue = Math.max(0, value);
+        if (twinDriven) {
+            // GP count cannot identify a bottle or prove its sort completion.
+            realCompleted = safeValue;
+            publish();
+            return;
+        }
         if (safeValue < realCompleted) {
             pendingRequired = pendingRequired >= 0 ? pendingRequired : required;
             batchTransitionTicks = BATCH_TRANSITION_TICKS;
@@ -445,12 +728,47 @@ final class ABSVisualisationFlowModel {
 
     /** Clears all symbolic/animation state after a confirmed reset request. */
     synchronized void resetSystem() {
+        if (twinGeneration != null) minimumTwinGeneration = twinGeneration.add(BigInteger.ONE);
+        twinGeneration = null;
+        twinSequence = -1L;
+        twinBatchKey = "";
+        twinBottleCount = 0;
+        requestedRequired = 0;
+        clearTwinModules();
         resetBatchNow(0);
         lastRealtimeTickNanos = 0L;
         for (int index = 0; index < MODULE_COUNT; index++) {
             statuses[index] = IDLE_STATUS;
             hasStatus[index] = true;
         }
+        publish();
+    }
+
+    /** Exact epoch avoids rejecting a fresh snapshot that overtook the reset signal. */
+    synchronized void resetSystem(String resetId) {
+        if (resetId == null || !resetId.matches("RST[0-9]{4,}")) return;
+        BigInteger expected = new BigInteger(resetId.substring(3)).add(BigInteger.ONE);
+        if (expected.compareTo(minimumTwinGeneration) <= 0) return;
+        minimumTwinGeneration = expected;
+        requestedRequired = 0;
+        realCompleted = 0;
+        for (int index = 0; index < MODULE_COUNT; index++) {
+            statuses[index] = IDLE_STATUS;
+            hasStatus[index] = true;
+        }
+        if (twinGeneration != null && twinGeneration.compareTo(expected) >= 0) {
+            // Preserve already-observed fresh generation and its sequence.
+            required = twinBottleCount;
+            publish();
+            return;
+        }
+        twinGeneration = null;
+        twinSequence = -1L;
+        twinBatchKey = "";
+        twinBottleCount = 0;
+        clearTwinModules();
+        resetBatchNow(0);
+        lastRealtimeTickNanos = 0L;
         publish();
     }
 
@@ -463,6 +781,12 @@ final class ABSVisualisationFlowModel {
         int previous = hasStatus[index] ? statuses[index] : Integer.MIN_VALUE;
         hasStatus[index] = true;
         statuses[index] = status;
+
+        if (twinDriven) {
+            // Aggregate status cannot supply a bottle identity or stage.
+            publish();
+            return;
+        }
 
         if (status == BUSY_STATUS) {
             startedCycles[index]++;
@@ -524,6 +848,7 @@ final class ABSVisualisationFlowModel {
     }
 
     private void tickInternal(double frameScale) {
+        if (twinDriven) return; // Live evidence never waits for a replay animation.
         if (batchTransitionTicks > 0) {
             batchTransitionTicks--;
             if (batchTransitionTicks == 0 && pendingRequired >= 0) {
@@ -580,6 +905,26 @@ final class ABSVisualisationFlowModel {
     }
 
     synchronized boolean invariantsHold() {
+        if (twinDriven) {
+            Set<String> identities = new HashSet<String>();
+            Set<String> placed = new HashSet<String>();
+            int completed = 0;
+            int currentCount = 0;
+            for (BottleState bottle : bottles) {
+                if (bottle.bottleKey.isEmpty() || !identities.add(bottle.bottleKey)) return false;
+                if (batchKey(bottle.bottleKey).equals(twinBatchKey)) {
+                    currentCount++;
+                    if (bottle.lifecycle == BottleLifecycle.COMPLETED) completed++;
+                }
+            }
+            for (BottleState bottle : twinModuleBottles) {
+                if (bottle != null && (!identities.contains(bottle.bottleKey) ||
+                    bottle.lifecycle == BottleLifecycle.COMPLETED ||
+                    !placed.add(bottle.bottleKey))) return false;
+            }
+            return completed == visualCompleted && currentCount == twinBottleCount &&
+                completed <= twinBottleCount && twinBottleCount <= required;
+        }
         boolean[] seen = new boolean[Math.max(1, bottles.size() + 1)];
         for (int index = 0; index < work.length; index++) {
             if (index == ROTARY || work[index] == null) {
@@ -1007,6 +1352,10 @@ final class ABSVisualisationFlowModel {
     }
 
     private void publish() {
+        if (twinDriven) {
+            publishTwins();
+            return;
+        }
         version++;
         ModuleSnapshot[] moduleSnapshots = new ModuleSnapshot[MODULE_COUNT];
         int[] stationBottleIds = new int[ROTARY_STATION_COUNT];
@@ -1033,7 +1382,10 @@ final class ABSVisualisationFlowModel {
             visualCompleted,
             determineMode(),
             moduleSnapshots,
-            bottleSnapshots
+            bottleSnapshots,
+            false,
+            "",
+            0
         );
     }
 
@@ -1116,7 +1468,8 @@ final class ABSVisualisationFlowModel {
             phaseName(index, progress, rotaryPhase),
             lifecycle,
             bottleId,
-            running
+            running,
+            ""
         );
     }
 

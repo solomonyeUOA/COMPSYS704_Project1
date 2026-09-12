@@ -27,8 +27,9 @@ or **Live resources**. Workpieces show bottle ID, confirmed stage, resource,
 version and S/200 mL or L/500 mL profile. Resource rows include machine ID/type,
 linked bottle, status, operation, fault and version. M2 resources have live
 controller observations; upstream `OBSERVED_*` rows are last confirmed completed
-operations, not a continuous actuator-state feed. The existing overview animation
-remains symbolic; neither twin table controls machines.
+operations, not a continuous actuator-state feed. The overview now uses these
+same confirmed bottle events; geometry remains schematic and neither the
+overview nor either twin table controls machines.
 
 The launcher defaults to ports **+10000** (e.g. Coordinator 21001), because this
 PC has an unrelated service on canonical port 11001. It remaps every XML in a
@@ -52,6 +53,27 @@ no IDE reconfiguration is required. See [the toolchain lock](toolchain/README.md
 
 See [the reset/twin integration notes](integration/RESET_TWIN_INTEGRATION.md)
 for scope, reproducible live checks and limitations.
+
+### Twin / overview consistency (QA M2-13 / M2-14)
+
+The overview and M2/M4 IP tables now share confirmed twin snapshots. A bottle
+that becomes `COMPLETE` leaves upstream stations immediately; the overview
+does not replay a slower, separate journey. Bottle markers use real identities
+(full keys in module details). GP **unloaded** count and twin **COMPLETE** count
+are labelled separately because sorting is a later confirmed event. The overview
+counts the latest observed product batch and keeps any older unfinished bottles
+visible until their own completion. The twin tables retain all bottles in the
+current reset generation.
+
+**Live resources** means one latest row per machine, not one row per bottle.
+Rows update for B002 and later bottles. The **Evidence** column distinguishes
+M2 controller observations from upstream `OBSERVED_*` last-completed operations;
+`-` means no linked bottle. The snapshot generation and sequence are displayed.
+M4's present twin feed confirms combined filling after Filler B; it does not
+provide continuous Filler A/B position or fill-level telemetry. The overview
+therefore shows a last-confirmed waypoint, not an invented live operation.
+
+See [the consistency fix and acceptance checks](integration/TWIN_VISUALISATION_CONSISTENCY.md).
 
 ### Finishing stages and repeated orders (QA M2-8 / M2-9 / M2-10)
 
@@ -94,9 +116,11 @@ open until this test stops its six runtimes automatically:
 python tools\project.py run --no-build --order 'PO0001|1|P1,L,60,40,3' --duration 120 --expect-completions 1 --expect-workpieces 3 --expect-visual-completions 3
 ```
 
-The overview is a symbolic animation and can catch up after the real GP count
-increases. A new batch replaces the previous batch's symbolic view; use the
-BottleTwin and ResourceTwin tables for retained confirmed records.
+With twin telemetry connected, overview completion follows the confirmed
+snapshot without a catch-up animation. Without a twin feed, the legacy
+status-only view is explicitly labelled **SYMBOLIC FALLBACK**. A new product
+batch becomes the overview's count scope; older unfinished bottles remain
+visible until completion. Use the twin tables for retained confirmed records.
 
 This repository is the current development-stage integration baseline for the
 Automated Bottling System (ABS). It contains M1's Swing POS, Coordinator and
