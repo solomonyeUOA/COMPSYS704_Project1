@@ -4,6 +4,10 @@ bin/
 out/
 *.class
 
+# Python launcher test artifacts
+__pycache__/
+*.pyc
+
 # SystemJ compiler-generated Java for current Clock Domains
 pos/POS.java
 coordinator/Coordinator.java

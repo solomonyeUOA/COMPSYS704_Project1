@@ -1,6 +1,6 @@
 /** High-level sensor/actuator simulation for the four M2 Plant Clock Domains. */
 public final class M2PlantStateV1 {
-    private static final long DEFAULT_ACTION_MILLIS = 100L;
+    private static final long DEFAULT_ACTION_MILLIS = SimulationTiming.scaleMillis(100L);
 
     private static String loaderBottleId;
     private static long loaderStartedAt;

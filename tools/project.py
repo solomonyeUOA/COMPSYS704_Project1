@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 from datetime import datetime
+import math
 import os
 import re
 from pathlib import Path
@@ -24,6 +25,33 @@ CONFIGS = [
     ("pos", "xuqi_pos/pos.xml"),
     ("coordinator", "xuqi_coordinator/coordinator.xml"),
 ]
+
+
+def demo_slowdown(value):
+    """Bounded physical-operation multiplier, never a virtual clock."""
+    try:
+        factor = float(value)
+    except (TypeError, ValueError) as error:
+        raise argparse.ArgumentTypeError("demo slowdown must be a number from 1 to 10") from error
+    if not math.isfinite(factor) or not 1 <= factor <= 10:
+        raise argparse.ArgumentTypeError("demo slowdown must be a finite number from 1 to 10")
+    return factor
+
+
+def runtime_options(name, args):
+    factor = demo_slowdown(args.demo_slowdown)
+    options = [f"-Djava.awt.headless={str(args.headless).lower()}",
+               f"-Dabs.simulation.slowdown={factor}"]
+    if name == "visualisation" and args.trace_visualisation:
+        options.append("-Dabs.visualisation.trace=true")
+    if name == "pos" and args.order:
+        options += ["-Dabs.pos.testOrder=" + args.order,
+                    "-Dabs.pos.testOrderDelayMillis=10000",
+                    f"-Dabs.pos.testOrderCount={args.order_count}",
+                    "-Dabs.pos.testOrderIntervalMillis=4000"]
+    if name == "pos" and args.reset_after is not None:
+        options.append(f"-Dabs.pos.testResetDelayMillis={int(args.reset_after * 1000)}")
+    return options
 
 
 def toolchain(args):
@@ -67,6 +95,8 @@ def build(args):
 
 
 def test(args):
+    subprocess.run([sys.executable, "-m", "unittest", "discover", "-s", "tests",
+                    "-p", "test_project*.py"], cwd=ROOT, check=True)
     if not args.no_build:
         build(args)
     java, _, lib = toolchain(args)
@@ -76,7 +106,8 @@ def test(args):
     tests.append("FaultToleranceEvaluation")
     for name in tests:
         print(f"TEST {name}", flush=True)
-        subprocess.run([str(java), "-Djava.awt.headless=true", "-cp", cp, name],
+        subprocess.run([str(java), "-Djava.awt.headless=true",
+                        "-Dabs.simulation.slowdown=1", "-cp", cp, name],
                        cwd=ROOT, check=True, timeout=90)
     subprocess.run([sys.executable, "tools/validate_integration.py"], cwd=ROOT, check=True)
     print(f"TEST PASS: {len(tests)} executable suites", flush=True)
@@ -114,18 +145,11 @@ def run(args):
     processes = []
     handles = []
     print(f"Run logs: {run_dir}\nPress Ctrl+C in this terminal to stop every runtime.", flush=True)
+    print(f"Simulation physical actions/timeouts: {args.demo_slowdown}x normal durations. "
+          "Telemetry, clocks, transport and heartbeats stay real-time; overall order time is not a fixed multiplier.", flush=True)
     try:
         for name, config in configs:
-            options = [f"-Djava.awt.headless={str(args.headless).lower()}"]
-            if name == "visualisation" and args.trace_visualisation:
-                options.append("-Dabs.visualisation.trace=true")
-            if name == "pos" and args.order:
-                options += ["-Dabs.pos.testOrder=" + args.order,
-                            "-Dabs.pos.testOrderDelayMillis=10000",
-                            f"-Dabs.pos.testOrderCount={args.order_count}",
-                            "-Dabs.pos.testOrderIntervalMillis=4000"]
-            if name == "pos" and args.reset_after is not None:
-                options.append(f"-Dabs.pos.testResetDelayMillis={int(args.reset_after * 1000)}")
+            options = runtime_options(name, args)
             output = open(run_dir / (name + ".out.log"), "w", encoding="utf-8")
             errors = open(run_dir / (name + ".err.log"), "w", encoding="utf-8")
             handles += [output, errors]
@@ -208,6 +232,8 @@ def main():
     parser.add_argument("--systemj-lib", default=os.environ.get("SYSTEMJ_LIB", str(DEFAULT_LIB)))
     parser.add_argument("--no-build", action="store_true", help="Use existing build/classes")
     parser.add_argument("--headless", action="store_true")
+    parser.add_argument("--demo-slowdown", type=demo_slowdown, default=1.0,
+                        help="Simulation only: multiply physical action durations and matching operation timeouts by 1..10 (try 5); telemetry stays real-time")
     parser.add_argument("--port-offset", type=int, default=10000)
     parser.add_argument("--order", help="Automatic POS order payload (V1 or V2)")
     parser.add_argument("--order-count", type=int, default=1)
@@ -220,6 +246,8 @@ def main():
     parser.add_argument("--trace-visualisation", action="store_true", help="Log confirmed-twin or legacy symbolic-flow reconciliation for UI diagnostics")
     parser.add_argument("--expect-visual-completions", type=int, help="Require N overview completion records (confirmed twins, or legacy replay); requires GUI and enables tracing")
     args = parser.parse_args()
+    if args.action != "run" and args.demo_slowdown != 1.0:
+        parser.error("--demo-slowdown applies only to run; regression tests keep normal timing")
     if args.expect_workpieces is not None and args.expect_workpieces < 1:
         parser.error("--expect-workpieces must be at least 1 (use --expect-reset for an empty reset)")
     if args.expect_completions is not None and args.expect_completions < 0:
