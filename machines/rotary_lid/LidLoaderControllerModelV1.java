@@ -1,7 +1,7 @@
 /** Deterministic pick-and-place controller model for the lid loader. */
 public final class LidLoaderControllerModelV1 {
-    public static final long PICK_TIMEOUT_MS = 1000;
-    public static final long PLACE_TIMEOUT_MS = 1000;
+    public static final long PICK_TIMEOUT_MS = SimulationTiming.scaleMillis(1000L);
+    public static final long PLACE_TIMEOUT_MS = SimulationTiming.scaleMillis(1000L);
 
     public enum State {
         READY,

@@ -146,7 +146,7 @@ public final class ABSVisualisation {
 
     private ABSVisualisation() {
         frame = new JFrame(
-            "Automated Bottling System - Live Twin Visualisation"
+            "Automated Bottling System - Live Twin Visualisation" + SimulationTiming.demoSuffix()
         );
         frame.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
         frame.setLayout(new BorderLayout(12, 10));

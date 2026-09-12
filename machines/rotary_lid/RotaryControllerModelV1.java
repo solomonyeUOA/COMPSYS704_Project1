@@ -1,7 +1,7 @@
 /** Deterministic controller model for one 60-degree rotary-table step. */
 public final class RotaryControllerModelV1 {
-    public static final long ROTATION_TIME_MS = 500;
-    public static final long ALIGNMENT_TIMEOUT_MS = 250;
+    public static final long ROTATION_TIME_MS = SimulationTiming.scaleMillis(500L);
+    public static final long ALIGNMENT_TIMEOUT_MS = SimulationTiming.scaleMillis(250L);
 
     public enum State {
         READY,

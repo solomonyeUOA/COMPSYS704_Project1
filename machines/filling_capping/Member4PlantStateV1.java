@@ -17,9 +17,12 @@ public final class Member4PlantStateV1 {
     }
 
     public static synchronized void reset() {
-        long shortDelay = delayProperty("m4.plant.shortDelayMs", 100L);
-        long doseDelay = delayProperty("m4.plant.doseDelayMs", 250L);
-        long refillDelay = delayProperty("m4.plant.refillDelayMs", 150L);
+        long resetDelay = delayProperty("m4.plant.shortDelayMs", 100L);
+        long shortDelay = SimulationTiming.scaleMillis(resetDelay);
+        long doseDelay = SimulationTiming.scaleMillis(
+            delayProperty("m4.plant.doseDelayMs", 250L));
+        long refillDelay = SimulationTiming.scaleMillis(
+            delayProperty("m4.plant.refillDelayMs", 150L));
         int shutoffLead = integerProperty("m4.shutoffLeadMl", 0);
         fillerA = new FillerPlantModelV1(
             shortDelay, doseDelay, refillDelay, shutoffLead
@@ -27,7 +30,8 @@ public final class Member4PlantStateV1 {
         fillerB = new FillerPlantModelV1(
             shortDelay, doseDelay, refillDelay, shutoffLead
         );
-        capper = new CapperPlantModelV1(shortDelay);
+        // Demo pacing must not delay the ordered safety-home sequence.
+        capper = new CapperPlantModelV1(shortDelay, resetDelay);
         sortPack = new SortPackPlantModelV1(shortDelay, shortDelay);
         fillerAFeedbackEvent = new M4BoundedEventV1(3, 30L);
         fillerBFeedbackEvent = new M4BoundedEventV1(3, 30L);

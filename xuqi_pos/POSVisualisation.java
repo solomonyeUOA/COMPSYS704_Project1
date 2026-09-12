@@ -107,7 +107,7 @@ public final class POSVisualisation {
     private final JLabel completionStatus;
 
     private POSVisualisation() {
-        frame = new JFrame("Purchase Order System");
+        frame = new JFrame("Purchase Order System" + SimulationTiming.demoSuffix());
         frame.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
         frame.setLayout(new BorderLayout(12, 12));
 

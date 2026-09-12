@@ -1,7 +1,7 @@
 /** Timed physical Plant abstraction for lid pick and placement. */
 public final class LidLoaderPlantModelV1 {
-    public static final long PICK_TIME_MS = 300;
-    public static final long PLACE_TIME_MS = 300;
+    public static final long PICK_TIME_MS = SimulationTiming.scaleMillis(300L);
+    public static final long PLACE_TIME_MS = SimulationTiming.scaleMillis(300L);
     public static final long PLACED_SENSOR_HOLD_MS = 200;
 
     /** Finite simulation capacity, independent of the submitted order size. */

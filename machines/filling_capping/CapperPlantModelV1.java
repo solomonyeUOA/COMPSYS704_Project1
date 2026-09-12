@@ -27,6 +27,7 @@ public final class CapperPlantModelV1 {
     }
 
     private final long actionDelayMs;
+    private final long resetActionDelayMs;
     private final Queue<String> feedback = new ArrayDeque<String>();
     private Stage stage = Stage.IDLE;
     private String activeBottleId;
@@ -43,10 +44,16 @@ public final class CapperPlantModelV1 {
     private String resetEvidence = "NONE";
 
     public CapperPlantModelV1(long actionDelayMs) {
-        if (actionDelayMs < 0) {
+        this(actionDelayMs, actionDelayMs);
+    }
+
+    /** Separate demonstration pacing from the safety-home sensor delays. */
+    public CapperPlantModelV1(long actionDelayMs, long resetActionDelayMs) {
+        if (actionDelayMs < 0 || resetActionDelayMs < 0) {
             throw new IllegalArgumentException("negative action delay");
         }
         this.actionDelayMs = actionDelayMs;
+        this.resetActionDelayMs = resetActionDelayMs;
     }
 
     public boolean acceptCommand(String payload, long nowMs) {
@@ -271,7 +278,7 @@ public final class CapperPlantModelV1 {
     }
 
     public void tickSystemReset(long nowMs) {
-        if (resetStep == 0 || nowMs - stageStartMs < actionDelayMs) {
+        if (resetStep == 0 || nowMs - stageStartMs < resetActionDelayMs) {
             return;
         }
         if (resetStep == 1) {

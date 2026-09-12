@@ -55,10 +55,10 @@ public final class M2MachineStateV1 {
 
     public static synchronized void reset() {
         loader = new BottleLoaderControllerModelV1();
-        conveyor = new ConveyorControllerModelV1(longProperty(
+        conveyor = new ConveyorControllerModelV1(SimulationTiming.scaleMillis(longProperty(
             "m2.conveyor.arrivalTimeoutMillis",
             2000L
-        ));
+        )));
         labeller = new LabellerControllerModelV1();
         unloader = new BottleUnloaderControllerModelV1(longProperty(
             "m2.bottleDoneHoldMillis",

@@ -33,7 +33,8 @@ public final class Member4MachineStateV1 {
     public static synchronized void reset() {
         int tolerance = integerProperty("m4.toleranceMl", 0, 0);
         int overflowMargin = integerProperty("m4.overflowMarginMl", 0, 0);
-        long timeout = longProperty("m4.operationTimeoutMs", 2500L, 1L);
+        long timeout = SimulationTiming.scaleMillis(
+            longProperty("m4.operationTimeoutMs", 2500L, 1L));
         int smallCapacity = integerProperty(
             "m4.sortpack.smallPackageCapacity", 2, 1
         );

@@ -22,6 +22,31 @@ including POS, the ABS visualization and M3 fault GUI. Enter products in POS and
 submit. Stop **all** runtimes with Ctrl+C in the launching terminal. Alternatively,
 double-click `run-project.bat` to build and open the interactive simulation.
 
+### Slower demonstration mode
+
+To give yourself time to inspect the overview, BottleTwins and ResourceTwins,
+stop any old run with Ctrl+C in its launching terminal, then run:
+
+```powershell
+python tools\project.py run --demo-slowdown 5
+```
+
+Or double-click **`run-demo.bat`** (defaults to 5). This rebuilds the updated
+sources and slows the simulated physical actions across M2, M3 and M4 together.
+Try `--demo-slowdown 10` for more viewing time. Values from 1 to 10 are accepted;
+normal `run-project.bat` and runs without the option remain at 1 (normal speed).
+Restart the run to change speed. The POS and ABS window titles show demo mode.
+
+This is not a delayed animation: the simulation itself takes longer, and the
+overview and twin tables still follow the same confirmed events. Matching
+operation timeouts scale too; telemetry, heartbeats, timestamps and reset
+handling remain real-time. A whole order is not exactly five times longer,
+because communication and handoffs are unchanged. Upstream `OBSERVED_*` resource
+rows remain last-confirmed observations, not continuous actuator telemetry.
+This option is for the software simulation, not hardware speed control.
+
+See [slow-demo details and checks](integration/SLOW_DEMO_MODE.md).
+
 Open the **M2 Digital Twin** card in ABS visualization, then **Live workpieces**
 or **Live resources**. Workpieces show bottle ID, confirmed stage, resource,
 version and S/200 mL or L/500 mL profile. Resource rows include machine ID/type,
