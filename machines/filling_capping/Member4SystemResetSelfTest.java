@@ -6,8 +6,40 @@ public final class Member4SystemResetSelfTest {
     public static void main(String[] args) {
         testCapperMechanicalSequence();
         testRegistryAndSimulatorLedgers();
+        testFormalBatchCorrelation();
         testRuntimeResetAndRestart();
         System.out.println("Member4SystemResetSelfTest PASSED");
+    }
+
+    private static void testFormalBatchCorrelation() {
+        Member4MachineStateV1.reset();
+        require(!Member4MachineStateV1.acceptRecognition(
+            "ARBITRARY-001|FORMAL-BATCH|S|200"
+        ), "recognition cannot invent an unregistered M1 batch");
+        require("FORMAL-BATCH|1|S".equals(
+            Member4MachineStateV1.acceptBatchStart("FORMAL-BATCH|1|S")
+        ), "formal M1 batch start accepted");
+        require("FORMAL-BATCH|1|S".equals(
+            Member4MachineStateV1.acceptBatchStart("FORMAL-BATCH|1|S")
+        ), "formal M1 batch retry is idempotent");
+        require(Member4MachineStateV1.acceptBatchStart(
+            "FORMAL-BATCH|2|S"
+        ) == null, "conflicting formal batch retry rejected");
+        require("ARBITRARY-001|FORMAL-BATCH|S|200".equals(
+            Member4MachineStateV1.recogniseBottle("ARBITRARY-001|S")
+        ), "M4 attaches the registered batch to local sensor data");
+        require(Member4MachineStateV1.recogniseBottle(
+            "ARBITRARY-001|L"
+        ) == null, "sensor size must match the registered batch");
+        require(Member4MachineStateV1.acceptRecognition(
+            "ARBITRARY-001|FORMAL-BATCH|S|200"
+        ), "correlated recognition accepted");
+        require(!Member4MachineStateV1.acceptRecognition(
+            "ARBITRARY-002|FORMAL-BATCH|S|200"
+        ), "recognitions cannot exceed the declared batch quantity");
+        require(!Member4MachineStateV1.acceptSortPackBatchEnd(
+            "UNREGISTERED-END|1|S"
+        ), "batch end requires the matching registered contract");
     }
 
     private static void testCapperMechanicalSequence() {
@@ -54,12 +86,12 @@ public final class Member4SystemResetSelfTest {
 
     private static void testRegistryAndSimulatorLedgers() {
         BottleContextRegistryModelV1 registry = new BottleContextRegistryModelV1();
-        registry.acceptRecognition("REG-OLD|S|200");
+        registry.acceptRecognition("REG-OLD|BATCH-OLD|S|200");
         registry.resetForSystem();
         require(registry.size() == 0 &&
-            registry.acceptRecognition("REG-OLD|S|200") == null,
+            registry.acceptRecognition("REG-OLD|BATCH-OLD|S|200") == null,
             "registry clears contexts but retains retired IDs");
-        require(registry.acceptRecognition("REG-NEW|L|500") != null,
+        require(registry.acceptRecognition("REG-NEW|BATCH-NEW|L|500") != null,
             "new registry identity accepted");
 
         RecognitionSimulatorStateV1 sim =
@@ -99,7 +131,11 @@ public final class Member4SystemResetSelfTest {
         RecognitionSimulatorStateV1.startBatchDriven();
         require(RecognitionSimulatorStateV1.acceptBatchRequest("RUNTIME-OLD|3|S"),
             "runtime old batch");
-        Member4MachineStateV1.acceptRecognition("RUNTIME-OLD-B001|S|200");
+        require("RUNTIME-OLD|3|S".equals(
+            Member4MachineStateV1.acceptBatchStart("RUNTIME-OLD|3|S")
+        ), "runtime formal batch contract");
+        Member4MachineStateV1.acceptRecognition(
+            "RUNTIME-OLD-B001|RUNTIME-OLD|S|200");
         Member4MachineStateV1.setFillerARatio(60);
         Member4MachineStateV1.acceptBottleAtFill(
             "RUNTIME-OLD-B001|S|200|GEOM_S|PACK_S");
@@ -124,10 +160,14 @@ public final class Member4SystemResetSelfTest {
         require(M4SystemResetStateV1.request("RST0001", 100L), "reset accepted");
         require(M4SystemResetStateV1.takeAck(100L) == null, "no immediate ACK");
         require(M4ResetFenceV1.isQuarantined() &&
-            !Member4MachineStateV1.acceptRecognition("QUARANTINED|S|200"),
+            !Member4MachineStateV1.acceptRecognition(
+                "QUARANTINED|QUARANTINE-BATCH|S|200"),
             "quarantine blocks work");
         require(!RecognitionSimulatorStateV1.acceptBatchRequest("LATE-BATCH|2|L"),
             "quarantine rejects and retires late simulation requests");
+        require(!Member4MachineStateV1.acceptSortPackBatchEnd(
+            "HELD-END|1|S"
+        ), "quarantine retires a held batch-end identity");
         require(!Member4PlantStateV1.snapshot().contains("injector=true") &&
             !Member4PlantStateV1.snapshot().contains("inlet=true") &&
             !Member4PlantStateV1.snapshot().contains("moving=true"),
@@ -159,11 +199,25 @@ public final class Member4SystemResetSelfTest {
             Member4MachineStateV1.takeWorkpieceObservation() == null &&
             Member4PlantStateV1.takeCapperFeedback() == null,
             "all pending offers/completions canceled");
-        require(!Member4MachineStateV1.acceptRecognition("RUNTIME-OLD-B001|S|200") &&
+        require(!Member4MachineStateV1.acceptRecognition(
+                "RUNTIME-OLD-B001|RUNTIME-OLD|S|200") &&
+            !Member4MachineStateV1.acceptRecognition(
+                "UNISSUED-AFTER-RESET|RUNTIME-OLD|S|200") &&
+            !Member4MachineStateV1.acceptSortPackBatchEnd(
+                "RUNTIME-OLD|3|S") &&
             !Member4MachineStateV1.acceptBottleAtFill(
                 "RUNTIME-OLD-B003|S|200|GEOM_S|PACK_S"),
-            "late bottle and context identities cannot revive");
-        Member4MachineStateV1.acceptRecognition("POST-RESET|L|500");
+            "late bottles and batch end from an old batch cannot revive");
+        require(Member4MachineStateV1.acceptBatchStart(
+                "HELD-END|1|S") == null &&
+            !Member4MachineStateV1.acceptSortPackBatchEnd(
+                "HELD-END|1|S"),
+            "held pre-reset batch end cannot create a ghost batch after ACK");
+        require("POST-RESET-BATCH|1|L".equals(
+            Member4MachineStateV1.acceptBatchStart("POST-RESET-BATCH|1|L")
+        ), "post-reset formal batch contract");
+        Member4MachineStateV1.acceptRecognition(
+            "POST-RESET|POST-RESET-BATCH|L|500");
         long count = M4SystemResetStateV1.resetCount();
         M4SystemResetStateV1.request("RST0001", 300L);
         require(M4SystemResetStateV1.resetCount() == count &&
@@ -197,6 +251,14 @@ public final class Member4SystemResetSelfTest {
     private static void runNewBottle(String id, String size, int capacity) {
         String context = id + "|" + size + "|" + capacity + "|GEOM_" +
             size + "|PACK_" + size;
+        require((id + "-BATCH|1|" + size).equals(
+            Member4MachineStateV1.acceptBatchStart(
+                id + "-BATCH|1|" + size
+            )
+        ), "new batch " + id);
+        require(Member4MachineStateV1.acceptRecognition(
+            id + "|" + id + "-BATCH|" + size + "|" + capacity
+        ), "new recognition " + id);
         Member4MachineStateV1.setFillerARatio(60);
         Member4MachineStateV1.setFillerBRatio(40);
         require(Member4MachineStateV1.acceptBottleAtFill(context), "new fill " + id);

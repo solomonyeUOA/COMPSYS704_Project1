@@ -1,20 +1,18 @@
-import java.util.Locale;
-
 /**
- * Bounded, idempotent transport for the simulation-only M1 -> M4 batch
- * request. A logical product batch owns one stable payload. Retries never
+ * Bounded, idempotent transport for the formal M1 -> M4 batch contract.
+ * A logical product batch owns one stable payload. Retries never
  * regenerate its identity. Each copy stays PRESENT for 200 ms, followed by
  * a wall-clock ABSENT gap before another copy can be offered. A single
  * logical reaction is too brief for independently scheduled TCP receivers.
  */
-public final class M1SimulationBatchOfferV1 {
+public final class M1M4BatchOfferV1 {
     static final long SIGNAL_HOLD_MILLIS = 200L;
     private final BoundedStringSignalOfferV1 transport;
     private String batchId;
     private int quantity;
     private String sizeCode;
 
-    public M1SimulationBatchOfferV1(
+    public M1M4BatchOfferV1(
         int maximumOffers,
         long retryIntervalMillis
     ) {
@@ -47,24 +45,31 @@ public final class M1SimulationBatchOfferV1 {
         String requestedSizeCode,
         long nowMillis
     ) {
-        validateOrderId(orderId);
-        if (oneBasedProductIndex < 1 || oneBasedProductIndex > 99) {
-            throw new IllegalArgumentException(
-                "product index must be 1..99"
-            );
-        }
+        M1ProductBatchV1 batch = M1ProductBatchV1.forProduct(
+            orderId,
+            oneBasedProductIndex,
+            requestedQuantity,
+            requestedSizeCode
+        );
+        return beginBatch(
+            batch.getBatchId(), requestedQuantity, requestedSizeCode, nowMillis
+        );
+    }
+
+    /** Starts delivery for an already established Coordinator batch contract. */
+    public boolean beginBatch(
+        String requestedBatchId,
+        int requestedQuantity,
+        String requestedSizeCode,
+        long nowMillis
+    ) {
+        M1ProductBatchV1.validateTransportId(requestedBatchId, "batchId");
         if (requestedQuantity < 1) {
             throw new IllegalArgumentException("quantity must be positive");
         }
         if (OrderV2.capacityFor(requestedSizeCode) == 0) {
             throw new IllegalArgumentException("sizeCode must be S or L");
         }
-
-        String requestedBatchId = orderId + "-P" + String.format(
-            Locale.ROOT,
-            "%02d",
-            Integer.valueOf(oneBasedProductIndex)
-        );
         if (requestedBatchId.equals(batchId)) {
             return requestedQuantity == quantity &&
                 requestedSizeCode.equals(sizeCode);
@@ -129,18 +134,4 @@ public final class M1SimulationBatchOfferV1 {
         return transport.isPending();
     }
 
-    private static void validateOrderId(String orderId) {
-        if (orderId == null || orderId.length() == 0 ||
-            !orderId.equals(orderId.trim()) || orderId.indexOf('|') >= 0) {
-            throw new IllegalArgumentException("invalid orderId");
-        }
-        for (int index = 0; index < orderId.length(); index++) {
-            char character = orderId.charAt(index);
-            if (character < 0x21 || character > 0x7e) {
-                throw new IllegalArgumentException(
-                    "orderId must be printable ASCII without spaces"
-                );
-            }
-        }
-    }
 }

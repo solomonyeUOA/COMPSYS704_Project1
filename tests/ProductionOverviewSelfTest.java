@@ -92,6 +92,11 @@ public final class ProductionOverviewSelfTest {
         require(ABSVisualisation.updateM4CapperState(
             "V1|LIVE-L-B001|L|GEOM_L|LOWERING|2"
         ), "valid M4 Capper telemetry accepted");
+        require(!ABSVisualisation.updateCoordinatorCapperStatus(3),
+            "delayed Coordinator Capper status cannot overwrite direct M4 telemetry");
+        require(ABSVisualisation.updateM4CapperState(
+            "V1|LIVE-L-B001|L|GEOM_L|LOWERING|2"
+        ), "duplicate direct M4 Capper telemetry remains idempotent");
         capper.syncRealState();
         require(capper.getDisplayedRealStatus() == 2,
             "M4 Capper telemetry updates real status");
@@ -152,6 +157,10 @@ public final class ProductionOverviewSelfTest {
         ABSVisualisation.resetSystem("RST9901");
         for (int i = 0; i < NAMES.length; i++) {
             if (i == 7) ABSVisualisation.updateLabellerStatus(1);
+            else if (i == 6) require(
+                ABSVisualisation.updateCoordinatorCapperStatus(1),
+                "Coordinator Capper fallback is re-enabled after reset"
+            );
             else ABSVisualisation.updateStatus(NAMES[i], 1);
         }
         tick(flow, 1);

@@ -18,17 +18,17 @@ public final class Member4ModelSelfTest {
             new BottleContextRegistryModelV1();
         require(
             "B001|S|200|GEOM_S|PACK_S".equals(
-                registry.acceptRecognition("B001|S|200")
+                registry.acceptRecognition("B001|BATCH-A|S|200")
             ),
             "small recognition creates canonical context"
         );
         require(
-            registry.acceptRecognition("B001|S|200") == null,
+            registry.acceptRecognition("B001|BATCH-A|S|200") == null,
             "identical recognition duplicate is a no-op"
         );
         boolean rejected = false;
         try {
-            registry.acceptRecognition("B002|S|500");
+            registry.acceptRecognition("B002|BATCH-A|S|500");
         }
         catch (IllegalArgumentException expected) {
             rejected = true;
@@ -204,7 +204,7 @@ public final class Member4ModelSelfTest {
         SortPackPlantModelV1 plant = new SortPackPlantModelV1(10, 10);
         runSortPack(
             controller, plant,
-            "ORDER-A-P01-B001|S|200|GEOM_S|PACK_S", 0
+            "BOTTLE-A|S|200|GEOM_S|PACK_S", "ORDER-A-P01", 0
         );
         require(controller.getSmallPackageCount() == 0,
             "partial batch remains open before M1 batch end");
@@ -223,7 +223,7 @@ public final class Member4ModelSelfTest {
 
         runSortPack(
             controller, plant,
-            "ORDER-B-P01-B001|S|200|GEOM_S|PACK_S", 100
+            "BOTTLE-B|S|200|GEOM_S|PACK_S", "ORDER-B-P01", 100
         );
         require(controller.getSmallBottleCount() == 2,
             "two small bottles from different orders are placed");
@@ -242,14 +242,14 @@ public final class Member4ModelSelfTest {
         require(earlyEnd.acceptBatchEnd("ORDER-C-P01|3|L", 0),
             "batch end may arrive before its final physical placements");
         runSortPack(earlyEnd, earlyPlant,
-            "ORDER-C-P01-B001|L|500|GEOM_L|PACK_L", 10);
+            "UNRELATED-01|L|500|GEOM_L|PACK_L", "ORDER-C-P01", 10);
         runSortPack(earlyEnd, earlyPlant,
-            "ORDER-C-P01-B002|L|500|GEOM_L|PACK_L", 100);
+            "UNRELATED-02|L|500|GEOM_L|PACK_L", "ORDER-C-P01", 100);
         require(!earlyEnd.isBatchFinalised("ORDER-C-P01") &&
             earlyEnd.getLargePackageCount() == 1,
             "one full package does not prematurely finalise a three-bottle batch");
         runSortPack(earlyEnd, earlyPlant,
-            "ORDER-C-P01-B003|L|500|GEOM_L|PACK_L", 200);
+            "UNRELATED-03|L|500|GEOM_L|PACK_L", "ORDER-C-P01", 200);
         require(earlyEnd.isBatchFinalised("ORDER-C-P01") &&
             earlyEnd.getLargePackageCount() == 2,
             "last bottle closes the remaining partial large package");
@@ -258,7 +258,9 @@ public final class Member4ModelSelfTest {
             new SortPackControllerModelV1(2, 2, 1000);
         SortPackPlantModelV1 wrongLane = new SortPackPlantModelV1(10, 10);
         wrongLane.setForceWrongLane(true);
-        faulty.acceptBottleReady("SP3|L|500|GEOM_L|PACK_L", 0);
+        faulty.acceptBottleReady(
+            "SP3|L|500|GEOM_L|PACK_L", "FAULT-BATCH", 0
+        );
         for (long now = 0; now <= 50; now += 10) {
             transferSortPack(faulty, wrongLane, now);
         }
@@ -272,7 +274,7 @@ public final class Member4ModelSelfTest {
         SortPackPlantModelV1 unavailable = new SortPackPlantModelV1(0, 0);
         unavailable.setPackagePresent(false);
         missingPackage.acceptBottleReady(
-            "SP4|S|200|GEOM_S|PACK_S", 0
+            "SP4|S|200|GEOM_S|PACK_S", "MISSING-BATCH", 0
         );
         for (long now = 0; now <= 20; now++) {
             transferSortPack(missingPackage, unavailable, now);
@@ -366,9 +368,10 @@ public final class Member4ModelSelfTest {
         SortPackControllerModelV1 controller,
         SortPackPlantModelV1 plant,
         String context,
+        String batchId,
         long start
     ) {
-        require(controller.acceptBottleReady(context, start),
+        require(controller.acceptBottleReady(context, batchId, start),
             "SortPack accepts a new context");
         for (long now = start; now <= start + 80; now += 10) {
             transferSortPack(controller, plant, now);

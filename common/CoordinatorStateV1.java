@@ -9,8 +9,8 @@
 public final class CoordinatorStateV1 {
     private static final int COMPLETION_TRANSMISSION_ATTEMPTS = 3;
     private static final long COMPLETION_RETRY_MILLIS = 500L;
-    private static final int SIMULATION_BATCH_TRANSMISSION_ATTEMPTS = 3;
-    private static final long SIMULATION_BATCH_RETRY_MILLIS = 600L;
+    private static final int M4_BATCH_TRANSMISSION_ATTEMPTS = 3;
+    private static final long M4_BATCH_RETRY_MILLIS = 600L;
     private static final int SORT_PACK_BATCH_END_TRANSMISSION_ATTEMPTS = 3;
     private static final long SORT_PACK_BATCH_END_HOLD_MILLIS = 200L;
     private static final long SORT_PACK_BATCH_END_RETRY_MILLIS = 600L;
@@ -72,15 +72,18 @@ public final class CoordinatorStateV1 {
     public static boolean completionTransmissionStarted = false;
     public static String lastAcceptedOrderId = "";
 
-    // Simulation/integration-only M1 -> M4 batch trigger. This state does not
-    // alter START_ORDER or any frozen Controller interface.
-    private static final M1SimulationBatchOfferV1 m4SimulationBatchOffer =
-        new M1SimulationBatchOfferV1(
-            SIMULATION_BATCH_TRANSMISSION_ATTEMPTS,
-            SIMULATION_BATCH_RETRY_MILLIS
+    // Formal M1 -> M4 batch contract. This does not alter START_ORDER or any
+    // frozen Controller interface.
+    private static final M1M4BatchOfferV1 m4BatchOffer =
+        new M1M4BatchOfferV1(
+            M4_BATCH_TRANSMISSION_ATTEMPTS,
+            M4_BATCH_RETRY_MILLIS
         );
-    public static boolean m4SimulationBatchTransmissionStarted = false;
-    public static int lastM4SimulationBatchAttempt = 0;
+    public static boolean m4BatchTransmissionStarted = false;
+    public static int lastM4BatchAttempt = 0;
+
+    // Product-batch identity is shared by batch start and Sort/Pack boundary.
+    private static M1ProductBatchV1 currentProductBatch;
 
     // M1 -> M4 product-batch boundary. The queue prevents a later product
     // from replacing an earlier batch end while its bounded copies are still
@@ -242,31 +245,36 @@ public final class CoordinatorStateV1 {
         return currentCapacityMl;
     }
 
-    /** Current stable simulation-only batch identity. */
-    public static String currentM4SimulationBatchId() {
-        return m4SimulationBatchOffer.getBatchId();
+    /** Current stable M1 -> M4 batch identity. */
+    public static String currentM4BatchId() {
+        return m4BatchOffer.getBatchId();
     }
 
     /** Stable batchId|quantity|sizeCode payload, including after retries drain. */
-    public static String currentM4SimulationBatchPayload() {
-        return m4SimulationBatchOffer.getStablePayload();
+    public static String currentM4BatchPayload() {
+        return m4BatchOffer.getStablePayload();
+    }
+
+    /** Coordinator-owned batch payload, independent of transport delivery. */
+    public static String currentProductBatchPayload() {
+        return currentProductBatch == null ? null : currentProductBatch.encode();
     }
 
     /**
      * Returns three bounded 200 ms PRESENT windows with the identical batch
      * payload, separated by 600 ms ABSENT gaps. No receipt ACK is inferred.
      */
-    public static String nextM4SimulationBatchRequest() {
-        return nextM4SimulationBatchRequest(System.currentTimeMillis());
+    public static String nextM4BatchStart() {
+        return nextM4BatchStart(System.currentTimeMillis());
     }
 
-    static String nextM4SimulationBatchRequest(long nowMillis) {
-        int before = m4SimulationBatchOffer.getOfferCount();
-        String payload = m4SimulationBatchOffer.nextReactionValue(nowMillis);
-        lastM4SimulationBatchAttempt =
-            m4SimulationBatchOffer.getOfferCount();
-        m4SimulationBatchTransmissionStarted = payload != null &&
-            lastM4SimulationBatchAttempt > before;
+    static String nextM4BatchStart(long nowMillis) {
+        int before = m4BatchOffer.getOfferCount();
+        String payload = m4BatchOffer.nextReactionValue(nowMillis);
+        lastM4BatchAttempt =
+            m4BatchOffer.getOfferCount();
+        m4BatchTransmissionStarted = payload != null &&
+            lastM4BatchAttempt > before;
         return payload;
     }
 
@@ -276,11 +284,11 @@ public final class CoordinatorStateV1 {
     }
 
     static synchronized boolean finishCurrentSortPackBatch(long nowMillis) {
-        String payload = currentM4SimulationBatchPayload();
-        if (payload == null) {
+        if (currentProductBatch == null) {
             return false;
         }
-        String batchId = payload.split("\\|", -1)[0];
+        String payload = currentProductBatch.encode();
+        String batchId = currentProductBatch.getBatchId();
         if (!completedSortPackBatches.add(batchId)) {
             return true;
         }
@@ -394,8 +402,8 @@ public final class CoordinatorStateV1 {
             " productIndex=" + currentProductIndex +
             " completionRemaining=" + completionTransmissionsRemaining +
             " completionSignalActive=" + completionSignalActive +
-            " m4SimBatch=" + currentM4SimulationBatchPayload() +
-            " m4SimAttempt=" + lastM4SimulationBatchAttempt +
+            " m4Batch=" + currentM4BatchPayload() +
+            " m4BatchAttempt=" + lastM4BatchAttempt +
             " size=" + currentSizeCode +
             " capacityMl=" + currentCapacityMl +
             " resetState=" + systemResetState() +
@@ -760,40 +768,42 @@ public final class CoordinatorStateV1 {
             currentCapacityMl = OrderV2.SMALL_CAPACITY_ML;
         }
         completedBottles = 0;
-        beginM4SimulationBatch();
+        currentProductBatch = M1ProductBatchV1.forProduct(
+            currentOrderId(),
+            currentProductIndex + 1,
+            requiredBottles,
+            currentSizeCode
+        );
+        beginM4Batch();
         startOrderUntilMillis = System.currentTimeMillis() + 500L;
     }
 
     /**
-     * Arms the simulation-only M4 batch trigger for the product that was just
-     * loaded. This is an environmental side channel, so a payload it cannot
-     * represent - for example an order ID that OrderV1 accepts but the
-     * simulation transport does not - is reported and skipped. It must never
-     * abort order acceptance or a product transition.
+     * Arms the formal M4 batch-start transport for the product just loaded.
      */
-    private static void beginM4SimulationBatch() {
-        lastM4SimulationBatchAttempt = 0;
-        m4SimulationBatchTransmissionStarted = false;
+    private static void beginM4Batch() {
+        lastM4BatchAttempt = 0;
+        m4BatchTransmissionStarted = false;
         String rejection = null;
         try {
-            if (!m4SimulationBatchOffer.beginProductBatch(
-                currentOrderId(),
-                currentProductIndex + 1,
-                requiredBottles,
-                currentSizeCode,
+            if (currentProductBatch == null ||
+                !m4BatchOffer.beginBatch(
+                currentProductBatch.getBatchId(),
+                currentProductBatch.getQuantity(),
+                currentProductBatch.getSizeCode(),
                 System.currentTimeMillis()
             )) {
                 rejection = "conflicting quantity or size for " +
-                    m4SimulationBatchOffer.getBatchId();
+                    m4BatchOffer.getBatchId();
             }
         }
         catch (IllegalArgumentException invalid) {
             rejection = invalid.getMessage();
         }
         if (rejection != null) {
-            m4SimulationBatchOffer.discard();
+            m4BatchOffer.discard();
             System.out.println(
-                "[M1-M4-SIM] batch trigger skipped for order " +
+                "[M1-M4-BATCH] batch start skipped for order " +
                 currentOrderId() + " product " +
                 (currentProductIndex + 1) + ": " + rejection
             );
@@ -849,9 +859,10 @@ public final class CoordinatorStateV1 {
         completionSignalUntilMillis = 0L;
         completionTransmissionStarted = false;
 
-        m4SimulationBatchOffer.discard();
-        m4SimulationBatchTransmissionStarted = false;
-        lastM4SimulationBatchAttempt = 0;
+        m4BatchOffer.discard();
+        currentProductBatch = null;
+        m4BatchTransmissionStarted = false;
+        lastM4BatchAttempt = 0;
         sortPackBatchEndOffer.discard();
         pendingSortPackBatchEnds.clear();
         sortPackBatchEndTransmissionStarted = false;

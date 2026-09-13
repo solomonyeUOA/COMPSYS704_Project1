@@ -48,7 +48,7 @@ separate reset subsystem.
 | Coordinator -> M4 | `M4_SYSTEM_RESET` | Coordinator reset fan-out |
 | M4 -> Coordinator | `M4_SYSTEM_RESET_ACK` | Matching safe-state acknowledgement |
 | Coordinator -> Visualisation | `VIZ_SYSTEM_RESET` | Display-state reset notification |
-| Coordinator -> M4 simulator | `M4_SIM_BATCH_REQUEST` | Simulation-only `batchId|quantity|sizeCode` publication |
+| Coordinator -> M4 Registry | `M4_BATCH_START` | Formal `batchId|quantity|sizeCode` contract |
 | Coordinator -> M4 Sort/Pack | `SORT_PACK_BATCH_END` | `batchId|quantity|sizeCode`; closes the batch's partial package after every declared placement |
 
 M1's Coordinator-side reset orchestration and ACK barrier are implemented.
@@ -93,7 +93,7 @@ FillerAPlantCD / FillerBPlantCD (12004 / 12005)    [M4 implemented]
 CapperPlantCD (12007)                              [M4 implemented]
 
 RecognitionSimulatorCD (11014)                    [simulation only]
-  receives M1 M4_SIM_BATCH_REQUEST:String as batchId|quantity|sizeCode
+  receives M4-internal M4_SIM_BATCH_READY:String as batchId|quantity|sizeCode
 ```
 
 `LabellerControllerCD:11013`, the four M2 Plant Clock Domains and
@@ -102,13 +102,15 @@ Filling, Capping and Sort/Pack modules are implemented in
 `machines/filling_capping/`. Their cross-member profiles and hand-offs still
 require a physical end-to-end acceptance run.
 
-## Simulation-only M1 -> M4 batch trigger
+## M1 -> M4 batch contract and simulation adapter
 
 The six-runtime simulation uses `xuqi_coordinator/coordinator.xml` and
 `machines/filling_capping/member4_simulation.xml`. For every product batch,
 M1 derives a stable identity such as `PO0001-P01` and publishes
-`PO0001-P01|10|S` on `M4_SIM_BATCH_REQUEST`, where the third field is the POS
-bottle size `S` or `L`. M4 de-duplicates retries and emits exactly
+`PO0001-P01|10|S` on `M4_BATCH_START`, where the third field is the POS bottle
+size `S` or `L`. M4's Registry de-duplicates retries and, only in the
+simulation mapping, forwards the accepted contract to the simulator. The
+simulator emits exactly
 `PO0001-P01-B001` through `PO0001-P01-B010` at that size, then waits in
 `FINISHED` for a different batch ID. The same batch ID with a different
 quantity or a different size is a conflict, not a re-parameterisation. A batch
@@ -116,9 +118,16 @@ that stops on a context-distribution timeout also releases the simulator, so
 the next batch ID is still accepted. A second product uses `PO0001-P02` and
 restarts its bottle suffix at `B001`.
 
-This link is environmental simulation orchestration only. It is absent from
-the canonical `machines/filling_capping/member4_system.xml`, changes no
-Controller signal, and grants M1 no M4 actuator ownership. The old
+M1 owns the batch contract and uses the same identity for
+`SORT_PACK_BATCH_END`. Inside M4, the local recognition request carries
+`bottleId|sizeCode`; the Registry attaches its accepted `batchId` and preserves
+that association until the unchanged five-field bottle context returns from
+M2 for Sort/Pack.
+
+`M4_BATCH_START` is present in the canonical
+`machines/filling_capping/member4_system.xml`. Only the Registry-to-simulator
+adapter is simulation-specific. The contract changes no Controller signal and
+grants M1 no M4 actuator ownership. The old
 `m4.sim.quantity` property remains available only through the standalone Java
 state-model entry point, together with `m4.sim.size`; integrated
 `RecognitionSimulatorCD` ignores both and takes the size from the request.

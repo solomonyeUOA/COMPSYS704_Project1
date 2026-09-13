@@ -66,10 +66,15 @@ public final class SortPackControllerModelV1 {
         this.timeoutMs = timeoutMs;
     }
 
-    public boolean acceptBottleReady(String payload, long nowMs) {
+    public boolean acceptBottleReady(
+        String payload,
+        String batchId,
+        long nowMs
+    ) {
         M4BottleContextV1 context;
         try {
             context = M4BottleContextV1.parse(payload);
+            M4ProtocolV1.validateBottleId(batchId);
         }
         catch (IllegalArgumentException exception) {
             fail("INVALID_CONTEXT", nowMs);
@@ -89,7 +94,6 @@ public final class SortPackControllerModelV1 {
             return false;
         }
 
-        String batchId = batchIdForBottle(context.getBottleId());
         BatchState batch = batch(batchId, context.getSizeCode());
         if (batch.finalised) {
             fail("BATCH_ALREADY_FINALISED", nowMs);
@@ -362,20 +366,6 @@ public final class SortPackControllerModelV1 {
     private int packageCapacity(String sizeCode) {
         return M4BottleContextV1.SMALL.equals(sizeCode) ?
             smallPackageCapacity : largePackageCapacity;
-    }
-
-    /** Unknown bottle formats are isolated as one-bottle batches, never mixed. */
-    private static String batchIdForBottle(String bottleId) {
-        int marker = bottleId.lastIndexOf("-B");
-        if (marker <= 0 || marker + 2 >= bottleId.length()) {
-            return bottleId;
-        }
-        for (int index = marker + 2; index < bottleId.length(); index++) {
-            if (!Character.isDigit(bottleId.charAt(index))) {
-                return bottleId;
-            }
-        }
-        return bottleId.substring(0, marker);
     }
 
     private void queue(String action, String value) {

@@ -1,6 +1,7 @@
 /** Thread-safe shared Controller state for the M4 SystemJ clock domains. */
 public final class Member4MachineStateV1 {
     private static BottleContextRegistryModelV1 registry;
+    private static M4BatchRegistryModelV1 batchRegistry;
     private static FillerControllerModelV1 fillerA;
     private static FillerControllerModelV1 fillerB;
     private static CapperControllerModelV1 capper;
@@ -42,6 +43,7 @@ public final class Member4MachineStateV1 {
             "m4.sortpack.largePackageCapacity", 2, 1
         );
         registry = new BottleContextRegistryModelV1();
+        batchRegistry = new M4BatchRegistryModelV1();
         fillerA = new FillerControllerModelV1(
             FillerControllerModelV1.LIQUID_A, tolerance, overflowMargin,
             timeout
@@ -69,12 +71,20 @@ public final class Member4MachineStateV1 {
     }
 
     public static synchronized boolean acceptRecognition(String payload) {
-        if (!M4ResetFenceV1.accept(payload)) { return false; }
         try {
+            M4BottleContextV1 recognised =
+                M4BottleContextV1.fromRecognition(payload);
+            if (!M4ResetFenceV1.acceptRecognition(
+                recognised.getBottleId(), recognised.getBatchId()
+            )) {
+                return false;
+            }
+            batchRegistry.validateRecognition(recognised);
             String context = registry.acceptRecognition(payload);
             if (context == null) {
                 return false;
             }
+            batchRegistry.recordRecognition(recognised);
             long now = System.currentTimeMillis();
             rotaryContextEvent.publish(context, now);
             loadProfileEvent.publish(context, now);
@@ -84,6 +94,21 @@ public final class Member4MachineStateV1 {
         catch (IllegalArgumentException exception) {
             return false;
         }
+    }
+
+    /** Receives the formal M1 product-batch contract. */
+    public static synchronized String acceptBatchStart(String payload) {
+        if (M4ResetFenceV1.isQuarantined()) {
+            retireBatchPayload(payload);
+            return null;
+        }
+        return batchRegistry.acceptBatchStart(payload);
+    }
+
+    /** Correlates M4-local recognition with the current registered batch. */
+    public static synchronized String recogniseBottle(String request) {
+        if (M4ResetFenceV1.isQuarantined()) { return null; }
+        return batchRegistry.recognise(request);
     }
 
     public static synchronized String takeRotaryContext() {
@@ -147,16 +172,34 @@ public final class Member4MachineStateV1 {
         String context
     ) {
         if (!M4ResetFenceV1.accept(context)) { return false; }
-        return sortPack.acceptBottleReady(
-            context,
-            System.currentTimeMillis()
-        );
+        try {
+            M4BottleContextV1 transferred = M4BottleContextV1.parse(context);
+            M4BottleContextV1 registered = registry.get(
+                transferred.getBottleId()
+            );
+            if (registered == null || registered.getBatchId() == null ||
+                !registered.encode().equals(transferred.encode())) {
+                return false;
+            }
+            return sortPack.acceptBottleReady(
+                context,
+                registered.getBatchId(),
+                System.currentTimeMillis()
+            );
+        }
+        catch (IllegalArgumentException invalid) {
+            return false;
+        }
     }
 
     public static synchronized boolean acceptSortPackBatchEnd(
         String batchEnd
     ) {
-        if (M4ResetFenceV1.isQuarantined()) { return false; }
+        if (M4ResetFenceV1.isQuarantined()) {
+            retireBatchPayload(batchEnd);
+            return false;
+        }
+        if (!batchRegistry.acceptsBatchEnd(batchEnd)) { return false; }
         return sortPack.acceptBatchEnd(
             batchEnd,
             System.currentTimeMillis()
@@ -355,6 +398,20 @@ public final class Member4MachineStateV1 {
             event.publish(nextCommand, now);
         }
         return event.take(now);
+    }
+
+    private static void retireBatchPayload(String payload) {
+        if (payload == null) { return; }
+        String[] fields = payload.split("\\|", -1);
+        if (fields.length > 0 && fields[0].length() > 0) {
+            try {
+                M4ProtocolV1.validateBottleId(fields[0]);
+                M4ResetFenceV1.retireBatch(fields[0]);
+            }
+            catch (IllegalArgumentException invalid) {
+                // Malformed input has no usable identity to fence.
+            }
+        }
     }
 
     private static int integerProperty(

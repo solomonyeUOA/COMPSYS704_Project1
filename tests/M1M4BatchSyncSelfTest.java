@@ -7,7 +7,7 @@ public final class M1M4BatchSyncSelfTest {
         caseARetryKeepsIdenticalBatchId();
         caseBNextProductCreatesNewBatchId();
         caseCSamePayloadDoesNotMutateIdentity();
-        caseDInvalidOrderIdSkipsTheTrigger();
+        caseDTransportHostileOrderGetsCanonicalBatch();
         caseEReplacementAndDiscardCancelHeldCopy();
         caseFHeldCopiesRemainIdempotentAtM4();
         caseGSystemResetCancelsHeldBatchWithoutInventingAck();
@@ -17,8 +17,8 @@ public final class M1M4BatchSyncSelfTest {
     }
 
     private static void caseARetryKeepsIdenticalBatchId() {
-        M1SimulationBatchOfferV1 offer =
-            new M1SimulationBatchOfferV1(3, 600L);
+        M1M4BatchOfferV1 offer =
+            new M1M4BatchOfferV1(3, 600L);
         require(offer.beginProductBatch("PO0001", 1, 20, "S", 0L),
             "M1-A initial product batch");
         String expected = "PO0001-P01|20|S";
@@ -57,36 +57,36 @@ public final class M1M4BatchSyncSelfTest {
             "PO0100|2|APPLE,S,60,40,1;BERRY,L,25,75,3"
         ), "M1-B multi-product order accepted");
         require("PO0100-P01".equals(
-            CoordinatorStateV1.currentM4SimulationBatchId()),
+            CoordinatorStateV1.currentM4BatchId()),
             "M1-B first product batch ID");
         require("PO0100-P01|1|S".equals(
-            CoordinatorStateV1.currentM4SimulationBatchPayload()),
+            CoordinatorStateV1.currentM4BatchPayload()),
             "M1-B first product payload");
         require(CoordinatorStateV1.recordBottleDone(),
             "M1-B first product completes");
         CoordinatorStateV1.advanceToNextProduct();
         require("PO0100-P02".equals(
-            CoordinatorStateV1.currentM4SimulationBatchId()),
+            CoordinatorStateV1.currentM4BatchId()),
             "M1-B next product gets a new ID");
         require("PO0100-P02|3|L".equals(
-            CoordinatorStateV1.currentM4SimulationBatchPayload()),
+            CoordinatorStateV1.currentM4BatchPayload()),
             "M1-B next product quantity follows POS order");
 
         CoordinatorStateV1.nextStatusPollMillis = Long.MAX_VALUE;
         Coordinator coordinator = new Coordinator("M1M4BatchProbe");
         coordinator.init();
-        coordinator.M4_SIM_BATCH_REQUEST.setClear();
+        coordinator.M4_BATCH_START.setClear();
         coordinator.runClockDomain();
-        require(coordinator.M4_SIM_BATCH_REQUEST.getStatus(),
-            "M1-B generated Coordinator emits simulation request");
+        require(coordinator.M4_BATCH_START.getStatus(),
+            "M1-B generated Coordinator emits batch start");
         require("PO0100-P02|3|L".equals(
-            coordinator.M4_SIM_BATCH_REQUEST.getValue()),
+            coordinator.M4_BATCH_START.getValue()),
             "M1-B generated Coordinator carries stable payload");
     }
 
     private static void caseCSamePayloadDoesNotMutateIdentity() {
-        M1SimulationBatchOfferV1 offer =
-            new M1SimulationBatchOfferV1(3, 600L);
+        M1M4BatchOfferV1 offer =
+            new M1M4BatchOfferV1(3, 600L);
         require(offer.beginProductBatch("PO0200", 1, 10, "L", 0L),
             "M1-C batch accepted");
         String stable = offer.getStablePayload();
@@ -112,26 +112,33 @@ public final class M1M4BatchSyncSelfTest {
             "M1-C duplicates/conflicts cannot extend the original hold deadline");
     }
 
-    private static void caseDInvalidOrderIdSkipsTheTrigger() {
-        // OrderV1 accepts any non-empty order ID, a space included, but the
-        // simulation transport requires printable ASCII without spaces. That
-        // mismatch must be reported and skipped, never thrown into the
-        // Coordinator clock domain where it would abort order acceptance.
+    private static void caseDTransportHostileOrderGetsCanonicalBatch() {
+        // OrderV1 accepts IDs that cannot be placed directly on M4's transport.
+        // The production contract must still exist and the simulation uses the
+        // same reversible, transport-safe batch identity.
         CoordinatorStateV1.completeOrder();
         require(CoordinatorStateV1.accept("PO 001|1|P1,60,40,2"),
-            "M1-D order with a transport-hostile ID is still accepted");
+            "M1-D order with a transport-hostile ID is accepted");
         require(CoordinatorStateV1.requiredBottles == 2 &&
             CoordinatorStateV1.orderActive,
             "M1-D production state is unaffected");
-        require(CoordinatorStateV1.currentM4SimulationBatchId() == null &&
-            CoordinatorStateV1.currentM4SimulationBatchPayload() == null,
-            "M1-D no simulation batch identity is retained");
-        require(CoordinatorStateV1.nextM4SimulationBatchRequest() == null,
-            "M1-D nothing is published for the skipped batch");
+        String expected = "OID~504F20303031-P01|2|S";
+        require(expected.equals(CoordinatorStateV1.currentProductBatchPayload()) &&
+            expected.equals(CoordinatorStateV1.currentM4BatchPayload()),
+            "M1-D production and simulation share the canonical contract");
+        require(expected.equals(
+            CoordinatorStateV1.nextM4BatchStart()),
+            "M1-D canonical batch is published to M4");
+        require(!CoordinatorStateV1.recordBottleDone() &&
+            CoordinatorStateV1.recordBottleDone() &&
+            CoordinatorStateV1.finishCurrentSortPackBatch(1L),
+            "M1-D completed product queues its formal packaging boundary");
+        require(expected.equals(CoordinatorStateV1.nextSortPackBatchEnd(1L)),
+            "M1-D packaging boundary does not depend on simulator state");
     }
 
     private static void caseEReplacementAndDiscardCancelHeldCopy() {
-        M1SimulationBatchOfferV1 offer = new M1SimulationBatchOfferV1(3, 600L);
+        M1M4BatchOfferV1 offer = new M1M4BatchOfferV1(3, 600L);
         offer.beginProductBatch("PO0300", 1, 1, "S", 0L);
         require("PO0300-P01|1|S".equals(offer.nextReactionValue(0L)),
             "M1-E original copy is active");
@@ -148,7 +155,7 @@ public final class M1M4BatchSyncSelfTest {
     }
 
     private static void caseFHeldCopiesRemainIdempotentAtM4() {
-        M1SimulationBatchOfferV1 offer = new M1SimulationBatchOfferV1(3, 600L);
+        M1M4BatchOfferV1 offer = new M1M4BatchOfferV1(3, 600L);
         RecognitionSimulatorStateV1 simulator =
             RecognitionSimulatorStateV1.batchDrivenFromProperties(
                 new java.util.Properties(), 0L);
@@ -158,7 +165,8 @@ public final class M1M4BatchSyncSelfTest {
         require(simulator.startBatchPayload(offer.nextReactionValue(150L), 150L) ==
             RecognitionSimulatorStateV1.BatchStartResult.ACCEPTED,
             "M1-F delayed receiver samples the still-held batch");
-        require("PO0400-P01-B001|L".equals(simulator.tick(150L, false)),
+        require("PO0400-P01-B001|L".equals(
+            simulator.tick(150L, false)),
             "M1-F exactly one batch-prefixed bottle starts");
         for (long now = 151L; now < 200L; now++) {
             require(simulator.startBatchPayload(offer.nextReactionValue(now), now) ==
@@ -181,19 +189,19 @@ public final class M1M4BatchSyncSelfTest {
             "M1-G order accepted");
         long now = System.currentTimeMillis();
         require("PO0500-P01|1|S".equals(
-            CoordinatorStateV1.nextM4SimulationBatchRequest(now)) &&
-            CoordinatorStateV1.m4SimulationBatchTransmissionStarted,
+            CoordinatorStateV1.nextM4BatchStart(now)) &&
+            CoordinatorStateV1.m4BatchTransmissionStarted,
             "M1-G first held batch window starts");
         require("PO0500-P01|1|S".equals(
-            CoordinatorStateV1.nextM4SimulationBatchRequest(now + 1L)) &&
-            !CoordinatorStateV1.m4SimulationBatchTransmissionStarted &&
-            CoordinatorStateV1.lastM4SimulationBatchAttempt == 1,
+            CoordinatorStateV1.nextM4BatchStart(now + 1L)) &&
+            !CoordinatorStateV1.m4BatchTransmissionStarted &&
+            CoordinatorStateV1.lastM4BatchAttempt == 1,
             "M1-G repeated held reaction is not a new attempt");
         require(CoordinatorStateV1.beginSystemReset("RST0001", now + 10L),
             "M1-G reset accepted during held delivery");
-        require(CoordinatorStateV1.nextM4SimulationBatchRequest(now + 20L) == null &&
-            CoordinatorStateV1.nextM4SimulationBatchRequest(now + 10000L) == null &&
-            CoordinatorStateV1.currentM4SimulationBatchPayload() == null,
+        require(CoordinatorStateV1.nextM4BatchStart(now + 20L) == null &&
+            CoordinatorStateV1.nextM4BatchStart(now + 10000L) == null &&
+            CoordinatorStateV1.currentM4BatchPayload() == null,
             "M1-G reset cancels old batch and retries");
         require(!CoordinatorStateV1.m2SystemResetAcknowledged &&
             !CoordinatorStateV1.m3SystemResetAcknowledged &&

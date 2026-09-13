@@ -35,7 +35,7 @@ public final class RecognitionSimulatorSelfTest {
         );
         require(profiles.size() == 1,
             "M4-D q1 must produce exactly one profile");
-        require("PO0001-P01-B001|S|200".equals(profiles.get(0)),
+        require("PO0001-P01-B001|PO0001-P01|S|200".equals(profiles.get(0)),
             "M4-D q1 profile identity");
     }
 
@@ -46,9 +46,9 @@ public final class RecognitionSimulatorSelfTest {
         );
         require(profiles.size() == 3,
             "M4-E q3 must produce exactly three profiles");
-        require("PO0001-P01-B001|S|200".equals(profiles.get(0)),
+        require("PO0001-P01-B001|PO0001-P01|S|200".equals(profiles.get(0)),
             "M4-E first profile");
-        require("PO0001-P01-B003|S|200".equals(profiles.get(2)),
+        require("PO0001-P01-B003|PO0001-P01|S|200".equals(profiles.get(2)),
             "M4-E final profile");
     }
 
@@ -57,7 +57,8 @@ public final class RecognitionSimulatorSelfTest {
         require(simulator.startBatch("PO0002-P01", 3, 0L) ==
             RecognitionSimulatorStateV1.BatchStartResult.ACCEPTED,
             "M4-F initial batch accepted");
-        require("PO0002-P01-B001|S".equals(simulator.tick(0L, false)),
+        require("PO0002-P01-B001|S".equals(
+            simulator.tick(0L, false)),
             "M4-F first request");
         require(simulator.startBatch("PO0002-P01", 3, 1L) ==
             RecognitionSimulatorStateV1.BatchStartResult.DUPLICATE,
@@ -98,7 +99,8 @@ public final class RecognitionSimulatorSelfTest {
         require(simulator.startBatch("PO0004-P02", 2, 20L) ==
             RecognitionSimulatorStateV1.BatchStartResult.ACCEPTED,
             "M4-H next product accepted after finish");
-        require("PO0004-P02-B001|S".equals(simulator.tick(20L, false)),
+        require("PO0004-P02-B001|S".equals(
+            simulator.tick(20L, false)),
             "M4-H next product starts from B001");
     }
 
@@ -127,7 +129,8 @@ public final class RecognitionSimulatorSelfTest {
                     "%03d",
                     Integer.valueOf(index + 1)
                 );
-            require(profiles.get(index).startsWith(expected + "|"),
+            require(profiles.get(index).startsWith(
+                expected + "|PO0042-P02|"),
                 "M4-J batch-prefixed bottle " + (index + 1));
         }
     }
@@ -142,10 +145,13 @@ public final class RecognitionSimulatorSelfTest {
         );
         require(productOne.size() == 10 && productTwo.size() == 5,
             "multi-product quantities remain independent");
-        require("PO0001-P01-B010|S|200".equals(productOne.get(9)),
+        require("PO0001-P01-B010|PO0001-P01|S|200".equals(
+            productOne.get(9)),
             "first product finishes with its own B010");
-        require("PO0001-P02-B001|S|200".equals(productTwo.get(0)) &&
-            "PO0001-P02-B005|S|200".equals(productTwo.get(4)),
+        require("PO0001-P02-B001|PO0001-P02|S|200".equals(
+                productTwo.get(0)) &&
+            "PO0001-P02-B005|PO0001-P02|S|200".equals(
+                productTwo.get(4)),
             "second product restarts at B001 and finishes at B005");
     }
 
@@ -154,7 +160,8 @@ public final class RecognitionSimulatorSelfTest {
         require(simulator.startBatch("PO0007-P01", 3, 0L) ==
             RecognitionSimulatorStateV1.BatchStartResult.ACCEPTED,
             "M4-L first batch accepted");
-        require("PO0007-P01-B001|S".equals(simulator.tick(0L, false)),
+        require("PO0007-P01-B001|S".equals(
+            simulator.tick(0L, false)),
             "M4-L first request");
         require(simulator.tick(1000L, false) == null &&
             simulator.failureReason() != null,
@@ -172,7 +179,8 @@ public final class RecognitionSimulatorSelfTest {
             "M4-L next batch accepted after a timeout");
         require(simulator.failureReason() == null,
             "M4-L accepted batch clears the previous failure");
-        require("PO0007-P02-B001|S".equals(simulator.tick(2000L, false)),
+        require("PO0007-P02-B001|S".equals(
+            simulator.tick(2000L, false)),
             "M4-L next batch restarts at B001");
         simulator.tick(2001L, true);
         completeRemaining(simulator, 2011L, 1);
@@ -185,8 +193,8 @@ public final class RecognitionSimulatorSelfTest {
         List<String> large = generateBatch(
             simulator, "PO0008-P01", 2, M4BottleContextV1.LARGE, 0L
         );
-        require("PO0008-P01-B001|L|500".equals(large.get(0)) &&
-            "PO0008-P01-B002|L|500".equals(large.get(1)),
+        require("PO0008-P01-B001|PO0008-P01|L|500".equals(large.get(0)) &&
+            "PO0008-P01-B002|PO0008-P01|L|500".equals(large.get(1)),
             "M4-M L batch carries the 500 mL profile");
 
         // The receiver is no longer parameterised by one global size, so the
@@ -194,7 +202,7 @@ public final class RecognitionSimulatorSelfTest {
         List<String> small = generateBatch(
             simulator, "PO0008-P02", 1, M4BottleContextV1.SMALL, 100L
         );
-        require("PO0008-P02-B001|S|200".equals(small.get(0)),
+        require("PO0008-P02-B001|PO0008-P02|S|200".equals(small.get(0)),
             "M4-M next batch switches back to the 200 mL profile");
 
         require(simulator.startBatch("PO0008-P03", 1, "XL", 200L) ==
@@ -213,7 +221,8 @@ public final class RecognitionSimulatorSelfTest {
         require(simulator.batchQuantity() == 3 &&
             M4BottleContextV1.SMALL.equals(simulator.batchSizeCode()),
             "M4-N contract stores quantity and size");
-        require("PO0001-P01-B001|S".equals(simulator.tick(0L, false)),
+        require("PO0001-P01-B001|S".equals(
+            simulator.tick(0L, false)),
             "M4-N recognition request carries the requested size");
 
         // Same ID + same quantity + same size is an M1 retry.
@@ -318,7 +327,7 @@ public final class RecognitionSimulatorSelfTest {
             "integrated quantity matrix q10 profile count");
         require(q20.size() == 20,
             "integrated quantity matrix q20 profile count");
-        require("PO0020-P01-B020|S|200".equals(q20.get(19)),
+        require("PO0020-P01-B020|PO0020-P01|S|200".equals(q20.get(19)),
             "integrated q20 final profile identity");
         System.out.println(
             "M4_AUTO_PROFILE_COUNTS q1=1 q3=3 q10=" + q10.size() +
@@ -344,7 +353,9 @@ public final class RecognitionSimulatorSelfTest {
         for (int bottle = 1; bottle <= quantity; bottle++) {
             String request = simulator.tick(now, false);
             require(request != null, "missing request for bottle " + bottle);
-            String profile = RecognitionPlantModelV1.recognise(request);
+            String profile = RecognitionPlantModelV1.recognise(
+                request, batchId, sizeCode
+            );
             require(profile != null, "recognition failed for " + request);
             profiles.add(profile);
             require(simulator.tick(now + 1L, true) == null,
@@ -434,10 +445,14 @@ public final class RecognitionSimulatorSelfTest {
             "final copy drains");
 
         Member4MachineStateV1.reset();
+        require("TEST-BATCH|1|S".equals(
+            Member4MachineStateV1.acceptBatchStart("TEST-BATCH|1|S")
+        ), "formal M4 batch is registered before recognition");
         require(!Member4MachineStateV1.isContextDistributionComplete(
             "TEST-B001", "S"),
             "unrecognised bottle cannot advance simulator");
-        Member4MachineStateV1.acceptRecognition("TEST-B001|S|200");
+        Member4MachineStateV1.acceptRecognition(
+            "TEST-B001|TEST-BATCH|S|200");
         require(!Member4MachineStateV1.isContextDistributionComplete(
             "TEST-B001", "S"),
             "registration alone is insufficient while copies remain");

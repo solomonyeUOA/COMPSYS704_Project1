@@ -8,6 +8,7 @@ public final class M4BottleContextV1 {
     public static final String PACKAGING_LARGE = "PACK_L";
 
     private final String bottleId;
+    private final String batchId;
     private final String sizeCode;
     private final int capacityMl;
     private final String geometryProfileId;
@@ -20,7 +21,28 @@ public final class M4BottleContextV1 {
         String geometryProfileId,
         String packagingProfileId
     ) {
+        this(
+            bottleId,
+            null,
+            sizeCode,
+            capacityMl,
+            geometryProfileId,
+            packagingProfileId
+        );
+    }
+
+    private M4BottleContextV1(
+        String bottleId,
+        String batchId,
+        String sizeCode,
+        int capacityMl,
+        String geometryProfileId,
+        String packagingProfileId
+    ) {
         M4ProtocolV1.validateBottleId(bottleId);
+        if (batchId != null) {
+            M4ProtocolV1.validateBottleId(batchId);
+        }
         boolean small = SMALL.equals(sizeCode) && capacityMl == 200 &&
             GEOMETRY_SMALL.equals(geometryProfileId) &&
             PACKAGING_SMALL.equals(packagingProfileId);
@@ -31,6 +53,7 @@ public final class M4BottleContextV1 {
             throw new IllegalArgumentException("unsupported bottle context");
         }
         this.bottleId = bottleId;
+        this.batchId = batchId;
         this.sizeCode = sizeCode;
         this.capacityMl = capacityMl;
         this.geometryProfileId = geometryProfileId;
@@ -38,16 +61,18 @@ public final class M4BottleContextV1 {
     }
 
     public static M4BottleContextV1 fromRecognition(String payload) {
-        String[] fields = M4ProtocolV1.fields(payload, 3);
-        int capacity = M4ProtocolV1.unsignedInteger(fields[2], "capacityMl");
-        if (SMALL.equals(fields[1]) && capacity == 200) {
+        String[] fields = M4ProtocolV1.fields(payload, 4);
+        int capacity = M4ProtocolV1.unsignedInteger(fields[3], "capacityMl");
+        if (SMALL.equals(fields[2]) && capacity == 200) {
             return new M4BottleContextV1(
-                fields[0], SMALL, 200, GEOMETRY_SMALL, PACKAGING_SMALL
+                fields[0], fields[1], SMALL, 200,
+                GEOMETRY_SMALL, PACKAGING_SMALL
             );
         }
-        if (LARGE.equals(fields[1]) && capacity == 500) {
+        if (LARGE.equals(fields[2]) && capacity == 500) {
             return new M4BottleContextV1(
-                fields[0], LARGE, 500, GEOMETRY_LARGE, PACKAGING_LARGE
+                fields[0], fields[1], LARGE, 500,
+                GEOMETRY_LARGE, PACKAGING_LARGE
             );
         }
         throw new IllegalArgumentException("size/capacity mismatch");
@@ -76,6 +101,11 @@ public final class M4BottleContextV1 {
 
     public String getBottleId() {
         return bottleId;
+    }
+
+    /** Present only on the registry's internal recognised-bottle record. */
+    public String getBatchId() {
+        return batchId;
     }
 
     public String getSizeCode() {
@@ -108,12 +138,18 @@ public final class M4BottleContextV1 {
 
     @Override
     public boolean equals(Object other) {
-        return other instanceof M4BottleContextV1 &&
-            encode().equals(((M4BottleContextV1) other).encode());
+        if (!(other instanceof M4BottleContextV1)) {
+            return false;
+        }
+        M4BottleContextV1 candidate = (M4BottleContextV1) other;
+        return encode().equals(candidate.encode()) &&
+            (batchId == null ? candidate.batchId == null :
+                batchId.equals(candidate.batchId));
     }
 
     @Override
     public int hashCode() {
-        return encode().hashCode();
+        return 31 * encode().hashCode() +
+            (batchId == null ? 0 : batchId.hashCode());
     }
 }
