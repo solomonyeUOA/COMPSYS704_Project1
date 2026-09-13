@@ -9,6 +9,11 @@ import java.awt.GridBagLayout;
 import java.awt.Insets;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -32,6 +37,8 @@ import javax.swing.SwingUtilities;
  */
 public final class POSVisualisation {
     private static final String TEST_ORDER_PROPERTY = "abs.pos.testOrder";
+    private static final String LAUNCHER_SHUTDOWN_FILE_PROPERTY =
+        "abs.launcher.shutdownFile";
     private static final long TEST_RESET_DELAY_MILLIS = Long.getLong(
         "abs.pos.testResetDelayMillis",
         Long.valueOf(-1L)
@@ -105,6 +112,7 @@ public final class POSVisualisation {
     private final List<ProductInputRow> productRows;
     private final JButton submitButton;
     private final JButton resetButton;
+    private final JButton exitButton;
     private final JLabel submissionStatus;
     private final JLabel completionStatus;
 
@@ -160,9 +168,18 @@ public final class POSVisualisation {
                 confirmAndRequestSystemReset();
             }
         });
+        exitButton = new JButton("Exit Program");
+        exitButton.setForeground(new Color(120, 50, 25));
+        exitButton.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent event) {
+                confirmAndExitProgram();
+            }
+        });
         JPanel actionPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 12, 0));
         actionPanel.add(submitButton);
         actionPanel.add(resetButton);
+        actionPanel.add(exitButton);
         constraints.gridy = 2;
         constraints.insets = new Insets(8, 0, 4, 0);
         form.add(actionPanel, constraints);
@@ -186,7 +203,7 @@ public final class POSVisualisation {
         form.add(completionStatus, constraints);
 
         frame.add(form, BorderLayout.CENTER);
-        frame.setPreferredSize(new Dimension(470, 500));
+        frame.setPreferredSize(new Dimension(560, 500));
         frame.pack();
         frame.setLocationByPlatform(true);
         frame.setResizable(false);
@@ -500,6 +517,55 @@ public final class POSVisualisation {
         submitButton.setEnabled(false);
         submissionStatus.setForeground(new Color(35, 90, 155));
         submissionStatus.setText("Submitting order...");
+    }
+
+    /** Requests coordinated launcher shutdown; does not leave peer CDs running. */
+    private void confirmAndExitProgram() {
+        int choice = JOptionPane.showConfirmDialog(
+            frame,
+            "Exit Program stops POS, visualization, M2, M3, M4 and Coordinator.\n" +
+                "Any active order will be stopped.",
+            "Exit complete simulation?",
+            JOptionPane.YES_NO_OPTION,
+            JOptionPane.WARNING_MESSAGE
+        );
+        if (choice != JOptionPane.YES_OPTION) {
+            return;
+        }
+        String shutdownFile = System.getProperty(
+            LAUNCHER_SHUTDOWN_FILE_PROPERTY, ""
+        ).trim();
+        if (shutdownFile.length() == 0) {
+            JOptionPane.showMessageDialog(
+                frame,
+                "This POS was not started by tools/project.py.\n" +
+                    "Stop the manually started runtimes from their launcher.",
+                "Launcher unavailable",
+                JOptionPane.WARNING_MESSAGE
+            );
+            return;
+        }
+        try {
+            requestLauncherShutdown(shutdownFile);
+            submitButton.setEnabled(false);
+            resetButton.setEnabled(false);
+            exitButton.setEnabled(false);
+            submissionStatus.setText("Stopping all project runtimes...");
+            frame.dispose();
+        } catch (IOException error) {
+            JOptionPane.showMessageDialog(
+                frame,
+                "Could not request launcher shutdown: " + error.getMessage(),
+                "Exit Program failed",
+                JOptionPane.ERROR_MESSAGE
+            );
+        }
+    }
+
+    /** Writes the per-run request consumed by the Python process launcher. */
+    static void requestLauncherShutdown(String shutdownFile) throws IOException {
+        Path request = Paths.get(shutdownFile);
+        Files.write(request, "POS Exit Program\n".getBytes(StandardCharsets.UTF_8));
     }
 
     private static void showCompletion(

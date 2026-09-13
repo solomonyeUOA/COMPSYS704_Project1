@@ -120,6 +120,7 @@ def run(args):
     cp = str(ROOT / "build/classes") + os.pathsep + str(lib / "*")
     run_dir = ROOT / "build/runs" / datetime.now().strftime("%Y%m%d-%H%M%S-%f")
     run_dir.mkdir(parents=True)
+    shutdown_request = run_dir / "exit-program.request"
     configs = []
     ports = set()
     ET.register_namespace("", "http://systemjtechnology.com")
@@ -145,11 +146,14 @@ def run(args):
     processes = []
     handles = []
     print(f"Run logs: {run_dir}\nPress Ctrl+C in this terminal to stop every runtime.", flush=True)
+    print("Use Exit Program in POS to stop all six runtimes from the GUI.", flush=True)
     print(f"Simulation physical actions/timeouts: {args.demo_slowdown}x normal durations. "
           "Telemetry, clocks, transport and heartbeats stay real-time; overall order time is not a fixed multiplier.", flush=True)
     try:
         for name, config in configs:
             options = runtime_options(name, args)
+            if name == "pos":
+                options.append("-Dabs.launcher.shutdownFile=" + str(shutdown_request))
             output = open(run_dir / (name + ".out.log"), "w", encoding="utf-8")
             errors = open(run_dir / (name + ".err.log"), "w", encoding="utf-8")
             handles += [output, errors]
@@ -161,6 +165,9 @@ def run(args):
             time.sleep(0.5)
         started = time.monotonic()
         while args.duration is None or time.monotonic() - started < args.duration:
+            if shutdown_request.exists():
+                print("Exit Program requested from POS; stopping project runtimes...", flush=True)
+                break
             for name, child in processes:
                 if child.poll() is not None:
                     raise RuntimeError(f"{name} exited with {child.returncode}; see {run_dir}")

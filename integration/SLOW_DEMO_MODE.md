@@ -13,6 +13,13 @@ Default 1 preserves normal timing. Use 10 for longer viewing, and restart to
 change it; this is not a live speed slider. Rebuild after pulling changes before
 using `--no-build`. Stop existing runs before rebuilding their shared classes.
 
+Use **Exit Program** in the POS window to request a coordinated shutdown of all
+six runtimes. Confirm the warning, then wait for `Stopped. Evidence retained in`
+in the launcher terminal. Closing the POS or visualization window alone does not
+stop the other Clock Domains. For an old run with no launcher terminal, identify
+the Project1 owner by port before stopping it; do not stop every `java.exe` on
+the computer.
+
 ## Timing and telemetry
 
 Every runtime receives the same immutable JVM property
