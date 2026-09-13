@@ -23,6 +23,7 @@ public final class CapperControllerModelV1 {
     private final long timeoutMs;
     private final Queue<String> plantCommands = new ArrayDeque<String>();
     private final Set<String> completedBottleIds = new HashSet<String>();
+    private final Set<String> acceptedPlantFeedback = new HashSet<String>();
     private Stage stage = Stage.WAITING;
     private int status = M4StatusV1.READY;
     private M4BottleContextV1 activeContext;
@@ -67,14 +68,12 @@ public final class CapperControllerModelV1 {
         completion = null;
         faultReason = "-";
         lastPlantFeedback = null;
+        acceptedPlantFeedback.clear();
         queue("SET_GEOMETRY", context.getGeometryProfileId());
         return true;
     }
 
     public void acceptPlantFeedback(String payload, long nowMs) {
-        if (payload != null && payload.equals(lastPlantFeedback)) {
-            return;
-        }
         String[] fields;
         try {
             fields = M4ProtocolV1.fields(payload, 3);
@@ -83,13 +82,19 @@ public final class CapperControllerModelV1 {
             fail("MALFORMED_PLANT_FEEDBACK", nowMs);
             return;
         }
-        if (activeContext == null ||
-            !activeContext.getBottleId().equals(fields[0])) {
+        if (activeContext == null) {
             fail("PLANT_IDENTITY_MISMATCH", nowMs);
             return;
         }
+        if (!activeContext.getBottleId().equals(fields[0])) {
+            if (completedBottleIds.contains(fields[0])) { return; }
+            fail("PLANT_IDENTITY_MISMATCH", nowMs);
+            return;
+        }
+        if (acceptedPlantFeedback.contains(payload)) { return; }
         String event = fields[1];
         String value = fields[2];
+        acceptedPlantFeedback.add(payload);
         lastPlantFeedback = payload;
         if ("FAULT".equals(event)) {
             fail(value, nowMs);
@@ -204,6 +209,7 @@ public final class CapperControllerModelV1 {
         faultReason = "-";
         plantCommands.clear();
         lastPlantFeedback = null;
+        acceptedPlantFeedback.clear();
         return true;
     }
 
