@@ -1,5 +1,7 @@
 import java.util.ArrayDeque;
+import java.util.HashSet;
 import java.util.Queue;
+import java.util.Set;
 
 /** Simulated filler Plant with explicit geometry, valve and refill state. */
 public final class FillerPlantModelV1 {
@@ -20,6 +22,8 @@ public final class FillerPlantModelV1 {
     private final long refillDelayMs;
     private final int shutoffLeadMl;
     private final Queue<String> feedback = new ArrayDeque<String>();
+    private final Set<String> acceptedCommands = new HashSet<String>();
+    private final Set<String> retiredBottleIds = new HashSet<String>();
 
     private Stage stage = Stage.IDLE;
     private String activeBottleId;
@@ -63,9 +67,6 @@ public final class FillerPlantModelV1 {
     }
 
     public boolean acceptCommand(String payload, long nowMs) {
-        if (payload != null && payload.equals(lastAcceptedCommand)) {
-            return true;
-        }
         String[] fields;
         try {
             fields = M4ProtocolV1.fields(payload, 3);
@@ -78,11 +79,15 @@ public final class FillerPlantModelV1 {
         String bottleId = fields[0];
         String action = fields[1];
         String value = fields[2];
+        if (retiredBottleIds.contains(bottleId) ||
+            acceptedCommands.contains(payload)) {
+            return true;
+        }
         if ("SAFE_STOP".equals(action)) {
             safeOutputs();
             activeBottleId = bottleId;
             stage = Stage.FAULT;
-            lastAcceptedCommand = payload;
+            remember(payload);
             return true;
         }
         if (activeBottleId != null && !activeBottleId.equals(bottleId) &&
@@ -97,11 +102,12 @@ public final class FillerPlantModelV1 {
                 return false;
             }
             safeOutputs();
+            retirePreviousBottle(bottleId);
             activeBottleId = bottleId;
             geometryProfile = value;
             stage = Stage.POSITIONING;
             stageStartMs = nowMs;
-            lastAcceptedCommand = payload;
+            remember(payload);
             return true;
         }
         if ("START_DOSE".equals(action) && stage == Stage.POSITIONED) {
@@ -122,7 +128,7 @@ public final class FillerPlantModelV1 {
             doseUnitMoving = true;
             stage = Stage.DOSING;
             stageStartMs = nowMs;
-            lastAcceptedCommand = payload;
+            remember(payload);
             return true;
         }
         if ("START_REFILL".equals(action) && stage == Stage.DOSED) {
@@ -132,14 +138,14 @@ public final class FillerPlantModelV1 {
             inletOpen = true;
             stage = Stage.REFILLING;
             stageStartMs = nowMs;
-            lastAcceptedCommand = payload;
+            remember(payload);
             return true;
         }
         if ("FINISH".equals(action) && stage == Stage.REFILLED) {
             safeOutputs();
             stage = Stage.SAFE;
             feedback.add(activeBottleId + "|SAFE|-" );
-            lastAcceptedCommand = payload;
+            remember(payload);
             return true;
         }
         enterFault(bottleId, "UNEXPECTED_COMMAND");
@@ -255,6 +261,8 @@ public final class FillerPlantModelV1 {
         stageStartMs = 0L;
         feedback.clear();
         lastAcceptedCommand = null;
+        acceptedCommands.clear();
+        retiredBottleIds.clear();
     }
 
     /** Close both valves and stop dose motion before clearing the cycle. */
@@ -278,5 +286,17 @@ public final class FillerPlantModelV1 {
         injectorOpen = false;
         inletOpen = false;
         doseUnitMoving = false;
+    }
+
+    private void retirePreviousBottle(String nextBottleId) {
+        if (activeBottleId != null && !activeBottleId.equals(nextBottleId)) {
+            retiredBottleIds.add(activeBottleId);
+            acceptedCommands.clear();
+        }
+    }
+
+    private void remember(String payload) {
+        acceptedCommands.add(payload);
+        lastAcceptedCommand = payload;
     }
 }

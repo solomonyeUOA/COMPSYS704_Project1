@@ -33,30 +33,46 @@ public final class Member4PlantStateV1 {
         // Demo pacing must not delay the ordered safety-home sequence.
         capper = new CapperPlantModelV1(shortDelay, resetDelay);
         sortPack = new SortPackPlantModelV1(shortDelay, shortDelay);
-        fillerAFeedbackEvent = new M4BoundedEventV1(3, 30L);
-        fillerBFeedbackEvent = new M4BoundedEventV1(3, 30L);
-        capperFeedbackEvent = new M4BoundedEventV1(3, 30L);
-        sortPackFeedbackEvent = new M4BoundedEventV1(3, 30L);
+        fillerAFeedbackEvent = M4BoundedEventV1.newLocalControlEvent();
+        fillerBFeedbackEvent = M4BoundedEventV1.newLocalControlEvent();
+        capperFeedbackEvent = M4BoundedEventV1.newLocalControlEvent();
+        sortPackFeedbackEvent = M4BoundedEventV1.newLocalControlEvent();
     }
 
     public static synchronized void acceptFillerACommand(String command) {
         if (!M4ResetFenceV1.accept(command)) { return; }
-        fillerA.acceptCommand(command, System.currentTimeMillis());
+        String previousStage = fillerA.getStageName();
+        if (fillerA.acceptCommand(command, System.currentTimeMillis()) &&
+            !previousStage.equals(fillerA.getStageName())) {
+            fillerAFeedbackEvent.cancel();
+        }
     }
 
     public static synchronized void acceptFillerBCommand(String command) {
         if (!M4ResetFenceV1.accept(command)) { return; }
-        fillerB.acceptCommand(command, System.currentTimeMillis());
+        String previousStage = fillerB.getStageName();
+        if (fillerB.acceptCommand(command, System.currentTimeMillis()) &&
+            !previousStage.equals(fillerB.getStageName())) {
+            fillerBFeedbackEvent.cancel();
+        }
     }
 
     public static synchronized void acceptCapperCommand(String command) {
         if (!M4ResetFenceV1.accept(command)) { return; }
-        capper.acceptCommand(command, System.currentTimeMillis());
+        String previousStage = capper.getStageName();
+        if (capper.acceptCommand(command, System.currentTimeMillis()) &&
+            !previousStage.equals(capper.getStageName())) {
+            capperFeedbackEvent.cancel();
+        }
     }
 
     public static synchronized void acceptSortPackCommand(String command) {
         if (!M4ResetFenceV1.accept(command)) { return; }
-        sortPack.acceptCommand(command, System.currentTimeMillis());
+        String previousStage = sortPack.getStageName();
+        if (sortPack.acceptCommand(command, System.currentTimeMillis()) &&
+            !previousStage.equals(sortPack.getStageName())) {
+            sortPackFeedbackEvent.cancel();
+        }
     }
 
     public static synchronized void tick() {
