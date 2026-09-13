@@ -1,5 +1,7 @@
 import java.util.ArrayDeque;
+import java.util.HashSet;
 import java.util.Queue;
+import java.util.Set;
 
 /** Simulated diverter and package placement Plant. */
 public final class SortPackPlantModelV1 {
@@ -15,6 +17,8 @@ public final class SortPackPlantModelV1 {
     private final long routeDelayMs;
     private final long placeDelayMs;
     private final Queue<String> feedback = new ArrayDeque<String>();
+    private final Set<String> acceptedCommands = new HashSet<String>();
+    private final Set<String> retiredBottleIds = new HashSet<String>();
     private Stage stage = Stage.IDLE;
     private String activeBottleId;
     private String lane = "-";
@@ -34,9 +38,6 @@ public final class SortPackPlantModelV1 {
     }
 
     public boolean acceptCommand(String payload, long nowMs) {
-        if (payload != null && payload.equals(lastAcceptedCommand)) {
-            return true;
-        }
         String[] fields;
         try {
             fields = M4ProtocolV1.fields(payload, 3);
@@ -49,10 +50,14 @@ public final class SortPackPlantModelV1 {
         String bottleId = fields[0];
         String action = fields[1];
         String value = fields[2];
+        if (retiredBottleIds.contains(bottleId) ||
+            acceptedCommands.contains(payload)) {
+            return true;
+        }
         if ("SAFE_STOP".equals(action)) {
             activeBottleId = bottleId;
             stage = Stage.FAULT;
-            lastAcceptedCommand = payload;
+            remember(payload);
             return true;
         }
         if ("SET_LANE".equals(action) &&
@@ -61,11 +66,12 @@ public final class SortPackPlantModelV1 {
                 fault(bottleId, "UNKNOWN_LANE");
                 return false;
             }
+            retirePreviousBottle(bottleId);
             activeBottleId = bottleId;
             lane = value;
             stage = Stage.ROUTING;
             stageStartMs = nowMs;
-            lastAcceptedCommand = payload;
+            remember(payload);
             return true;
         }
         if ("PLACE".equals(action) && stage == Stage.ROUTED) {
@@ -81,7 +87,7 @@ public final class SortPackPlantModelV1 {
             packagingProfile = value;
             stage = Stage.PLACING;
             stageStartMs = nowMs;
-            lastAcceptedCommand = payload;
+            remember(payload);
             return true;
         }
         fault(bottleId, "UNEXPECTED_COMMAND");
@@ -145,6 +151,8 @@ public final class SortPackPlantModelV1 {
         forcePlacementTimeout = false;
         stage = Stage.IDLE;
         lastAcceptedCommand = null;
+        acceptedCommands.clear();
+        retiredBottleIds.clear();
     }
 
     public void resetForSystem() {
@@ -158,6 +166,18 @@ public final class SortPackPlantModelV1 {
 
     public boolean isSystemResetSafe() {
         return stage == Stage.IDLE && feedback.isEmpty();
+    }
+
+    private void retirePreviousBottle(String nextBottleId) {
+        if (activeBottleId != null && !activeBottleId.equals(nextBottleId)) {
+            retiredBottleIds.add(activeBottleId);
+            acceptedCommands.clear();
+        }
+    }
+
+    private void remember(String payload) {
+        acceptedCommands.add(payload);
+        lastAcceptedCommand = payload;
     }
 
     private void fault(String bottleId, String reason) {

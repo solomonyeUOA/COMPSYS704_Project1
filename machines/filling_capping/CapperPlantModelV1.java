@@ -1,5 +1,7 @@
 import java.util.ArrayDeque;
+import java.util.HashSet;
 import java.util.Queue;
+import java.util.Set;
 
 /** Simulated Capper mechanics with clamp and raised-position interlocks. */
 public final class CapperPlantModelV1 {
@@ -29,6 +31,8 @@ public final class CapperPlantModelV1 {
     private final long actionDelayMs;
     private final long resetActionDelayMs;
     private final Queue<String> feedback = new ArrayDeque<String>();
+    private final Set<String> acceptedCommands = new HashSet<String>();
+    private final Set<String> retiredBottleIds = new HashSet<String>();
     private Stage stage = Stage.IDLE;
     private String activeBottleId;
     private String geometryProfile = "-";
@@ -58,9 +62,6 @@ public final class CapperPlantModelV1 {
 
     public boolean acceptCommand(String payload, long nowMs) {
         if (resetStep != 0) { return false; }
-        if (payload != null && payload.equals(lastAcceptedCommand)) {
-            return true;
-        }
         String[] fields;
         try {
             fields = M4ProtocolV1.fields(payload, 3);
@@ -73,6 +74,10 @@ public final class CapperPlantModelV1 {
         String bottleId = fields[0];
         String action = fields[1];
         String value = fields[2];
+        if (retiredBottleIds.contains(bottleId) ||
+            acceptedCommands.contains(payload)) {
+            return true;
+        }
         if ("SAFE_STOP".equals(action)) {
             activeBottleId = bottleId;
             gripping = false;
@@ -82,7 +87,7 @@ public final class CapperPlantModelV1 {
                 clamped = false;
             }
             stage = Stage.FAULT;
-            lastAcceptedCommand = payload;
+            remember(payload);
             return true;
         }
         if (activeBottleId != null && !activeBottleId.equals(bottleId) &&
@@ -101,6 +106,7 @@ public final class CapperPlantModelV1 {
                 fault(bottleId, "UNKNOWN_GEOMETRY");
                 return false;
             }
+            retirePreviousBottle(bottleId);
             activeBottleId = bottleId;
             geometryProfile = value;
             clamped = false;
@@ -108,50 +114,50 @@ public final class CapperPlantModelV1 {
             gripping = false;
             twisted = false;
             begin(Stage.POSITIONING, "PROFILE_CONFIRMED|" + value, nowMs);
-            lastAcceptedCommand = payload;
+            remember(payload);
             return true;
         }
         if ("CLAMP".equals(action) && stage == Stage.POSITIONED) {
             begin(Stage.CLAMPING, "CLAMPED|-", nowMs);
-            lastAcceptedCommand = payload;
+            remember(payload);
             return true;
         }
         if ("LOWER".equals(action) && stage == Stage.CLAMPED && clamped) {
             begin(Stage.LOWERING, "LOWERED|-", nowMs);
-            lastAcceptedCommand = payload;
+            remember(payload);
             return true;
         }
         if ("GRIP".equals(action) && stage == Stage.LOWERED && clamped) {
             begin(Stage.GRIPPING, "GRIPPED|-", nowMs);
-            lastAcceptedCommand = payload;
+            remember(payload);
             return true;
         }
         if ("TWIST".equals(action) && stage == Stage.GRIPPED && clamped &&
             lowered && gripping) {
             begin(Stage.TWISTING, "TWISTED|-", nowMs);
-            lastAcceptedCommand = payload;
+            remember(payload);
             return true;
         }
         if ("RELEASE".equals(action) && stage == Stage.TWISTED && clamped) {
             begin(Stage.RELEASING, "RELEASED|-", nowMs);
-            lastAcceptedCommand = payload;
+            remember(payload);
             return true;
         }
         if ("RETURN_HOME".equals(action) && stage == Stage.RELEASED &&
             clamped) {
             begin(Stage.RETURNING, "HOME|-", nowMs);
-            lastAcceptedCommand = payload;
+            remember(payload);
             return true;
         }
         if ("RAISE".equals(action) && stage == Stage.HOME && clamped) {
             begin(Stage.RAISING, "RAISED|-", nowMs);
-            lastAcceptedCommand = payload;
+            remember(payload);
             return true;
         }
         if ("UNCLAMP".equals(action) && stage == Stage.RAISED &&
             clamped && !lowered) {
             begin(Stage.UNCLAMPING, "UNCLAMPED|-", nowMs);
-            lastAcceptedCommand = payload;
+            remember(payload);
             return true;
         }
         fault(bottleId, "INTERLOCK_OR_SEQUENCE_ERROR");
@@ -257,6 +263,8 @@ public final class CapperPlantModelV1 {
         twisted = false;
         stage = Stage.IDLE;
         lastAcceptedCommand = null;
+        acceptedCommands.clear();
+        retiredBottleIds.clear();
     }
 
     public void beginSystemReset(long nowMs) {
@@ -316,6 +324,18 @@ public final class CapperPlantModelV1 {
         stage = next;
         pendingFeedback = eventAndValue;
         stageStartMs = nowMs;
+    }
+
+    private void retirePreviousBottle(String nextBottleId) {
+        if (activeBottleId != null && !activeBottleId.equals(nextBottleId)) {
+            retiredBottleIds.add(activeBottleId);
+            acceptedCommands.clear();
+        }
+    }
+
+    private void remember(String payload) {
+        acceptedCommands.add(payload);
+        lastAcceptedCommand = payload;
     }
 
     private void fault(String bottleId, String reason) {

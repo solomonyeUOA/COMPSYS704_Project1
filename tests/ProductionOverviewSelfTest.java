@@ -79,6 +79,7 @@ public final class ProductionOverviewSelfTest {
         ABSVisualisation.resetSystem("RST9900");
         ABSVisualisation.updateRequiredBottles(1);
         ABSVisualisationFlowModel flow = flowModel();
+
         for (int stage = 0; stage <= ABSVisualisationFlowModel.CAPPER; stage++) complete(stage, flow);
         ABSVisualisation.ModuleDetailPanel label = new ABSVisualisation.ModuleDetailPanel(7);
         ABSVisualisation.ModuleDetailPanel capper = new ABSVisualisation.ModuleDetailPanel(6);
@@ -168,14 +169,152 @@ public final class ProductionOverviewSelfTest {
         sort.syncRealState();
         require(label.getDisplayedRealStatus() == 1 && sort.getDisplayedRealStatus() == 1,
             "new stations return READY after reset");
+        for (int i = 0; i < NAMES.length; i++) {
+            ABSVisualisation.ModuleDetailPanel detail =
+                new ABSVisualisation.ModuleDetailPanel(i);
+            require(text(detail).contains(NAMES[i].toUpperCase()),
+                "professional detail identity for " + NAMES[i]);
+            require(buttons(detail) == 0,
+                "read-only detail has no application controls for " + NAMES[i]);
+            require(detail.getDetailModel() == flow.getSnapshot().getModule(i),
+                "overview/detail share immutable module snapshot for " + NAMES[i]);
+            detail.stopAnimation();
+        }
+        ABSVisualisation.OverviewSummaryPanel summary =
+            new ABSVisualisation.OverviewSummaryPanel();
+        summary.syncState();
+        require(text(summary).contains("ACTIVE ORDER") &&
+            text(summary).contains("SYSTEM STATE"),
+            "overview has complete evidence summary row");
+        require(text(summary).contains("--"),
+            "summary retains unknown markers without fabricated telemetry");
+        exerciseTeamIpOverview(output);
         if (output != null) {
             render(overview, output, "production-overview-label-sort.png", 1400, 470);
+            render(summary, output, "production-summary-fixture.png", 1400, 120);
             render(label, output, "labeller-detail-fixture.png", 820, 620);
             render(sort, output, "sort-pack-detail-fixture.png", 820, 620);
         }
         label.stopAnimation();
         capper.stopAnimation();
         sort.stopAnimation();
+        exerciseSizeFixtures(output);
+    }
+
+    private static void exerciseTeamIpOverview(File output) throws Exception {
+        final int[] opened = {-1};
+        ABSVisualisation.TeamIpExtensionsPanel extensions =
+            teamIpOverviewWithClickRecorder(opened);
+        JButton[] cards = teamIpCards(extensions);
+        require(cards.length == 2,
+            "Team-IP overview renders exactly two extension cards");
+
+        String m2 = cards[0].getAccessibleContext().getAccessibleName();
+        String m4 = cards[1].getAccessibleContext().getAccessibleName();
+        require(m2.indexOf("M2 DIGITAL TWIN") >= 0,
+            "M2 Digital Twin card remains visible");
+        require(m4.indexOf("M4 TWO-SIZE EXTENSION") >= 0,
+            "M4 Two-Size Extension card remains visible");
+        require((m2 + " " + m4).indexOf("M3 FAULT TOLERANCE") < 0,
+            "M3 Fault Tolerance card is absent from the overview");
+
+        Container cardRow = cards[0].getParent();
+        require(cardRow == cards[1].getParent() &&
+            cardRow.getComponentCount() == 2,
+            "the card row has no empty third slot");
+        require(cardRow.getLayout() instanceof java.awt.GridLayout &&
+            ((java.awt.GridLayout)cardRow.getLayout()).getColumns() == 2,
+            "remaining cards use an intentional two-column layout");
+        extensions.setSize(1400, 170);
+        layout(extensions);
+        require(cards[0].getWidth() == cards[1].getWidth() &&
+            cards[0].getWidth() > 600,
+            "M2 and M4 divide the available width evenly");
+
+        cards[0].doClick();
+        require(opened[0] == ABSVisualisationTeamIpModel.M2_DIGITAL_TWIN,
+            "M2 card still opens M2 detail");
+        cards[1].doClick();
+        require(opened[0] == ABSVisualisationTeamIpModel.M4_TWO_SIZE,
+            "M4 card still opens M4 detail");
+
+        // The M3 observation/detail model remains intact even though its
+        // overview launcher is deliberately hidden.
+        ABSVisualisation.TeamIpDetailPanel m3Detail =
+            new ABSVisualisation.TeamIpDetailPanel(
+                ABSVisualisationTeamIpModel.M3_FAULT_TOLERANCE
+            );
+        require(m3Detail != null,
+            "M3 fault presentation/data path remains available");
+
+        if (output != null) {
+            render(extensions, output, "team-ip-overview-m2-m4-fixture.png",
+                1400, 190);
+        }
+    }
+
+    /** Explicit multi-station fixtures, isolated from no-Twin symbolic replay. */
+    private static void exerciseSizeFixtures(File output) throws Exception {
+        ABSVisualisation.resetSystem("RST9902");
+        ABSVisualisation.updateRequiredBottles(10);
+        ABSVisualisation.updateTwinSnapshot(sizeFixture(1, "S", 200));
+        ABSVisualisation.ModuleDetailPanel[] sizeDetails =
+            new ABSVisualisation.ModuleDetailPanel[NAMES.length];
+        for (int index = 0; index < sizeDetails.length; index++) {
+            sizeDetails[index] = new ABSVisualisation.ModuleDetailPanel(index);
+            sizeDetails[index].syncRealState();
+            require(sizeDetails[index].getBottleScaleForTest() == 0.82,
+                NAMES[index] + " detail uses the common S geometry");
+        }
+        require(text(sizeDetails[ABSVisualisationFlowModel.LOADER])
+                .contains("Small (S) - 200 mL"),
+            "loader detail identifies the confirmed small profile");
+        if (output != null) {
+            render(sizeDetails[ABSVisualisationFlowModel.LOADER], output,
+                "loader-detail-small-fixture.png", 820, 620);
+            render(sizeDetails[ABSVisualisationFlowModel.CONVEYOR], output,
+                "conveyor-detail-small-fixture.png", 820, 620);
+            render(sizeDetails[ABSVisualisationFlowModel.ROTARY], output,
+                "rotary-detail-small-fixture.png", 820, 620);
+            render(sizeDetails[ABSVisualisationFlowModel.FILLER_A], output,
+                "filler-a-detail-small-fixture.png", 820, 620);
+            render(sizeDetails[ABSVisualisationFlowModel.FILLER_B], output,
+                "filler-b-detail-small-fixture.png", 820, 620);
+            render(sizeDetails[ABSVisualisationFlowModel.LID], output,
+                "lid-detail-small-fixture.png", 820, 620);
+            render(sizeDetails[ABSVisualisationFlowModel.CAPPER], output,
+                "capper-detail-small-fixture.png", 820, 620);
+            render(sizeDetails[ABSVisualisationFlowModel.LABELLER], output,
+                "labeller-detail-small-fixture.png", 820, 620);
+            render(sizeDetails[ABSVisualisationFlowModel.UNLOADER], output,
+                "unloader-detail-small-fixture.png", 820, 620);
+            render(sizeDetails[ABSVisualisationFlowModel.SORT_PACK], output,
+                "sort-pack-detail-small-fixture.png", 820, 620);
+        }
+        ABSVisualisation.updateTwinSnapshot(sizeFixture(2, "L", 500));
+        for (int index = 0; index < sizeDetails.length; index++) {
+            sizeDetails[index].syncRealState();
+            require(sizeDetails[index].getBottleScaleForTest() == 1.18,
+                NAMES[index] + " detail switches to common L geometry");
+        }
+        require(text(sizeDetails[ABSVisualisationFlowModel.LOADER])
+                .contains("Large (L) - 500 mL"),
+            "loader detail identifies the confirmed large profile");
+        if (output != null) {
+            render(sizeDetails[ABSVisualisationFlowModel.LOADER], output,
+                "loader-detail-large-fixture.png", 820, 620);
+            render(sizeDetails[ABSVisualisationFlowModel.FILLER_A], output,
+                "filler-a-detail-large-fixture.png", 820, 620);
+            render(sizeDetails[ABSVisualisationFlowModel.LID], output,
+                "lid-detail-large-fixture.png", 820, 620);
+            render(sizeDetails[ABSVisualisationFlowModel.CAPPER], output,
+                "capper-detail-large-fixture.png", 820, 620);
+            render(sizeDetails[ABSVisualisationFlowModel.LABELLER], output,
+                "labeller-detail-large-fixture.png", 820, 620);
+        }
+        for (ABSVisualisation.ModuleDetailPanel detail : sizeDetails) {
+            detail.stopAnimation();
+        }
     }
 
     private static void complete(int stage, ABSVisualisationFlowModel flow) throws Exception {
@@ -189,6 +328,30 @@ public final class ProductionOverviewSelfTest {
         Field field = ABSVisualisation.class.getDeclaredField("VISUAL_MODEL");
         field.setAccessible(true);
         return (ABSVisualisationFlowModel)field.get(null);
+    }
+
+    private static String sizeFixture(int sequence, String size, int capacity) {
+        String[] resources = {"BottleLoaderControllerCD", "ConveyorControllerCD",
+            "RotaryTableControllerCD", "FillerAControllerCD", "FillerBControllerCD",
+            "LidLoaderControllerCD", "CapperControllerCD", "LabellerControllerCD",
+            "BottleUnloaderControllerCD", "SortPackControllerCD"};
+        String[] types = {"LOADER", "CONVEYOR", "ROTARY", "FILLER_A", "FILLER_B",
+            "LID", "CAPPER", "LABELLER", "UNLOADER", "SORTPACK"};
+        String[] stages = {"LOADED", "LOADED", "P1", "P1", "FILLED", "LIDDED",
+            "CAPPED", "LABELLED", "UNLOADED", "SORTED"};
+        StringBuilder bottles = new StringBuilder();
+        StringBuilder observations = new StringBuilder();
+        for (int index = 0; index < 10; index++) {
+            if (index > 0) { bottles.append(';'); observations.append(';'); }
+            String bottle = String.format("PO9900-P01-B%03d", index + 1);
+            bottles.append(bottle).append(',').append(stages[index]).append(',')
+                .append(resources[index]).append(',').append(sequence).append(',')
+                .append(size).append(',').append(capacity);
+            observations.append(resources[index]).append(',').append(types[index])
+                .append(',').append(bottle).append(",2,TEST_FIXTURE,NONE,").append(sequence);
+        }
+        return "V2|TWIN|9903|" + sequence + "|W=10|R=10|REJECTED=0|WORKPIECES=" +
+            bottles + "|RESOURCES=" + observations;
     }
 
     /** Observe the private read-only dialog callback without opening a headless JFrame. */
@@ -208,6 +371,37 @@ public final class ProductionOverviewSelfTest {
         return constructor.newInstance(recorder);
     }
 
+    private static ABSVisualisation.TeamIpExtensionsPanel
+        teamIpOverviewWithClickRecorder(final int[] opened) throws Exception {
+        Class<?> opener = Class.forName("ABSVisualisation$TeamIpWindowOpener");
+        Object recorder = Proxy.newProxyInstance(
+            opener.getClassLoader(),
+            new Class<?>[] {opener},
+            new InvocationHandler() {
+                public Object invoke(Object proxy, Method method, Object[] args) {
+                    if ("openTeamIpDetail".equals(method.getName())) {
+                        opened[0] = ((Integer)args[0]).intValue();
+                    }
+                    return null;
+                }
+            }
+        );
+        Constructor<ABSVisualisation.TeamIpExtensionsPanel> constructor =
+            ABSVisualisation.TeamIpExtensionsPanel.class
+                .getDeclaredConstructor(opener);
+        constructor.setAccessible(true);
+        return constructor.newInstance(recorder);
+    }
+
+    private static JButton[] teamIpCards(
+        ABSVisualisation.TeamIpExtensionsPanel extensions
+    ) throws Exception {
+        Field field = ABSVisualisation.TeamIpExtensionsPanel.class
+            .getDeclaredField("cards");
+        field.setAccessible(true);
+        return (JButton[])field.get(extensions);
+    }
+
     /** No JFrame/timer in headless tests; publish exactly the timer's immutable snapshot. */
     private static void tick(ABSVisualisationFlowModel flow, int count) throws Exception {
         for (int i = 0; i < count; i++) flow.tick();
@@ -217,7 +411,9 @@ public final class ProductionOverviewSelfTest {
     }
 
     private static int buttons(Component component) {
-        int count = component instanceof JButton ? 1 : 0;
+        // Ignore Swing's internal JScrollPane arrow buttons; only application
+        // buttons could represent a prohibited visualisation control output.
+        int count = component.getClass() == JButton.class ? 1 : 0;
         if (component instanceof Container) {
             for (Component child : ((Container)component).getComponents()) count += buttons(child);
         }

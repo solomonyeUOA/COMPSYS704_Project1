@@ -21,12 +21,14 @@ import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
 
 import javax.swing.BorderFactory;
+import javax.swing.BoxLayout;
 import javax.swing.JButton;
 import javax.swing.JComboBox;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
+import javax.swing.JScrollPane;
 import javax.swing.JTextField;
 import javax.swing.SwingConstants;
 import javax.swing.SwingUtilities;
@@ -110,6 +112,9 @@ public final class POSVisualisation {
     private final JFrame frame;
     private final JTextField orderIdField;
     private final List<ProductInputRow> productRows;
+    private final JPanel productListPanel;
+    private final JButton addProductButton;
+    private final JButton removeProductButton;
     private final JButton submitButton;
     private final JButton resetButton;
     private final JButton exitButton;
@@ -141,17 +146,50 @@ public final class POSVisualisation {
 
         productRows = new ArrayList<ProductInputRow>();
         ProductInputRow firstProduct = new ProductInputRow(
-            "P1", "2", "60", "40"
+            "P1", "2", "25", "75"
         );
         productRows.add(firstProduct);
-        JPanel productPanel = createProductPanel(firstProduct, 1);
+
+        productListPanel = new JPanel();
+        productListPanel.setLayout(new BoxLayout(
+            productListPanel,
+            BoxLayout.Y_AXIS
+        ));
+        JScrollPane productScroll = new JScrollPane(productListPanel);
+        productScroll.setPreferredSize(new Dimension(520, 285));
+        productScroll.setBorder(BorderFactory.createEmptyBorder());
+
+        addProductButton = new JButton("Add Product");
+        addProductButton.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent event) {
+                addProductRow();
+            }
+        });
+        removeProductButton = new JButton("Remove Last Product");
+        removeProductButton.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent event) {
+                removeLastProductRow();
+            }
+        });
+        JPanel productButtons = new JPanel(
+            new FlowLayout(FlowLayout.RIGHT, 8, 2)
+        );
+        productButtons.add(addProductButton);
+        productButtons.add(removeProductButton);
+        JPanel productSection = new JPanel(new BorderLayout(4, 4));
+        productSection.add(productScroll, BorderLayout.CENTER);
+        productSection.add(productButtons, BorderLayout.SOUTH);
+        refreshProductPanels();
+
         constraints.gridx = 0;
         constraints.gridy = 1;
         constraints.gridwidth = 2;
         constraints.fill = GridBagConstraints.HORIZONTAL;
         constraints.weightx = 1.0;
         constraints.insets = new Insets(10, 0, 8, 0);
-        form.add(productPanel, constraints);
+        form.add(productSection, constraints);
 
         submitButton = new JButton("Submit Order");
         submitButton.addActionListener(new ActionListener() {
@@ -203,7 +241,7 @@ public final class POSVisualisation {
         form.add(completionStatus, constraints);
 
         frame.add(form, BorderLayout.CENTER);
-        frame.setPreferredSize(new Dimension(560, 500));
+        frame.setPreferredSize(new Dimension(600, 690));
         frame.pack();
         frame.setLocationByPlatform(true);
         frame.setResizable(false);
@@ -440,6 +478,38 @@ public final class POSVisualisation {
             ", completionTime=" + completionSeconds + " seconds";
     }
 
+    private void addProductRow() {
+        if (productRows.size() >= OrderV2.MAX_PRODUCTS) {
+            return;
+        }
+        productRows.add(new ProductInputRow("P1", "1", "25", "75"));
+        refreshProductPanels();
+    }
+
+    private void removeLastProductRow() {
+        if (productRows.size() <= 1) {
+            return;
+        }
+        productRows.remove(productRows.size() - 1);
+        refreshProductPanels();
+    }
+
+    private void refreshProductPanels() {
+        productListPanel.removeAll();
+        for (int index = 0; index < productRows.size(); index++) {
+            productListPanel.add(createProductPanel(
+                productRows.get(index),
+                index + 1
+            ));
+        }
+        addProductButton.setEnabled(
+            productRows.size() < OrderV2.MAX_PRODUCTS
+        );
+        removeProductButton.setEnabled(productRows.size() > 1);
+        productListPanel.revalidate();
+        productListPanel.repaint();
+    }
+
     private void queueOrderFromForm() {
         synchronized (POSVisualisation.class) {
             if (resetInProgress) {
@@ -447,66 +517,15 @@ public final class POSVisualisation {
                 return;
             }
         }
-        String orderId = orderIdField.getText().trim();
-        if (!isProtocolToken(orderId)) {
-            showValidationError("Order ID is required and cannot contain | , ;");
-            return;
+        final String payload;
+        try {
+            payload = buildOrderPayload(
+                orderIdField.getText().trim(),
+                productRows
+            );
         }
-
-        StringBuilder products = new StringBuilder();
-        for (int index = 0; index < productRows.size(); index++) {
-            ProductInputRow row = productRows.get(index);
-            String productId = row.productId.getText().trim();
-            String sizeCode = row.selectedSizeCode();
-            if (!isProtocolToken(productId)) {
-                showValidationError(
-                    "Product is required and cannot contain | , ;"
-                );
-                return;
-            }
-
-            final int quantity;
-            final int liquidA;
-            final int liquidB;
-            try {
-                quantity = Integer.parseInt(row.quantity.getText().trim());
-                liquidA = Integer.parseInt(row.liquidA.getText().trim());
-                liquidB = Integer.parseInt(row.liquidB.getText().trim());
-            }
-            catch (NumberFormatException error) {
-                showValidationError(
-                    "Quantity and liquid percentages must be integers"
-                );
-                return;
-            }
-
-            if (quantity <= 0) {
-                showValidationError("Quantity must be greater than 0");
-                return;
-            }
-            if (liquidA < 0 || liquidA > 100 ||
-                liquidB < 0 || liquidB > 100) {
-                showValidationError("Liquid percentages must be from 0 to 100");
-                return;
-            }
-            if (liquidA + liquidB != 100) {
-                showValidationError("Liquid A + Liquid B must equal 100");
-                return;
-            }
-
-            if (index > 0) {
-                products.append(';');
-            }
-            products.append(productId).append(',')
-                .append(sizeCode).append(',')
-                .append(liquidA).append(',')
-                .append(liquidB).append(',')
-                .append(quantity);
-        }
-
-        String payload = orderId + "|" + productRows.size() + "|" + products;
-        if (OrderV2.parse(payload) == null) {
-            showValidationError("Invalid size-aware order was not queued");
+        catch (IllegalArgumentException error) {
+            showValidationError(error.getMessage());
             return;
         }
         if (!PENDING_ORDER.compareAndSet(null, payload)) {
@@ -818,21 +837,69 @@ public final class POSVisualisation {
             text.indexOf(',') < 0 && text.indexOf(';') < 0;
     }
 
+    private static String buildOrderPayload(
+        String orderId,
+        List<ProductInputRow> rows
+    ) {
+        if (!isProtocolToken(orderId)) {
+            throw new IllegalArgumentException(
+                "Order ID is required and cannot contain | , ;"
+            );
+        }
+        if (rows == null || rows.size() < 1 ||
+            rows.size() > OrderV2.MAX_PRODUCTS) {
+            throw new IllegalArgumentException(
+                "Order must contain 1 to " + OrderV2.MAX_PRODUCTS +
+                " products"
+            );
+        }
+
+        StringBuilder products = new StringBuilder();
+        for (int index = 0; index < rows.size(); index++) {
+            if (index > 0) {
+                products.append(';');
+            }
+            products.append(rows.get(index).encodedProduct());
+        }
+        String payload = orderId + "|" + rows.size() + "|" + products;
+        if (OrderV2.parse(payload) == null) {
+            throw new IllegalArgumentException(
+                "Invalid size-aware order was not queued"
+            );
+        }
+        return payload;
+    }
+
+    static String buildOrderPayloadForTest(
+        String orderId,
+        ProductInputRow... rows
+    ) {
+        List<ProductInputRow> values = new ArrayList<ProductInputRow>();
+        if (rows != null) {
+            for (ProductInputRow row : rows) {
+                values.add(row);
+            }
+        }
+        return buildOrderPayload(orderId, values);
+    }
+
     private static JPanel createProductPanel(ProductInputRow row, int number) {
         JPanel panel = new JPanel(new GridBagLayout());
         panel.setBorder(BorderFactory.createTitledBorder("Product " + number));
         GridBagConstraints constraints = baseConstraints();
 
-        addFormLabel(panel, constraints, 0, "Product");
-        addFormField(panel, constraints, 0, row.productId);
-        addFormLabel(panel, constraints, 1, "Bottle Size");
-        addFormField(panel, constraints, 1, row.bottleSize);
-        addFormLabel(panel, constraints, 2, "Quantity");
-        addFormField(panel, constraints, 2, row.quantity);
-        addFormLabel(panel, constraints, 3, "Liquid A %");
-        addFormField(panel, constraints, 3, row.liquidA);
-        addFormLabel(panel, constraints, 4, "Liquid B %");
-        addFormField(panel, constraints, 4, row.liquidB);
+        addFormLabel(panel, constraints, 0, "Product Type");
+        addFormField(panel, constraints, 0, row.productPreset);
+        addFormLabel(panel, constraints, 1, "Product ID / Name");
+        addFormField(panel, constraints, 1, row.productId);
+        addFormLabel(panel, constraints, 2, "Bottle Size");
+        addFormField(panel, constraints, 2, row.bottleSize);
+        addFormLabel(panel, constraints, 3, "Quantity");
+        addFormField(panel, constraints, 3, row.quantity);
+        addFormLabel(panel, constraints, 4, "Liquid A %");
+        addFormField(panel, constraints, 4, row.liquidA);
+        addFormLabel(panel, constraints, 5, "Liquid B %");
+        addFormField(panel, constraints, 5, row.liquidB);
         return panel;
     }
 
@@ -875,7 +942,7 @@ public final class POSVisualisation {
         JPanel panel,
         GridBagConstraints constraints,
         int row,
-        JComboBox<SizeOption> field
+        JComboBox<?> field
     ) {
         constraints.gridx = 1;
         constraints.gridy = row;
@@ -885,20 +952,70 @@ public final class POSVisualisation {
         panel.add(field, constraints);
     }
 
-    /** One row today; adding up to four rows does not change ORDER encoding. */
-    private static final class ProductInputRow {
+    enum ProductPreset {
+        P1("P1", 25, 75),
+        P2("P2", 50, 50),
+        P3("P3", 75, 25),
+        CUSTOM("Custom", -1, -1);
+
+        private final String productId;
+        private final int liquidA;
+        private final int liquidB;
+
+        ProductPreset(String id, int a, int b) {
+            productId = id;
+            liquidA = a;
+            liquidB = b;
+        }
+
+        private boolean isCustom() {
+            return this == CUSTOM;
+        }
+
+        private static ProductPreset matching(
+            String productId,
+            String liquidA,
+            String liquidB
+        ) {
+            for (ProductPreset preset : values()) {
+                if (!preset.isCustom() &&
+                    preset.productId.equals(productId) &&
+                    Integer.toString(preset.liquidA).equals(liquidA) &&
+                    Integer.toString(preset.liquidB).equals(liquidB)) {
+                    return preset;
+                }
+            }
+            return CUSTOM;
+        }
+
+        @Override
+        public String toString() {
+            return productId;
+        }
+    }
+
+    /** One independent product row; the order supports up to four rows. */
+    static final class ProductInputRow {
+        private final JComboBox<ProductPreset> productPreset;
         private final JTextField productId;
         private final JComboBox<SizeOption> bottleSize;
         private final JTextField quantity;
         private final JTextField liquidA;
         private final JTextField liquidB;
+        private ProductPreset activePreset;
+        private String customProductId = "";
+        private String customLiquidA = "";
+        private String customLiquidB = "";
 
-        private ProductInputRow(
+        ProductInputRow(
             String productIdValue,
             String quantityValue,
             String liquidAValue,
             String liquidBValue
         ) {
+            productPreset = new JComboBox<ProductPreset>(
+                ProductPreset.values()
+            );
             productId = new JTextField(productIdValue, 14);
             bottleSize = new JComboBox<SizeOption>(new SizeOption[] {
                 new SizeOption("Small \u2014 200 mL", OrderV2.SMALL),
@@ -908,11 +1025,135 @@ public final class POSVisualisation {
             quantity = new JTextField(quantityValue, 14);
             liquidA = new JTextField(liquidAValue, 14);
             liquidB = new JTextField(liquidBValue, 14);
+            activePreset = ProductPreset.matching(
+                productIdValue,
+                liquidAValue,
+                liquidBValue
+            );
+            if (activePreset.isCustom()) {
+                customProductId = productIdValue;
+                customLiquidA = liquidAValue;
+                customLiquidB = liquidBValue;
+            }
+            productPreset.setSelectedItem(activePreset);
+            applyPresetFields(activePreset);
+            productPreset.addActionListener(new ActionListener() {
+                @Override
+                public void actionPerformed(ActionEvent event) {
+                    ProductPreset selected =
+                        (ProductPreset)productPreset.getSelectedItem();
+                    changePreset(selected == null ?
+                        ProductPreset.P1 : selected);
+                }
+            });
+        }
+
+        private void changePreset(ProductPreset nextPreset) {
+            if (activePreset != null && activePreset.isCustom()) {
+                customProductId = productId.getText();
+                customLiquidA = liquidA.getText();
+                customLiquidB = liquidB.getText();
+            }
+            activePreset = nextPreset;
+            applyPresetFields(nextPreset);
+        }
+
+        private void applyPresetFields(ProductPreset preset) {
+            boolean custom = preset.isCustom();
+            if (custom) {
+                productId.setText(customProductId);
+                liquidA.setText(customLiquidA);
+                liquidB.setText(customLiquidB);
+            }
+            else {
+                productId.setText(preset.productId);
+                liquidA.setText(Integer.toString(preset.liquidA));
+                liquidB.setText(Integer.toString(preset.liquidB));
+            }
+            productId.setEditable(custom);
+            liquidA.setEditable(custom);
+            liquidB.setEditable(custom);
         }
 
         private String selectedSizeCode() {
             SizeOption selected = (SizeOption)bottleSize.getSelectedItem();
             return selected == null ? OrderV2.SMALL : selected.code;
+        }
+
+        private String encodedProduct() {
+            String encodedProductId = productId.getText().trim();
+            if (!isProtocolToken(encodedProductId)) {
+                throw new IllegalArgumentException(
+                    "Product is required and cannot contain | , ;"
+                );
+            }
+
+            final int encodedQuantity;
+            final int encodedLiquidA;
+            final int encodedLiquidB;
+            try {
+                encodedQuantity = Integer.parseInt(quantity.getText().trim());
+                encodedLiquidA = Integer.parseInt(liquidA.getText().trim());
+                encodedLiquidB = Integer.parseInt(liquidB.getText().trim());
+            }
+            catch (NumberFormatException error) {
+                throw new IllegalArgumentException(
+                    "Quantity and liquid percentages must be integers"
+                );
+            }
+            if (encodedQuantity <= 0) {
+                throw new IllegalArgumentException(
+                    "Quantity must be greater than 0"
+                );
+            }
+            if (encodedLiquidA < 0 || encodedLiquidA > 100 ||
+                encodedLiquidB < 0 || encodedLiquidB > 100) {
+                throw new IllegalArgumentException(
+                    "Liquid percentages must be from 0 to 100"
+                );
+            }
+            if (encodedLiquidA + encodedLiquidB != 100) {
+                throw new IllegalArgumentException(
+                    "Liquid A + Liquid B must equal 100"
+                );
+            }
+            return encodedProductId + ',' + selectedSizeCode() + ',' +
+                encodedLiquidA + ',' + encodedLiquidB + ',' + encodedQuantity;
+        }
+
+        void selectPresetForTest(ProductPreset preset) {
+            productPreset.setSelectedItem(preset);
+        }
+
+        void setCustomValuesForTest(String id, String a, String b) {
+            if (activePreset != ProductPreset.CUSTOM) {
+                selectPresetForTest(ProductPreset.CUSTOM);
+            }
+            productId.setText(id);
+            liquidA.setText(a);
+            liquidB.setText(b);
+        }
+
+        void setSizeAndQuantityForTest(String sizeCode, String value) {
+            bottleSize.setSelectedIndex(OrderV2.LARGE.equals(sizeCode) ? 1 : 0);
+            quantity.setText(value);
+        }
+
+        String productIdForTest() {
+            return productId.getText();
+        }
+
+        String liquidAForTest() {
+            return liquidA.getText();
+        }
+
+        String liquidBForTest() {
+            return liquidB.getText();
+        }
+
+        boolean customFieldsEditableForTest() {
+            return productId.isEditable() && liquidA.isEditable() &&
+                liquidB.isEditable();
         }
     }
 

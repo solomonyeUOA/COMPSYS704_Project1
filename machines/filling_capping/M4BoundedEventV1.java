@@ -1,5 +1,8 @@
 /** Small transport window for an idempotent bottle-correlated event. */
 public final class M4BoundedEventV1 {
+    private static final int LOCAL_CONTROL_COPY_COUNT = 10;
+    private static final long LOCAL_CONTROL_COPY_GAP_MS = 100L;
+
     private final int copyCount;
     private final long copyGapMs;
     private String payload;
@@ -12,6 +15,18 @@ public final class M4BoundedEventV1 {
         }
         this.copyCount = copyCount;
         this.copyGapMs = copyGapMs;
+    }
+
+    /**
+     * Controller/Plant traffic must span ordinary multi-CD scheduling pauses,
+     * while remaining bounded below the 2.5 s operation timeout.  This is the
+     * same proven 10 x 100 ms window used by the M4 reset acknowledgement.
+     */
+    public static M4BoundedEventV1 newLocalControlEvent() {
+        return new M4BoundedEventV1(
+            LOCAL_CONTROL_COPY_COUNT,
+            LOCAL_CONTROL_COPY_GAP_MS
+        );
     }
 
     public void publish(String value, long nowMs) {

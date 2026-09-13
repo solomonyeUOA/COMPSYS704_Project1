@@ -53,6 +53,10 @@ public final class LiveTwinPanelSelfTest {
         m4.syncState();
         assertPopulated(m2);
         assertPopulated(m4);
+        require(findTabs(m2).indexOfTab("Lifecycle") >= 0,
+            "M2 includes confirmed lifecycle visualisation");
+        require(findTabs(m4).indexOfTab("Size profiles") >= 0,
+            "M4 includes S/L profile visualisation");
 
         // A duplicate or invalid snapshot cannot erase or duplicate the visible rows.
         ABSVisualisation.updateTwinSnapshot(fixture);
@@ -62,6 +66,8 @@ public final class LiveTwinPanelSelfTest {
         if (output != null) {
             render(m2, "Live workpieces", output, "live-workpieces-fixture.png");
             render(m2, "Live resources", output, "live-resources-fixture.png");
+            render(m2, "Lifecycle", output, "live-lifecycle-fixture.png");
+            render(m4, "Size profiles", output, "live-size-profiles-fixture.png");
         }
 
         // ResourceTwin is one latest row per machine, not a first-bottle cache.
