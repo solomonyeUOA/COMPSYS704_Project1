@@ -48,6 +48,12 @@ class DemoLauncherTest(unittest.TestCase):
         options = PROJECT.runtime_options("m2", self.settings(demo_slowdown=1.0000001))
         self.assertIn("-Dabs.simulation.slowdown=1.0000001", options)
 
+    def test_launcher_passes_private_shutdown_file_only_to_pos(self):
+        options = PROJECT.runtime_options("pos", self.settings())
+        self.assertFalse(any("abs.launcher.shutdownFile" in item for item in options))
+        # The per-run path is deliberately attached by run(), not runtime_options(),
+        # so test/unit processes cannot accidentally request a real shutdown.
+
     def test_invalid_cli_fails_before_build_or_launch(self):
         for arguments in (("run", "--demo-slowdown", "nan"),
                           ("run", "--demo-slowdown", "11"),

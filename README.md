@@ -37,6 +37,12 @@ Try `--demo-slowdown 10` for more viewing time. Values from 1 to 10 are accepted
 normal `run-project.bat` and runs without the option remain at 1 (normal speed).
 Restart the run to change speed. The POS and ABS window titles show demo mode.
 
+Use **Exit Program** in the POS window to stop POS, visualization, M2, M3, M4
+and Coordinator together. Confirm the warning, then wait for `Stopped. Evidence
+retained in ...` in the launcher terminal. Closing individual Java windows, or
+closing PowerShell without Ctrl+C, can leave the other runtimes and their ports
+occupied.
+
 This is not a delayed animation: the simulation itself takes longer, and the
 overview and twin tables still follow the same confirmed events. Matching
 operation timeouts scale too; telemetry, heartbeats, timestamps and reset
