@@ -13,6 +13,8 @@ M2TransferFaultAdapter(
     output String signal TRANSFER_RECOVERY_RESULT;
     output String signal LOCAL_RECOVERY_INTENT;
     output String signal M2_SYSTEM_RESET_ACK;
+    output String signal TEST_TRANSFER_FAULT_ACK;
+    output String signal WATCHDOG_M2_HEARTBEAT;
 )
 ->{
     System.out.println("M2 M2TransferFaultAdapterCD started");
@@ -50,11 +52,21 @@ M2TransferFaultAdapter(
     }}
     ||
     {loop {
+        String watchdogHeartbeat =
+            M2TransferFaultAdapterStateV2_1.nextWatchdogHeartbeat();
+        if (watchdogHeartbeat != null) {
+            emit WATCHDOG_M2_HEARTBEAT(watchdogHeartbeat);
+        }
         M2SystemResetStateV1.tick();
         String resetAck = M2SystemResetStateV1.takeAck();
         if (resetAck != null) {
             emit M2_SYSTEM_RESET_ACK(resetAck);
             System.out.println("M2 SYSTEM_RESET safe ACK=" + resetAck);
+        }
+        String testFaultAck =
+            M2TransferFaultAdapterStateV2_1.takeTestFaultAck();
+        if (testFaultAck != null) {
+            emit TEST_TRANSFER_FAULT_ACK(testFaultAck);
         }
         String event =
             M2TransferFaultAdapterStateV2_1.takeFaultEvent();

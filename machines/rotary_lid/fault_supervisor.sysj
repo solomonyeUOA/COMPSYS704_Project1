@@ -7,6 +7,7 @@ FaultSupervisor(
     input String signal FT_SAFE_STOP_ACK;
     input String signal FT_RESUME_DECISION;
     input String signal M3_SYSTEM_RESET;
+    input String signal TEST_TRANSFER_FAULT_ACK;
     input String signal WATCHDOG_M1_HEARTBEAT;
     input String signal WATCHDOG_M2_HEARTBEAT;
     input String signal WATCHDOG_M4_HEARTBEAT;
@@ -51,6 +52,11 @@ FaultSupervisor(
     ||
     {loop {
         if (!M3SystemResetStateV1.isQuarantined()) {
+            present(TEST_TRANSFER_FAULT_ACK) {
+                FaultInjectionStateV2_1.onTransferAcknowledgement(
+                    #TEST_TRANSFER_FAULT_ACK
+                );
+            }
             String testFault = FaultInjectionStateV2_1.nextTransferRequest();
             if (testFault != null) {
                 emit TEST_TRANSFER_FAULT(testFault);

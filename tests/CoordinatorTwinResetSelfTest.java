@@ -2,6 +2,12 @@
 public final class CoordinatorTwinResetSelfTest {
     public static void main(String[] args) {
         CoordinatorStateV1.resetForTest();
+        require(CoordinatorStateV1.nextWatchdogHeartbeat(0L).startsWith(
+            "V1|M1_COORDINATOR|0|RUNNING"), "M1 heartbeat starts immediately");
+        require(CoordinatorStateV1.nextWatchdogHeartbeat(499L) == null,
+            "M1 heartbeat is rate limited");
+        require(CoordinatorStateV1.nextWatchdogHeartbeat(500L) != null,
+            "M1 heartbeat repeats after interval");
         require(CoordinatorStateV1.accept("PO0001|1|P1,L,60,40,1"), "order accepted");
         require("V1|PO0001|P1|60|40|1|L".equals(CoordinatorStateV1.nextTwinBatchContext()), "live recipe context includes size");
         require(CoordinatorStateV1.publishStartOrder(), "initial quantity is held");

@@ -17,6 +17,10 @@
                      To="CoordinatorCD.SYSTEM_RESET_REQUEST"
                      Class="com.systemj.ipc.SimpleClient"
                      IP="127.0.0.1" Port="11001" />
+            <oSignal Name="WATCHDOG_POS_HEARTBEAT"
+                     To="FaultSupervisorCD.WATCHDOG_POS_HEARTBEAT"
+                     Class="OptionalSimpleClient"
+                     IP="127.0.0.1" Port="13003" />
         </ClockDomain>
     </SubSystem>
 </System>

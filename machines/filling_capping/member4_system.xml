@@ -6,6 +6,7 @@
             <iSignal Name="M4_BATCH_START" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="11011" />
             <iSignal Name="M4_SYSTEM_RESET" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="11011" />
             <oSignal Name="M4_SYSTEM_RESET_ACK" To="CoordinatorCD.M4_SYSTEM_RESET_ACK" Class="OptionalSimpleClient" IP="127.0.0.1" Port="11001" />
+            <oSignal Name="WATCHDOG_M4_HEARTBEAT" To="FaultSupervisorCD.WATCHDOG_M4_HEARTBEAT" Class="OptionalSimpleClient" IP="127.0.0.1" Port="13003" />
             <oSignal Name="M4_WORKPIECE_OBSERVATION" To="DigitalTwinCD.M4_WORKPIECE_OBSERVATION" Class="OptionalSimpleClient" IP="127.0.0.1" Port="14002" />
             <oSignal Name="M4_SIM_BATCH_READY" To="RecognitionSimulatorCD.M4_SIM_BATCH_READY" Class="OptionalSimpleClient" IP="127.0.0.1" Port="11014" />
             <iSignal Name="BOTTLE_RECOGNISED" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="11011" />

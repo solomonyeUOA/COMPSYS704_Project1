@@ -52,6 +52,7 @@ public final class POSVisualisation {
         ).longValue()
     );
     private static final int ORDER_TRANSMISSION_ATTEMPTS = 3;
+    private static final long WATCHDOG_HEARTBEAT_MILLIS = 500L;
     private static final long ORDER_RETRY_MILLIS = Math.max(
         1L,
         Long.getLong(
@@ -93,6 +94,7 @@ public final class POSVisualisation {
     private static boolean resetInProgress = false;
     private static String activeResetId = null;
     private static int nextResetNumber = 1;
+    private static long nextWatchdogHeartbeatMillis;
     private static final Set<String> COMPLETED_ORDER_IDS =
         new HashSet<String>();
     private static final Set<String> COMPLETED_RESET_IDS =
@@ -207,6 +209,18 @@ public final class POSVisualisation {
                 }
             }
         });
+    }
+
+    public static synchronized String nextWatchdogHeartbeat() {
+        return nextWatchdogHeartbeat(System.currentTimeMillis());
+    }
+
+    static synchronized String nextWatchdogHeartbeat(long nowMillis) {
+        if (nowMillis < nextWatchdogHeartbeatMillis) {
+            return null;
+        }
+        nextWatchdogHeartbeatMillis = nowMillis + WATCHDOG_HEARTBEAT_MILLIS;
+        return "V1|POS|" + nowMillis + "|RUNNING";
     }
 
     /**
@@ -667,6 +681,7 @@ public final class POSVisualisation {
     }
 
     static synchronized void resetForTest() {
+        nextWatchdogHeartbeatMillis = 0L;
         PENDING_ORDER.set(null);
         RESET_OFFER.discard();
         testOrdersReturned = 0;

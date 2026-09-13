@@ -1,16 +1,32 @@
 /** Static SystemJ-facing facade for M2TransferFaultAdapterCD. */
 public final class M2TransferFaultAdapterStateV2_1 {
+    private static final long WATCHDOG_HEARTBEAT_MILLIS = 500L;
     private static M2TransferFaultAdapterModelV2_1 model =
         new M2TransferFaultAdapterModelV2_1();
+    private static long nextWatchdogHeartbeatMillis;
+    private static String pendingTestFaultAck;
 
     private M2TransferFaultAdapterStateV2_1() {
     }
 
     public static synchronized void reset() {
         model = new M2TransferFaultAdapterModelV2_1();
+        pendingTestFaultAck = null;
     }
 
     public static synchronized void resetForSystemReset() { reset(); }
+
+    public static synchronized String nextWatchdogHeartbeat() {
+        return nextWatchdogHeartbeat(System.currentTimeMillis());
+    }
+
+    static synchronized String nextWatchdogHeartbeat(long nowMillis) {
+        if (nowMillis < nextWatchdogHeartbeatMillis) {
+            return null;
+        }
+        nextWatchdogHeartbeatMillis = nowMillis + WATCHDOG_HEARTBEAT_MILLIS;
+        return "V1|M2_TRANSFER|" + nowMillis + "|RUNNING";
+    }
 
     private static boolean currentEpoch(String payload) {
         String[] fields = payload == null ? new String[0] : payload.split("\\|", -1);
@@ -27,7 +43,20 @@ public final class M2TransferFaultAdapterStateV2_1 {
         if (M2SystemResetStateV1.isQuarantined()) {
             return false;
         }
-        return M2MachineStateV1.armTransferTestFault(payload);
+        String[] fields = payload == null ? new String[0] :
+            payload.split("\\|", -1);
+        boolean accepted = M2MachineStateV1.armTransferTestFault(payload);
+        if (fields.length == 2 && !fields[0].isEmpty()) {
+            pendingTestFaultAck = "V1|" + fields[0] + "|" +
+                (accepted ? "ACCEPTED" : "REJECTED");
+        }
+        return accepted;
+    }
+
+    public static synchronized String takeTestFaultAck() {
+        String ack = pendingTestFaultAck;
+        pendingTestFaultAck = null;
+        return ack;
     }
 
     public static synchronized boolean recoverTestFault(String payload) {

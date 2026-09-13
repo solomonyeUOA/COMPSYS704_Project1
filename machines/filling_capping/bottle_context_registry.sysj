@@ -11,11 +11,16 @@ BottleContextRegistry(
     output String signal M4_SYSTEM_RESET_ACK;
     output String signal M4_WORKPIECE_OBSERVATION;
     output String signal M4_SIM_BATCH_READY;
+    output String signal WATCHDOG_M4_HEARTBEAT;
 )
 ->{
     System.out.println("M4 BottleContextRegistryCD started");
 
     {loop {
+        String watchdogHeartbeat = M4SystemResetStateV1.nextWatchdogHeartbeat();
+        if (watchdogHeartbeat != null) {
+            emit WATCHDOG_M4_HEARTBEAT(watchdogHeartbeat);
+        }
         present(M4_SYSTEM_RESET) {
             M4SystemResetStateV1.request(#M4_SYSTEM_RESET);
         }

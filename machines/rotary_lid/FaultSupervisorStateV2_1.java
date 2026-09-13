@@ -101,7 +101,8 @@ public final class FaultSupervisorStateV2_1 {
         );
         if (FaultGuiActionsV2_1.isTestMode() &&
             isResumeDecision(payload) &&
-            !FaultTestControlStateV2_1.hasPendingResumeRequest()) {
+            !FaultTestControlStateV2_1.hasPendingResumeRequest() &&
+            !isTrustedAutomaticResumeDecision(payload)) {
             return false;
         }
         boolean accepted = MODEL.onResumeDecision(payload);
@@ -119,6 +120,10 @@ public final class FaultSupervisorStateV2_1 {
         String[] fields = payload.split("\\|", -1);
         return fields.length == 6 && "V2".equals(fields[0]) &&
             "RESUME".equals(fields[3]);
+    }
+
+    private static boolean isTrustedAutomaticResumeDecision(String payload) {
+        return MODEL.isTrustedAutomaticResumeDecision(payload);
     }
 
     public static String takeRecoveryRequest() {
@@ -307,6 +312,34 @@ public final class FaultSupervisorStateV2_1 {
 
     public static String latestEvidence() {
         return MODEL.getLatestEvidence();
+    }
+
+    public static long completedRecoverySequence() {
+        return MODEL.getCompletedRecoverySequence();
+    }
+
+    public static String lastCompletedRecoveryMode() {
+        return MODEL.getLastCompletedRecoveryMode();
+    }
+
+    public static String lastCompletedRecoverySubsystem() {
+        return MODEL.getLastCompletedRecoverySubsystem();
+    }
+
+    public static String lastCompletedRecoveryFault() {
+        return MODEL.getLastCompletedRecoveryFault();
+    }
+
+    public static String lastCompletedRecoveryAction() {
+        return MODEL.getLastCompletedRecoveryAction();
+    }
+
+    public static int lastCompletedRecoveryAttempt() {
+        return MODEL.getLastCompletedRecoveryAttempt();
+    }
+
+    public static String lastCompletedRecoveryAuthority() {
+        return MODEL.getLastCompletedRecoveryAuthority();
     }
 
     public static String localSummary() {

@@ -10,7 +10,10 @@ public final class FaultMonitoringPresentationV2_1 {
         if (FaultMonitoringStateV2_1.SUPERVISOR.equals(component.name)) {
             if ("WAITING_RESULT".equals(current.supervisorState)) return "RECOVERING";
             if ("LOCKED_OUT".equals(current.supervisorState)) return "ISOLATED";
-            if ("RECOVERY_READY".equals(current.supervisorState)) return "VERIFIED";
+            if ("RECOVERY_READY".equals(current.supervisorState)) {
+                return isAutomaticRecovery(current) ?
+                    "AUTO RECOVERED" : "VERIFIED";
+            }
             return current.supervisorState;
         }
         if (isFaultSource(component, current)) {
@@ -20,7 +23,10 @@ public final class FaultMonitoringPresentationV2_1 {
                     "RECOVERING " + current.attempt + "/" +
                         current.maximumAttempts : "RECOVERING";
             }
-            if ("RECOVERY_READY".equals(current.supervisorState)) return "VERIFIED";
+            if ("RECOVERY_READY".equals(current.supervisorState)) {
+                return isAutomaticRecovery(current) ?
+                    "AUTO RECOVERED" : "VERIFIED";
+            }
             if ("WAITING_SAFE_STOP".equals(current.supervisorState) ||
                 "LOCKED_OUT".equals(current.supervisorState) ||
                 "MANUAL_RECOVERY".equals(current.supervisorState) ||
@@ -45,5 +51,12 @@ public final class FaultMonitoringPresentationV2_1 {
                 FaultMonitoringStateV2_1.LID_CONTROLLER.equals(component.name)) ||
             ("TRANSFER".equals(current.subsystem) &&
                 FaultMonitoringStateV2_1.M2_LINK.equals(component.name));
+    }
+
+    public static boolean isAutomaticRecovery(
+        FaultMonitoringStateV2_1.Snapshot current
+    ) {
+        return current != null && current.policy != null &&
+            current.policy.indexOf("AUTOMATIC_RETRY") >= 0;
     }
 }
