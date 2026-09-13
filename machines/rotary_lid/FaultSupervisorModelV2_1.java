@@ -62,6 +62,16 @@ public final class FaultSupervisorModelV2_1 {
     private int manualEscalations;
     private int recoveryFailures;
     private long traceSequence;
+    private long completedRecoverySequence;
+    private String lastCompletedRecoveryMode = "NONE";
+    private String lastCompletedRecoverySubsystem = "-";
+    private String lastCompletedRecoveryFault = "-";
+    private String lastCompletedRecoveryAction = "-";
+    private int lastCompletedRecoveryAttempt;
+    private String lastCompletedRecoveryAuthority = "-";
+    private String lastCompletedRecoveryEventId = "-";
+    private String lastCompletedRecoveryEpoch = "-";
+    private long lastCompletedRecoveryStateVersion = -1L;
 
     public synchronized boolean onFaultEvent(String payload) {
         FaultProtocolV2_1.FaultEvent event;
@@ -444,6 +454,10 @@ public final class FaultSupervisorModelV2_1 {
             reject("INVALID_RESUME_DECISION " + exception.getMessage());
             return false;
         }
+        if (activeEvent == null && isDuplicateCompletedResume(fields)) {
+            record("DUPLICATE_M1_RESUME " + fields[1]);
+            return true;
+        }
         if (activeEvent == null ||
             !activeEvent.eventId.equals(fields[1]) ||
             !activeEvent.sourceEpoch.equals(fields[2]) ||
@@ -460,6 +474,20 @@ public final class FaultSupervisorModelV2_1 {
             reject("UNSAFE_RESUME_DECISION");
             return false;
         }
+        completedRecoverySequence++;
+        lastCompletedRecoveryMode = activePolicy != null &&
+            activePolicy.disposition ==
+                FaultPolicyV2_1.Disposition.AUTOMATIC_RETRY ?
+            "AUTOMATIC" : "MANUAL";
+        lastCompletedRecoverySubsystem = activeEvent.subsystem;
+        lastCompletedRecoveryFault = activeEvent.faultCode;
+        lastCompletedRecoveryAction = activePolicy == null ? "-" :
+            activePolicy.action;
+        lastCompletedRecoveryAttempt = activeAttempt;
+        lastCompletedRecoveryAuthority = fields[4];
+        lastCompletedRecoveryEventId = activeEvent.eventId;
+        lastCompletedRecoveryEpoch = activeEvent.sourceEpoch;
+        lastCompletedRecoveryStateVersion = latestStateVersion;
         record("M1_RESUME " + fields[4]);
         clearActiveRecovery();
         return true;
@@ -678,6 +706,58 @@ public final class FaultSupervisorModelV2_1 {
         return latestEvidence;
     }
 
+    public synchronized boolean isAutomaticRecoveryReady() {
+        return state == State.RECOVERY_READY && activePolicy != null &&
+            activePolicy.disposition ==
+                FaultPolicyV2_1.Disposition.AUTOMATIC_RETRY;
+    }
+
+    public synchronized boolean isTrustedAutomaticResumeDecision(
+        String payload
+    ) {
+        String[] fields;
+        try {
+            fields = coordinationFields(payload, 6);
+        }
+        catch (IllegalArgumentException exception) {
+            return false;
+        }
+        if (!"RESUME".equals(fields[3]) ||
+            !"M1_AUTO_INTERLOCK_VERIFIED".equals(fields[4])) {
+            return false;
+        }
+        return isAutomaticRecoveryReady() ||
+            isDuplicateCompletedResume(fields);
+    }
+
+    public synchronized long getCompletedRecoverySequence() {
+        return completedRecoverySequence;
+    }
+
+    public synchronized String getLastCompletedRecoveryMode() {
+        return lastCompletedRecoveryMode;
+    }
+
+    public synchronized String getLastCompletedRecoverySubsystem() {
+        return lastCompletedRecoverySubsystem;
+    }
+
+    public synchronized String getLastCompletedRecoveryFault() {
+        return lastCompletedRecoveryFault;
+    }
+
+    public synchronized String getLastCompletedRecoveryAction() {
+        return lastCompletedRecoveryAction;
+    }
+
+    public synchronized int getLastCompletedRecoveryAttempt() {
+        return lastCompletedRecoveryAttempt;
+    }
+
+    public synchronized String getLastCompletedRecoveryAuthority() {
+        return lastCompletedRecoveryAuthority;
+    }
+
     public synchronized String getLocalSummary() {
         return "ROTARY=" + localDecision("ROTARY") + "; LID=" +
             localDecision("LID");
@@ -714,6 +794,7 @@ public final class FaultSupervisorModelV2_1 {
         manualEscalations = 0;
         recoveryFailures = 0;
         traceSequence = 0;
+        clearCompletedRecovery();
         clearActiveRecovery();
         clearOutputs();
     }
@@ -726,6 +807,7 @@ public final class FaultSupervisorModelV2_1 {
         clearActiveRecovery();
         clearOutputs();
         latestEvidence = "NONE";
+        clearCompletedRecovery();
         record("SYSTEM_RESET");
     }
 
@@ -890,6 +972,31 @@ public final class FaultSupervisorModelV2_1 {
         decision = "IDLE";
         latestEvidence = "NONE";
         pendingRecoveryRequest = null;
+    }
+
+    private void clearCompletedRecovery() {
+        completedRecoverySequence = 0L;
+        lastCompletedRecoveryMode = "NONE";
+        lastCompletedRecoverySubsystem = "-";
+        lastCompletedRecoveryFault = "-";
+        lastCompletedRecoveryAction = "-";
+        lastCompletedRecoveryAttempt = 0;
+        lastCompletedRecoveryAuthority = "-";
+        lastCompletedRecoveryEventId = "-";
+        lastCompletedRecoveryEpoch = "-";
+        lastCompletedRecoveryStateVersion = -1L;
+    }
+
+    private boolean isDuplicateCompletedResume(String[] fields) {
+        return fields != null && fields.length == 6 &&
+            "AUTOMATIC".equals(lastCompletedRecoveryMode) &&
+            lastCompletedRecoveryEventId.equals(fields[1]) &&
+            lastCompletedRecoveryEpoch.equals(fields[2]) &&
+            "RESUME".equals(fields[3]) &&
+            lastCompletedRecoveryAuthority.equals(fields[4]) &&
+            String.valueOf(lastCompletedRecoveryStateVersion).equals(
+                fields[5]
+            );
     }
 
     private void clearOutputs() {

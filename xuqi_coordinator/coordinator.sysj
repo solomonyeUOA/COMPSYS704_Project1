@@ -26,6 +26,7 @@ Coordinator(
     input String signal FT_RECOVERY_FAILED;
     output String signal FT_SAFE_STOP_ACK;
     output String signal FT_RESUME_DECISION;
+    output String signal WATCHDOG_M1_HEARTBEAT;
     input String signal FT_TEST_CONTROL;
 
     output Integer signal START_ORDER;
@@ -152,6 +153,17 @@ Coordinator(
                         CoordinatorStateV1.lifecycleSnapshot()
                     );
                 }
+            }
+            pause;
+        }
+    }
+    ||
+    {
+        loop {
+            String watchdogHeartbeat =
+                CoordinatorStateV1.nextWatchdogHeartbeat();
+            if (watchdogHeartbeat != null) {
+                emit WATCHDOG_M1_HEARTBEAT(watchdogHeartbeat);
             }
             pause;
         }
@@ -575,12 +587,25 @@ Coordinator(
             if (CoordinatorStateV1.recordFtRecoveryReady(
                 #FT_RECOVERY_READY
             )) {
-                System.out.println(
-                    "[COORD-FT] FT_RECOVERY_READY recorded; HOLD retained " +
-                    "and no automatic resume performed. payload=" +
-                    #FT_RECOVERY_READY + " " +
-                    CoordinatorStateV1.ftSnapshot()
-                );
+                String automaticResume =
+                    CoordinatorStateV1.takeFtAutomaticResumeDecision();
+                if (automaticResume != null) {
+                    emit FT_RESUME_DECISION(automaticResume);
+                    System.out.println(
+                        "[COORD-FT] low-risk recovery evidence and M1 " +
+                        "interlocks verified; automatic RESUME emitted. " +
+                        "payload=" + automaticResume + " " +
+                        CoordinatorStateV1.ftSnapshot()
+                    );
+                }
+                else {
+                    System.out.println(
+                        "[COORD-FT] FT_RECOVERY_READY recorded; HOLD " +
+                        "retained for manual approval. payload=" +
+                        #FT_RECOVERY_READY + " " +
+                        CoordinatorStateV1.ftSnapshot()
+                    );
+                }
             }
         } pause;}}
         ||

@@ -17,6 +17,7 @@ public final class CoordinatorStateV1 {
     private static final int RESET_TRANSMISSION_ATTEMPTS = 3;
     private static final long RESET_SIGNAL_HOLD_MILLIS = 500L;
     private static final long RESET_RETRY_MILLIS = 250L;
+    private static final long WATCHDOG_HEARTBEAT_MILLIS = 500L;
     private static final long COMPLETION_SIGNAL_HOLD_MILLIS = Math.max(
         1L,
         Long.getLong(
@@ -62,6 +63,7 @@ public final class CoordinatorStateV1 {
     public static long orderStartMillis = 0;
     public static long nextStatusPollMillis =
         System.currentTimeMillis() + 1000;
+    private static long nextWatchdogHeartbeatMillis;
     public static String pendingCompletionPayload = "";
     public static boolean completionPending = false;
     public static long completionSendAfterMillis = 0;
@@ -132,6 +134,9 @@ public final class CoordinatorStateV1 {
     public static String pendingFtSafeStopRequest = "";
     public static String latestFtRecoveryReady = "";
     public static String latestFtRecoveryFailed = "";
+    private static String pendingFtAutomaticResumeDecision = "";
+    private static String lastFtAutomaticResumeReady = "";
+    private static String lastFtAutomaticResumeDecision = "";
     public static boolean ftCoordinationHold = false;
     public static boolean ftSafeStopEstablished = false;
     public static boolean ftBatchTransitionHeld = false;
@@ -145,6 +150,18 @@ public final class CoordinatorStateV1 {
     private static String ftVisualSafeStop = "NOT_REQUESTED";
     private static String ftVisualRecovery = "NOT_ACTIVE";
     private static String pendingFtVisualEvidence = visualFtEvidence();
+
+    public static synchronized String nextWatchdogHeartbeat() {
+        return nextWatchdogHeartbeat(System.currentTimeMillis());
+    }
+
+    static synchronized String nextWatchdogHeartbeat(long nowMillis) {
+        if (nowMillis < nextWatchdogHeartbeatMillis) {
+            return null;
+        }
+        nextWatchdogHeartbeatMillis = nowMillis + WATCHDOG_HEARTBEAT_MILLIS;
+        return "V1|M1_COORDINATOR|" + nowMillis + "|RUNNING";
+    }
 
     /** Parses and accepts a new order only when no order is active. */
     public static boolean accept(String payload) {
@@ -619,17 +636,46 @@ public final class CoordinatorStateV1 {
         return true;
     }
 
-    /** Records service-ready evidence but intentionally keeps the M1 hold. */
-    public static boolean recordFtRecoveryReady(String payload) {
+    /** Records service-ready evidence and auto-resumes only verified low-risk faults. */
+    public static synchronized boolean recordFtRecoveryReady(String payload) {
+        if (isPresentPayload(payload) &&
+            payload.equals(lastFtAutomaticResumeReady) &&
+            isPresentPayload(lastFtAutomaticResumeDecision)) {
+            pendingFtAutomaticResumeDecision = lastFtAutomaticResumeDecision;
+            return true;
+        }
         if (!admitFtEvidence(payload)) {
             return false;
         }
         latestFtRecoveryReady = payload;
-        ftVisualState = "RECOVERY_READY_HOLD";
         updateFtVisualIdentity(payload, false);
-        ftVisualRecovery = "READY_AWAITING_M1";
+        if (canAutomaticallyResumeFt(payload)) {
+            String[] fields = payload.split("\\|", -1);
+            pendingFtAutomaticResumeDecision =
+                "V2|" + fields[1] + "|" + fields[2] +
+                "|RESUME|M1_AUTO_INTERLOCK_VERIFIED|" + fields[4];
+            lastFtAutomaticResumeReady = payload;
+            lastFtAutomaticResumeDecision = pendingFtAutomaticResumeDecision;
+            ftCoordinationHold = false;
+            ftSafeStopEstablished = false;
+            pendingFtSafeStopRequest = "";
+            ftVisualState = "NORMAL";
+            ftVisualSafeStop = "RELEASED";
+            ftVisualRecovery = "AUTO_RESUMED_INTERLOCKS_VERIFIED";
+            retiredFtKeys.add(fields[2] + "|" + fields[1]);
+        }
+        else {
+            ftVisualState = "RECOVERY_READY_HOLD";
+            ftVisualRecovery = "READY_AWAITING_M1";
+        }
         queueFtVisualEvidence();
         return true;
+    }
+
+    public static synchronized String takeFtAutomaticResumeDecision() {
+        String decision = pendingFtAutomaticResumeDecision;
+        pendingFtAutomaticResumeDecision = "";
+        return isPresentPayload(decision) ? decision : null;
     }
 
     /** Records/escalates a failed recovery and retains the M1 hold. */
@@ -871,6 +917,9 @@ public final class CoordinatorStateV1 {
         pendingFtSafeStopRequest = "";
         latestFtRecoveryReady = "";
         latestFtRecoveryFailed = "";
+        pendingFtAutomaticResumeDecision = "";
+        lastFtAutomaticResumeReady = "";
+        lastFtAutomaticResumeDecision = "";
         ftCoordinationHold = false;
         ftSafeStopEstablished = false;
         ftBatchTransitionHeld = false;
@@ -947,6 +996,47 @@ public final class CoordinatorStateV1 {
 
     private static boolean isPresentPayload(String payload) {
         return payload != null && payload.trim().length() > 0;
+    }
+
+    private static boolean canAutomaticallyResumeFt(String payload) {
+        if (systemResetPendingExternalAck ||
+            isPresentPayload(pendingFtSafeStopRequest)) {
+            return false;
+        }
+        String[] ready = payload == null ? new String[0] :
+            payload.split("\\|", -1);
+        String[] alert = latestFtFaultAlert == null ? new String[0] :
+            latestFtFaultAlert.split("\\|", -1);
+        if (ready.length != 5 || alert.length != 8 ||
+            !"V2".equals(ready[0]) || !"V2".equals(alert[0]) ||
+            !ready[1].equals(alert[1]) || !ready[2].equals(alert[2]) ||
+            !"RECOVERY_READY".equals(ready[3]) ||
+            !"WARNING".equals(alert[5]) ||
+            hasMatchingFtFailure(ready[1], ready[2])) {
+            return false;
+        }
+        boolean lowRisk =
+            ("TRANSFER".equals(alert[3]) &&
+                "ARRIVAL_TIMEOUT".equals(alert[4])) ||
+            ("LID".equals(alert[3]) && "PICK_TIMEOUT".equals(alert[4]));
+        if (!lowRisk || !ready[4].matches("0|[1-9][0-9]*") ||
+            !alert[7].matches("0|[1-9][0-9]*")) {
+            return false;
+        }
+        return new java.math.BigInteger(ready[4]).compareTo(
+            new java.math.BigInteger(alert[7])) > 0;
+    }
+
+    private static boolean hasMatchingFtFailure(
+        String eventId,
+        String sourceEpoch
+    ) {
+        if (!isPresentPayload(latestFtRecoveryFailed)) {
+            return false;
+        }
+        String[] failed = latestFtRecoveryFailed.split("\\|", -1);
+        return failed.length >= 3 && eventId.equals(failed[1]) &&
+            sourceEpoch.equals(failed[2]);
     }
 
     /** Preserve correlation tombstones across reset; delayed FT cannot restore HOLD. */

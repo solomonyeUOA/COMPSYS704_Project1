@@ -153,6 +153,9 @@ public final class FaultManagementGUI {
         private long lastWatchdogNotificationSequence;
         private String lastEventId = "-";
         private String lastSupervisorState = "IDLE";
+        private long lastCompletedRecoverySequence;
+        private boolean automaticRecoveryVerified;
+        private String automaticRecoverySummary = "";
 
         DashboardFrame() {
             super("M3 Fault-Tolerance Monitor");
@@ -393,9 +396,22 @@ public final class FaultManagementGUI {
                     }
                     actionRunning = false;
                     actionFailed = !accepted;
-                    actionFeedback = accepted ?
-                        t("Completed: ", "已完成：") + runningAction :
-                        value(error, t("Rejected in the current state", "当前状态拒绝该操作"));
+                    if (accepted && "resume".equals(action) &&
+                        automaticRecoveryVerified) {
+                        actionFeedback = automaticRecoverySummary + t(
+                            ". M1 approved resume; system resumed normally.",
+                            "。M1 已批准恢复，系统已正常继续运行。"
+                        );
+                    }
+                    else {
+                        actionFeedback = accepted ?
+                            t("Completed: ", "已完成：") + runningAction :
+                            value(error, t("Rejected in the current state", "当前状态拒绝该操作"));
+                    }
+                    if (accepted && "reset".equals(action)) {
+                        automaticRecoveryVerified = false;
+                        automaticRecoverySummary = "";
+                    }
                     runningAction = "";
                     refresh();
                 }
@@ -450,9 +466,15 @@ public final class FaultManagementGUI {
         private void synchroniseActionFeedback(
             FaultMonitoringStateV2_1.Snapshot snapshot
         ) {
+            if (snapshot.completedRecoverySequence <
+                lastCompletedRecoverySequence) {
+                lastCompletedRecoverySequence = 0L;
+            }
             boolean newFault = !"-".equals(snapshot.eventId) &&
                 !snapshot.eventId.equals(lastEventId);
             if (newFault && !actionRunning) {
+                automaticRecoveryVerified = false;
+                automaticRecoverySummary = "";
                 actionFailed = false;
                 actionFeedback = t(
                     "Fault detected; follow the enabled recovery steps.",
@@ -463,13 +485,88 @@ public final class FaultManagementGUI {
                 !"RECOVERY_READY".equals(lastSupervisorState) &&
                 !actionRunning) {
                 actionFailed = false;
-                actionFeedback = t(
-                    "Recovery verified; system HOLD remains until Approve resume is pressed.",
-                    "恢复验证完成；按下批准恢复前系统仍保持暂停。"
-                );
+                if (FaultMonitoringPresentationV2_1.isAutomaticRecovery(snapshot)) {
+                    automaticRecoveryVerified = true;
+                    automaticRecoverySummary = t(
+                        "Automatic recovery successful: ",
+                        "自动恢复成功："
+                    ) + snapshot.subsystem + " / " + snapshot.faultCode +
+                        t("; action ", "；动作 ") + recoveryAction(snapshot) +
+                        t("; attempt ", "；尝试 ") + snapshot.attempt + "/" +
+                        snapshot.maximumAttempts;
+                    actionFeedback = automaticRecoverySummary + t(
+                        ". Recovery evidence was submitted automatically; M1 is validating its interlocks.",
+                        "。恢复证据已自动提交；M1 正在验证联锁条件。"
+                    );
+                }
+                else {
+                    actionFeedback = t(
+                        "Recovery verified; system HOLD remains until Approve resume is pressed.",
+                        "恢复验证完成；按下批准恢复前系统仍保持暂停。"
+                    );
+                }
+            }
+            if (snapshot.completedRecoverySequence >
+                lastCompletedRecoverySequence) {
+                lastCompletedRecoverySequence =
+                    snapshot.completedRecoverySequence;
+                if ("AUTOMATIC".equals(
+                    snapshot.lastCompletedRecoveryMode)) {
+                    automaticRecoveryVerified = false;
+                    automaticRecoverySummary = t(
+                        "Automatic recovery successful: ",
+                        "自动恢复成功："
+                    ) + snapshot.lastCompletedRecoverySubsystem + " / " +
+                        snapshot.lastCompletedRecoveryFault +
+                        t("; action ", "；动作 ") +
+                        snapshot.lastCompletedRecoveryAction +
+                        t("; attempt ", "；尝试 ") +
+                        snapshot.lastCompletedRecoveryAttempt + "/1";
+                    actionFailed = false;
+                    actionFeedback = automaticRecoverySummary + t(
+                        ". M1 interlocks and evidence verified; automatic RESUME issued. System resumed normally.",
+                        "。M1 已验证联锁条件和恢复证据，并自动发出 RESUME；系统已正常继续运行。"
+                    );
+                    showCompletedAutomaticRecoveryNotification(snapshot);
+                }
             }
             lastEventId = snapshot.eventId;
             lastSupervisorState = snapshot.supervisorState;
+        }
+
+        private void showCompletedAutomaticRecoveryNotification(
+            FaultMonitoringStateV2_1.Snapshot snapshot
+        ) {
+            JOptionPane pane = new JOptionPane(
+                t("Module: ", "模块：") +
+                    snapshot.lastCompletedRecoverySubsystem + "\n" +
+                t("Fault: ", "故障：") +
+                    snapshot.lastCompletedRecoveryFault + "\n" +
+                t("Action: ", "动作：") +
+                    snapshot.lastCompletedRecoveryAction + "\n" +
+                t("M1 decision: Automatic RESUME after interlock and evidence validation.\n" +
+                    "System resumed normally.",
+                    "M1 决策：验证联锁条件和恢复证据后自动发出 RESUME。\n系统已正常继续运行。"),
+                JOptionPane.INFORMATION_MESSAGE
+            );
+            JDialog dialog = pane.createDialog(
+                this, t("Automatic Recovery Successful", "自动恢复成功")
+            );
+            dialog.setModal(false);
+            dialog.setAlwaysOnTop(true);
+            dialog.setVisible(true);
+        }
+
+        private String recoveryAction(
+            FaultMonitoringStateV2_1.Snapshot snapshot
+        ) {
+            String marker = " action=";
+            int start = snapshot.policy.indexOf(marker);
+            if (start < 0) return "RETRY";
+            start += marker.length();
+            int end = snapshot.policy.indexOf(' ', start);
+            return end < 0 ? snapshot.policy.substring(start) :
+                snapshot.policy.substring(start, end);
         }
 
         private void showWatchdogNotification(
@@ -565,10 +662,23 @@ public final class FaultManagementGUI {
                 ));
             }
             else if (!"-".equals(armed)) {
+                testNote.setText(
+                    !FaultInjectionStateV2_1.hasTransferRequest() ?
+                        t("Fault armed for the next matching machine stage.",
+                            "故障已布置，正在等待下一次匹配的机器工序。") :
+                    FaultInjectionStateV2_1.transferRequestAccepted() ?
+                        t("M2 accepted the fault injection; waiting for the next matching machine stage.",
+                            "M2 已接受故障注入，正在等待下一次匹配的机器工序。") :
+                        t("Delivering the fault injection request to M2.",
+                            "正在向 M2 发送故障注入请求。")
+                );
+            }
+            else if (!"-".equals(
+                FaultInjectionStateV2_1.transferDeliveryError())) {
                 testNote.setText(t(
-                    "Fault armed for the next matching machine stage. Submit an order; recovery controls enable after it triggers.",
-                    "故障已布置，将在下一次匹配的机器阶段触发。请提交订单；触发后恢复按钮会按顺序启用。"
-                ));
+                    "Fault injection failed: ",
+                    "故障注入失败："
+                ) + FaultInjectionStateV2_1.transferDeliveryError());
             }
             else if ("IDLE".equals(state)) {
                 testNote.setText(t(
@@ -623,6 +733,15 @@ public final class FaultManagementGUI {
                 line("Required service evidence", snapshot.requiredServiceEvidence) +
                 line("Latest validated evidence", snapshot.latestEvidence) +
                 line("Local controller state", snapshot.localState) +
+                line("Last completed recovery mode",
+                    snapshot.lastCompletedRecoveryMode) +
+                line("Last completed recovery",
+                    snapshot.lastCompletedRecoverySubsystem + "/" +
+                        snapshot.lastCompletedRecoveryFault + " action=" +
+                        snapshot.lastCompletedRecoveryAction + " attempt=" +
+                        snapshot.lastCompletedRecoveryAttempt +
+                        " authority=" +
+                        snapshot.lastCompletedRecoveryAuthority) +
                 line("Session metrics", snapshot.metrics.summary());
         }
 
@@ -662,7 +781,10 @@ public final class FaultManagementGUI {
             if (actionRunning) return t("PROCESSING", "处理中");
             if ("IDLE".equals(state)) return t("IDLE", "空闲");
             if ("WAITING_RESULT".equals(state)) return t("RECOVERING", "恢复中");
-            if ("RECOVERY_READY".equals(state)) return t("VERIFIED / WAITING", "验证完成 / 等待授权");
+            if ("RECOVERY_READY".equals(state)) return
+                automaticRecoveryVerified ?
+                    t("AUTO RECOVERED", "自动恢复成功") :
+                    t("VERIFIED / WAITING", "验证完成 / 等待授权");
             if ("LOCKED_OUT".equals(state)) return t("STOPPED / ISOLATED", "已停止 / 已隔离");
             if ("FAILED".equals(state)) return t("FAILED", "失败");
             if ("MANUAL_RECOVERY".equals(state)) return t("RECOVERING", "恢复中");
@@ -673,15 +795,25 @@ public final class FaultManagementGUI {
             String state = snapshot.supervisorState;
             if ("IDLE".equals(state) &&
                 !"-".equals(FaultInjectionStateV2_1.armedFault())) {
-                return t("Fault armed; waiting for matching machine stage",
-                    "故障已布置，等待对应机器工序");
+                return !FaultInjectionStateV2_1.hasTransferRequest() ?
+                    t("Fault armed; waiting for matching machine stage",
+                        "故障已布置，等待对应机器工序") :
+                    FaultInjectionStateV2_1.transferRequestAccepted() ?
+                    t("M2 accepted fault; waiting for matching machine stage",
+                        "M2 已接受故障，等待对应机器工序") :
+                    t("Delivering fault request to M2",
+                        "正在向 M2 发送故障请求");
             }
             if ("WAITING_SAFE_STOP".equals(state)) return t("Isolating fault and awaiting M1 safe stop", "隔离故障并等待 M1 安全停机");
             if ("WAITING_ACK".equals(state)) return t("Sending bounded recovery request", "发送有限次数恢复请求");
             if ("WAITING_RESULT".equals(state)) return t("Controller recovery in progress", "控制器正在恢复");
             if ("RESOURCE_WAIT".equals(state)) return t("Waiting for resource replenishment", "等待资源补充");
             if ("MANUAL_RECOVERY".equals(state) || "LOCKED_OUT".equals(state)) return t("Fault isolated; manual reconciliation required", "故障已隔离，需要人工核对");
-            if ("RECOVERY_READY".equals(state)) return t("Evidence verified; waiting for M1", "证据已验证，等待 M1");
+            if ("RECOVERY_READY".equals(state)) return
+                FaultMonitoringPresentationV2_1.isAutomaticRecovery(snapshot) ?
+                    t("Automatic recovery verified; waiting only for M1 approval",
+                        "自动恢复已验证；当前仅等待 M1 批准") :
+                    t("Evidence verified; waiting for M1", "证据已验证，等待 M1");
             if ("FAILED".equals(state)) return t("Recovery failed", "恢复失败");
             return t("Monitoring M3 runtime and controller events", "监控 M3 运行状态与控制器事件");
         }
@@ -707,10 +839,17 @@ public final class FaultManagementGUI {
             String state = snapshot.supervisorState;
             if ("IDLE".equals(state) &&
                 !"-".equals(FaultInjectionStateV2_1.armedFault())) {
-                return t("Test fault armed: ", "测试故障已布置：") +
-                    FaultInjectionStateV2_1.armedFault() +
-                    t(". Submit an order; it will trigger at the matching real machine stage.",
-                        "。提交订单后，将在对应的真实机器工序触发。");
+                String fault = FaultInjectionStateV2_1.armedFault();
+                return !FaultInjectionStateV2_1.hasTransferRequest() ?
+                    t("Test fault armed: ", "测试故障已布置：") + fault +
+                        t(". Waiting for its matching real machine stage.",
+                            "。正在等待对应的真实机器工序。") :
+                    FaultInjectionStateV2_1.transferRequestAccepted() ?
+                    t("M2 accepted test fault: ", "M2 已接受测试故障：") +
+                        fault + t(". Waiting for its matching real machine stage.",
+                            "。正在等待对应的真实机器工序。") :
+                    t("Delivering test fault to M2: ",
+                        "正在向 M2 发送测试故障：") + fault;
             }
             String source = "-".equals(snapshot.subsystem) ? "" :
                 snapshot.subsystem + " / " + snapshot.faultCode + ": ";
@@ -725,6 +864,13 @@ public final class FaultManagementGUI {
                     "先记录人工核对，再提交控制器证据以恢复被隔离的传输设备。");
             }
             if ("LOCKED_OUT".equals(state)) return source + t("automatic recovery stopped. " + snapshot.decision, "自动恢复已停止。" + snapshot.decision);
+            if ("RECOVERY_READY".equals(state) &&
+                FaultMonitoringPresentationV2_1.isAutomaticRecovery(snapshot)) {
+                return source + t(
+                    "automatic recovery verified; evidence submitted automatically. M1 is validating interlocks before automatic release.",
+                    "自动恢复已验证，证据已自动提交；M1 正在验证联锁条件并准备自动放行。"
+                );
+            }
             if ("RECOVERY_READY".equals(state)) return source + t("recovery verified; M1 retains the resume decision.", "恢复已验证，恢复运行仍由 M1 决定。");
             if ("FAILED".equals(state)) return source + t("recovery failed: ", "恢复失败：") + snapshot.decision + " | " + snapshot.latestEvidence;
             return t("No active fault. Monitoring live M3 heartbeats and interface traffic.", "当前无活动故障，正在监控 M3 实时心跳与接口通信。");

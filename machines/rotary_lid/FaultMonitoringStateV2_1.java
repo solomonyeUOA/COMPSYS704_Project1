@@ -158,6 +158,13 @@ public final class FaultMonitoringStateV2_1 {
             FaultSupervisorStateV2_1.requiredServiceEvidence(),
             FaultSupervisorStateV2_1.latestEvidence(),
             FaultSupervisorStateV2_1.localSummary(),
+            FaultSupervisorStateV2_1.completedRecoverySequence(),
+            FaultSupervisorStateV2_1.lastCompletedRecoveryMode(),
+            FaultSupervisorStateV2_1.lastCompletedRecoverySubsystem(),
+            FaultSupervisorStateV2_1.lastCompletedRecoveryFault(),
+            FaultSupervisorStateV2_1.lastCompletedRecoveryAction(),
+            FaultSupervisorStateV2_1.lastCompletedRecoveryAttempt(),
+            FaultSupervisorStateV2_1.lastCompletedRecoveryAuthority(),
             metrics, warnings, errors, faults, components,
             watchdog.active, watchdog.faultComponent, watchdog.faultReason,
             watchdog.action, watchdog.resetCount, watchdog.recoveryAttempt,
@@ -348,6 +355,13 @@ public final class FaultMonitoringStateV2_1 {
         public final String requiredServiceEvidence;
         public final String latestEvidence;
         public final String localState;
+        public final long completedRecoverySequence;
+        public final String lastCompletedRecoveryMode;
+        public final String lastCompletedRecoverySubsystem;
+        public final String lastCompletedRecoveryFault;
+        public final String lastCompletedRecoveryAction;
+        public final int lastCompletedRecoveryAttempt;
+        public final String lastCompletedRecoveryAuthority;
         public final FaultSupervisorMetricsV2_1 metrics;
         public final int warnings;
         public final int errors;
@@ -375,6 +389,13 @@ public final class FaultMonitoringStateV2_1 {
             long stateEnteredAtMs, String policy,
             String requiredSafeEvidence, String requiredServiceEvidence,
             String latestEvidence, String localState,
+            long completedRecoverySequence,
+            String lastCompletedRecoveryMode,
+            String lastCompletedRecoverySubsystem,
+            String lastCompletedRecoveryFault,
+            String lastCompletedRecoveryAction,
+            int lastCompletedRecoveryAttempt,
+            String lastCompletedRecoveryAuthority,
             FaultSupervisorMetricsV2_1 metrics, int warnings, int errors,
             int faults, ComponentSnapshot[] components,
             boolean watchdogActive, String watchdogFaultComponent,
@@ -407,6 +428,15 @@ public final class FaultMonitoringStateV2_1 {
             this.requiredServiceEvidence = requiredServiceEvidence;
             this.latestEvidence = latestEvidence;
             this.localState = localState;
+            this.completedRecoverySequence = completedRecoverySequence;
+            this.lastCompletedRecoveryMode = lastCompletedRecoveryMode;
+            this.lastCompletedRecoverySubsystem =
+                lastCompletedRecoverySubsystem;
+            this.lastCompletedRecoveryFault = lastCompletedRecoveryFault;
+            this.lastCompletedRecoveryAction = lastCompletedRecoveryAction;
+            this.lastCompletedRecoveryAttempt = lastCompletedRecoveryAttempt;
+            this.lastCompletedRecoveryAuthority =
+                lastCompletedRecoveryAuthority;
             this.metrics = metrics;
             this.warnings = warnings;
             this.errors = errors;

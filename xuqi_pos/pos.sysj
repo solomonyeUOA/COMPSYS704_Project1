@@ -9,12 +9,18 @@ POS(
     input String signal SYSTEM_RESET_COMPLETE;
     output String signal ORDER;
     output String signal SYSTEM_RESET_REQUEST;
+    output String signal WATCHDOG_POS_HEARTBEAT;
 )
 ->{
     POSVisualisation.start();
     System.out.println("POS Integration V1 started");
 
     loop {
+        String watchdogHeartbeat = POSVisualisation.nextWatchdogHeartbeat();
+        if (watchdogHeartbeat != null) {
+            emit WATCHDOG_POS_HEARTBEAT(watchdogHeartbeat);
+        }
+
         String submittedOrder = POSVisualisation.pollSubmittedOrder();
         if (submittedOrder != null) {
             // POS validates again at the SystemJ boundary. The Coordinator

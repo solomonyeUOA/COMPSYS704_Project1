@@ -61,6 +61,12 @@ public final class FaultInjectionIntegrationSelfTest {
         String request = FaultInjectionStateV2_1.nextTransferRequest();
         require(request != null && request.endsWith("|ARRIVAL_TIMEOUT"),
             "transfer fault crosses the M3 SystemJ boundary");
+        String requestId = request.split("\\|", -1)[0];
+        require(FaultInjectionStateV2_1.onTransferAcknowledgement(
+            "V1|" + requestId + "|ACCEPTED"
+        ), "M3 accepts matching M2 injection acknowledgement");
+        require(FaultInjectionStateV2_1.nextTransferRequest() == null,
+            "M3 stops sending after M2 accepts the injection");
         FaultInjectionStateV2_1.consumed("ARRIVAL_TIMEOUT");
         require(FaultInjectionStateV2_1.arm("ARRIVAL_TIMEOUT"),
             "same transfer fault can be armed again immediately");
@@ -68,6 +74,10 @@ public final class FaultInjectionIntegrationSelfTest {
         require(repeated != null && repeated.endsWith("|ARRIVAL_TIMEOUT") &&
             !repeated.equals(request),
             "repeated injection uses a new request identity");
+        String repeatedId = repeated.split("\\|", -1)[0];
+        require(FaultInjectionStateV2_1.onTransferAcknowledgement(
+            "V1|" + repeatedId + "|ACCEPTED"
+        ), "second M2 acknowledgement is correlated independently");
     }
 
     private static void require(boolean condition, String message) {

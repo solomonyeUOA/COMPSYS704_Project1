@@ -4,15 +4,29 @@ import java.util.LinkedHashSet;
 
 /** Reset barrier owner. ACK follows simulated actuator evidence, never receipt. */
 public final class M4SystemResetStateV1 {
+    private static final long WATCHDOG_HEARTBEAT_MILLIS = 500L;
     private static String latestId;
     private static final int RESET_HISTORY_LIMIT = 64;
     private static final LinkedHashSet<String> seenResetIds =
         new LinkedHashSet<String>();
     private static boolean resetting;
     private static long resetCount;
+    private static long nextWatchdogHeartbeatMillis;
     private static final M4BoundedEventV1 ack = new M4BoundedEventV1(10, 100L);
 
     private M4SystemResetStateV1() { }
+
+    public static synchronized String nextWatchdogHeartbeat() {
+        return nextWatchdogHeartbeat(System.currentTimeMillis());
+    }
+
+    static synchronized String nextWatchdogHeartbeat(long nowMillis) {
+        if (nowMillis < nextWatchdogHeartbeatMillis) {
+            return null;
+        }
+        nextWatchdogHeartbeatMillis = nowMillis + WATCHDOG_HEARTBEAT_MILLIS;
+        return "V1|M4_PROCESS|" + nowMillis + "|RUNNING";
+    }
 
     public static synchronized boolean request(String resetId) {
         return request(resetId, System.currentTimeMillis());

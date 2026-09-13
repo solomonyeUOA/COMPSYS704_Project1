@@ -23,6 +23,7 @@ public final class FaultSupervisorSelfTest {
         testGuiHotModeSwitch();
         testGuiMagazineResourceRecovery();
         testGuiM1RecoveryRoundTrip();
+        testM1AutomaticLowRiskResume();
         testLateArrivalEvidenceRequiresManualSequence();
         testArrivalHandoffCompletesDroppedResult();
         testGuiTransferRecoveryRoundTrip();
@@ -580,6 +581,8 @@ public final class FaultSupervisorSelfTest {
         require(CoordinatorStateV1.recordFtRecoveryReady(
             FaultSupervisorStateV2_1.takeRecoveryReady()
         ), "M1 records recovery-ready evidence");
+        require(CoordinatorStateV1.takeFtAutomaticResumeDecision() == null,
+            "critical manual recovery cannot receive automatic M1 resume");
         require(FaultTestControlStateV2_1.nextRequest() == null,
             "controller evidence does not queue an implicit resume request");
         require(!FaultSupervisorStateV2_1.onResumeDecision(
@@ -619,6 +622,58 @@ public final class FaultSupervisorSelfTest {
 
         FaultGuiActionsV2_1.setTestMode(false);
         Member3PlantStateV1.reset();
+        FaultSupervisorStateV2_1.reset();
+        CoordinatorStateV1.resetForTest();
+    }
+
+    private static void testM1AutomaticLowRiskResume() {
+        FaultSupervisorStateV2_1.reset();
+        CoordinatorStateV1.resetForTest();
+        FaultGuiActionsV2_1.setTestMode(true);
+
+        String fault = event(
+            "AUTO-M1-1", "M2-E01", "TRANSFER", "ARRIVAL_TIMEOUT",
+            "WARNING", 10
+        );
+        require(FaultSupervisorStateV2_1.onTransferFault(fault),
+            "low-risk transfer fault enters automatic recovery");
+        require(CoordinatorStateV1.recordFtFaultAlert(
+            FaultSupervisorStateV2_1.takeFaultAlert()
+        ), "M1 records the correlated low-risk alert");
+        require(FaultSupervisorStateV2_1.onRecoveryAck(
+            "V2|AUTO-M1-1|M2-E01|1|ACCEPTED|route_clear|10"
+        ), "controller accepts the bounded automatic retry");
+        require(FaultSupervisorStateV2_1.onRecoveryResult(
+            "V2|AUTO-M1-1|M2-E01|1|SUCCESS|" +
+            "motor_off+occupancy_consistent|arrival_confirmed|11"
+        ), "M3 validates automatic recovery evidence");
+        String recoveryReady = FaultSupervisorStateV2_1.takeRecoveryReady();
+        require(CoordinatorStateV1.recordFtRecoveryReady(recoveryReady),
+            "M1 records correlated recovery-ready evidence");
+        String automaticResume =
+            CoordinatorStateV1.takeFtAutomaticResumeDecision();
+        require(automaticResume != null &&
+            automaticResume.contains("|M1_AUTO_INTERLOCK_VERIFIED|"),
+            "M1 automatically authorises only the verified low-risk event");
+        require(FaultSupervisorStateV2_1.onResumeDecision(automaticResume),
+            "test mode accepts the trusted M1 automatic decision");
+        require(CoordinatorStateV1.recordFtRecoveryReady(recoveryReady),
+            "duplicate bounded READY re-arms the same automatic decision");
+        String duplicateResume =
+            CoordinatorStateV1.takeFtAutomaticResumeDecision();
+        require(automaticResume.equals(duplicateResume) &&
+            FaultSupervisorStateV2_1.onResumeDecision(duplicateResume),
+            "duplicate automatic RESUME is idempotent after packet retry");
+        require("IDLE".equals(FaultSupervisorStateV2_1.stateName()),
+            "automatic M1 decision resumes the supervisor");
+        require("AUTOMATIC".equals(
+            FaultSupervisorStateV2_1.lastCompletedRecoveryMode()),
+            "completed automatic recovery remains visible for GUI audit");
+        require("M1_AUTO_INTERLOCK_VERIFIED".equals(
+            FaultSupervisorStateV2_1.lastCompletedRecoveryAuthority()),
+            "GUI audit records the automatic M1 authority");
+
+        FaultGuiActionsV2_1.setTestMode(false);
         FaultSupervisorStateV2_1.reset();
         CoordinatorStateV1.resetForTest();
     }
@@ -864,9 +919,11 @@ public final class FaultSupervisorSelfTest {
         ), "monitoring recovery result accepted");
         FaultMonitoringStateV2_1.Snapshot verified =
             FaultMonitoringStateV2_1.snapshot();
-        require("VERIFIED".equals(FaultMonitoringPresentationV2_1.displayState(
+        require("AUTO RECOVERED".equals(FaultMonitoringPresentationV2_1.displayState(
             component(verified, FaultMonitoringStateV2_1.SUPERVISOR), verified
-        )), "dynamic view follows verified recovery state");
+        )), "dynamic view identifies verified automatic recovery");
+        require(FaultMonitoringPresentationV2_1.isAutomaticRecovery(verified),
+            "verified automatic policy is exposed to the GUI");
         require(FaultSupervisorStateV2_1.onResumeDecision(
             "V2|MON-1|MONITOR|RESUME|test|2"
         ), "M1 resume returns the monitoring flow to idle");

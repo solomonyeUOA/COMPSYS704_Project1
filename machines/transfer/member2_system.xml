@@ -95,6 +95,8 @@
             <oSignal Name="M2_SYSTEM_RESET_ACK" To="CoordinatorCD.M2_SYSTEM_RESET_ACK" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="11001" />
             <iSignal Name="LOCAL_TRANSFER_FAULT" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="13002" />
             <iSignal Name="TEST_TRANSFER_FAULT" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="13002" />
+            <oSignal Name="TEST_TRANSFER_FAULT_ACK" To="FaultSupervisorCD.TEST_TRANSFER_FAULT_ACK" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="13003" />
+            <oSignal Name="WATCHDOG_M2_HEARTBEAT" To="FaultSupervisorCD.WATCHDOG_M2_HEARTBEAT" Class="OptionalSimpleClient" IP="127.0.0.1" Port="13003" />
             <iSignal Name="TEST_TRANSFER_RECOVERY" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="13002" />
             <iSignal Name="TRANSFER_RECOVERY_REQUEST" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="13002" />
             <iSignal Name="LOCAL_RECOVERY_EVIDENCE" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="13002" />
