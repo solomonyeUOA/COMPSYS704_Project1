@@ -3,9 +3,11 @@
 <System xmlns="http://systemjtechnology.com">
     <SubSystem Name="MEMBER4_DEMO_SS" Local="true">
         <ClockDomain Name="BottleContextRegistryCD" Class="BottleContextRegistry">
+            <iSignal Name="M4_BATCH_START" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="11011" />
             <iSignal Name="M4_SYSTEM_RESET" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="11011" />
             <oSignal Name="M4_SYSTEM_RESET_ACK" To="Member4DemoDriverCD.M4_SYSTEM_RESET_ACK" Class="OptionalSimpleClient" IP="127.0.0.1" Port="12114" />
             <oSignal Name="M4_WORKPIECE_OBSERVATION" To="Member4DemoDriverCD.M4_WORKPIECE_OBSERVATION" Class="OptionalSimpleClient" IP="127.0.0.1" Port="12114" />
+            <oSignal Name="M4_SIM_BATCH_READY" To="RecognitionSimulatorCD.M4_SIM_BATCH_READY" Class="OptionalSimpleClient" IP="127.0.0.1" Port="11014" />
             <iSignal Name="BOTTLE_RECOGNISED" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="11011" />
             <oSignal Name="ROTARY_BOTTLE_CONTEXT" To="Member4DemoDriverCD.ROTARY_BOTTLE_CONTEXT" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="12114" />
             <oSignal Name="LOAD_PROFILE" To="Member4DemoDriverCD.LOAD_PROFILE" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="12114" />

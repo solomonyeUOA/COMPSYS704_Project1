@@ -64,9 +64,7 @@ ABSVisualisationPlant(
     } pause;}}
     ||
     {loop {present(VIZ_CAPPER_STATUS) {
-        ABSVisualisation.updateStatus(
-            "Capper", #VIZ_CAPPER_STATUS
-        );
+        ABSVisualisation.updateCoordinatorCapperStatus(#VIZ_CAPPER_STATUS);
     } pause;}}
     ||
     {loop {present(VIZ_UNLOADER_STATUS) {

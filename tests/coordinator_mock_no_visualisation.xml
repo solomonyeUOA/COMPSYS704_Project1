@@ -70,6 +70,10 @@
                      To="MockControllerCD.M4_SYSTEM_RESET"
                      Class="com.systemj.ipc.SimpleClient"
                      IP="127.0.0.1" Port="11002" />
+            <oSignal Name="M4_BATCH_START"
+                     To="BottleContextRegistryCD.M4_BATCH_START"
+                     Class="OptionalSimpleClient"
+                     IP="127.0.0.1" Port="11011" />
             <oSignal Name="FT_SAFE_STOP_ACK"
                      To="FaultSupervisorCD.FT_SAFE_STOP_ACK"
                      Class="OptionalSimpleClient"

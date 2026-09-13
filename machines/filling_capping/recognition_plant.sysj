@@ -9,10 +9,10 @@ RecognitionPlant(
 
     {loop {
         present(RECOGNITION_REQUEST) {
-            String recognised = RecognitionPlantModelV1.recognise(
+            String recognised = Member4MachineStateV1.recogniseBottle(
                 #RECOGNITION_REQUEST
             );
-            if (recognised != null && M4ResetFenceV1.accept(recognised)) {
+            if (recognised != null) {
                 emit BOTTLE_RECOGNISED(recognised);
             }
             else {

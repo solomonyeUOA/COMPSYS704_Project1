@@ -236,7 +236,7 @@ Controller state directly.
 
 The Coordinator parses and validates orders, retains each product's recipe,
 `sizeCode` and `capacityMl`, dispatches product batches, publishes the
-simulation-only M4 batch request, polls Controller status, counts
+formal M4 batch-start contract, polls Controller status, counts
 `BOTTLE_DONE`, coordinates fault tolerance and sends `ORDER_COMPLETE`.
 Whole-system reset orchestration remains inside this same Coordinator: it
 clears M1-owned state, fans out the reset identity, waits at the M2/M3/M4 ACK
@@ -259,24 +259,26 @@ The runtime relationship is:
 POS -> Coordinator -> Bottle Loader / Conveyor / Rotary Turntable
                   -> Filler A / Filler B / Lid Loader / Capper / Unloader
                   -> ABS Visualisation
-                  -> M4 Recognition Simulator [simulation only]
+                  -> M4 Batch Registry
+                         `-> Recognition Simulator [simulation only]
 ```
 
 `BOTTLE_DONE` is sent by Bottle Unloader after one finished bottle reaches the
 collection stage. Capper completion alone does not complete the production
 cycle.
 
-For integrated simulation, each accepted product batch also publishes the
-simulation-only signal `M4_SIM_BATCH_REQUEST:String` as
-`<orderId>-P<two-digit product index>|<quantity>|<sizeCode>`. The Coordinator
-sends three identical bounded copies, each PRESENT for 200 ms with 600 ms
-ABSENT gaps between copies. This does not replace `START_ORDER` or change
-Controller ownership. The current M4 `RecognitionSimulatorCD` consumes the
-third field, de-duplicates identical retries, rejects reuse of a batch ID with
-a different quantity or size, and emits bottles at the batch-specific size.
-Use `xuqi_coordinator/coordinator.xml` together with
-`machines/filling_capping/member4_simulation.xml`. With the canonical
-`member4_system.xml`, the optional simulation output remains disconnected.
+For every run, each accepted product publishes the formal signal
+`M4_BATCH_START:String` as
+`<batchId>|<quantity>|<sizeCode>`. For transport-safe order IDs, `batchId` is
+`<orderId>-P<two-digit product index>`; other valid POS IDs are encoded into a
+collision-free printable form. M4 registers this contract before accepting
+recognition and uses the same identity for `SORT_PACK_BATCH_END`. The
+Coordinator sends three identical bounded copies, each PRESENT for 200 ms
+with 600 ms ABSENT gaps between copies. In the simulation mapping, the M4
+Registry forwards an accepted contract to `RecognitionSimulatorCD`; in the
+canonical mapping that optional internal output is disconnected. The local
+recognition request contains only `bottleId|sizeCode`, and M4 attaches the
+registered batch instead of asking a sensor or simulator to invent M1's ID.
 
 ## Design basis
 

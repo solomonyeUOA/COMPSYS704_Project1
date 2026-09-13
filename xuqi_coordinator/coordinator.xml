@@ -97,14 +97,11 @@
                      Class="OptionalSimpleClient"
                      IP="127.0.0.1" Port="13003" />
 
-            <!--
-                SIMULATION ONLY: stable batchId|quantity|sizeCode, 3 copies
-                about 600 ms apart with an ABSENT reaction between pulses.
-            -->
-            <oSignal Name="M4_SIM_BATCH_REQUEST"
-                     To="RecognitionSimulatorCD.M4_SIM_BATCH_REQUEST"
+            <!-- Stable product batch contract, with bounded retries. -->
+            <oSignal Name="M4_BATCH_START"
+                     To="BottleContextRegistryCD.M4_BATCH_START"
                      Class="OptionalSimpleClient"
-                     IP="127.0.0.1" Port="11014" />
+                     IP="127.0.0.1" Port="11011" />
             <oSignal Name="SORT_PACK_BATCH_END"
                      To="SortPackControllerCD.SORT_PACK_BATCH_END"
                      Class="OptionalSimpleClient"

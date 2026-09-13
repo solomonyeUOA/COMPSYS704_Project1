@@ -32,8 +32,8 @@ Coordinator(
     output Integer signal FILL_A_RATIO;
     output Integer signal FILL_B_RATIO;
 
-    // SIMULATION / FULL-INTEGRATION ONLY. Not a Controller interface.
-    output String signal M4_SIM_BATCH_REQUEST;
+    // Formal M1 -> M4 product-batch contract.
+    output String signal M4_BATCH_START;
     // Product-batch boundary used by M4 to close partial packages.
     output String signal SORT_PACK_BATCH_END;
     output String signal TWIN_BATCH_CONTEXT;
@@ -261,23 +261,23 @@ Coordinator(
         }}
     }
     ||
-    // Bounded simulation-only product-batch publication. The helper retains
+    // Bounded product-batch publication. The helper retains
     // one stable batchId|quantity|sizeCode payload for 3 PRESENT windows
     // of 200 ms, separated by 600 ms ABSENT gaps.
     {
         loop {
-            String simulationBatchRequest =
-                CoordinatorStateV1.nextM4SimulationBatchRequest();
-            if (simulationBatchRequest != null) {
-                emit M4_SIM_BATCH_REQUEST(simulationBatchRequest);
+            String batchStart =
+                CoordinatorStateV1.nextM4BatchStart();
+            if (batchStart != null) {
+                emit M4_BATCH_START(batchStart);
                 if (
                     CoordinatorStateV1.
-                        m4SimulationBatchTransmissionStarted
+                        m4BatchTransmissionStarted
                 ) {
                     System.out.println(
-                        "[M1-M4-SIM] batch request " +
-                        simulationBatchRequest + " attempt=" +
-                        CoordinatorStateV1.lastM4SimulationBatchAttempt
+                        "[M1-M4-BATCH] batch start " +
+                        batchStart + " attempt=" +
+                        CoordinatorStateV1.lastM4BatchAttempt
                     );
                 }
             }

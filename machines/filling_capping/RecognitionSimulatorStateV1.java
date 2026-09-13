@@ -317,7 +317,7 @@ public final class RecognitionSimulatorStateV1 {
         resetRuntimeLogging();
         System.out.println(
             "[M4-SIM] batch-driven mode IDLE; awaiting " +
-            "M4_SIM_BATCH_REQUEST batchId|quantity|sizeCode " +
+            "M4_SIM_BATCH_READY batchId|quantity|sizeCode " +
             "(m4.sim.quantity and m4.sim.size ignored)"
         );
     }
@@ -427,6 +427,7 @@ public final class RecognitionSimulatorStateV1 {
     /** Cancel a cycle, retaining every batch identity for the JVM lifetime. */
     public void cancelForSystemReset() {
         for (String batch : processedBatches.keySet()) {
+            M4ResetFenceV1.retireBatch(batch);
             M4ResetFenceV1.retirePrefix(batch + "-B");
         }
         if (legacyIdentifiers && legacyBottleIdPrefix != null) {
@@ -465,6 +466,7 @@ public final class RecognitionSimulatorStateV1 {
             if (!processedBatches.containsKey(fields[0])) {
                 processedBatches.put(fields[0], requested + "|" + size);
             }
+            M4ResetFenceV1.retireBatch(fields[0]);
             M4ResetFenceV1.retirePrefix(fields[0] + "-B");
         }
         catch (IllegalArgumentException invalid) {

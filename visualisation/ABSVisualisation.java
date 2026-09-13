@@ -587,6 +587,19 @@ public final class ABSVisualisation {
         return true;
     }
 
+    /**
+     * Uses Coordinator status only until direct M4 telemetry is available.
+     * Once present, that richer source owns the Capper status for the rest of
+     * the reset generation, so a delayed forwarded value cannot overwrite it.
+     */
+    public static synchronized boolean updateCoordinatorCapperStatus(
+        int status
+    ) {
+        if (m4CapperTelemetry != null) { return false; }
+        updateStatus("Capper", status);
+        return true;
+    }
+
     /** Resets only this read-only M1 projection; it never commands a Plant. */
     public static synchronized void resetSystem(String resetId) {
         if (resetId == null || !resetId.matches("RST[0-9]{4,}") ||

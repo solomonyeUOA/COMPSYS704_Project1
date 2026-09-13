@@ -147,12 +147,12 @@ public final class SystemResetSelfTest {
         CoordinatorStateV1.resetForTest();
         require(CoordinatorStateV1.accept("PO-G|1|P1,L,60,40,2"),
             "G order accepted");
-        require(CoordinatorStateV1.nextM4SimulationBatchRequest() != null,
+        require(CoordinatorStateV1.nextM4BatchStart() != null,
             "G M4 retry active");
         require(CoordinatorStateV1.beginSystemReset("RST0006", 0L),
             "G reset accepted");
-        require(CoordinatorStateV1.currentM4SimulationBatchPayload() == null &&
-            CoordinatorStateV1.nextM4SimulationBatchRequest(1000L) == null,
+        require(CoordinatorStateV1.currentM4BatchPayload() == null &&
+            CoordinatorStateV1.nextM4BatchStart(1000L) == null,
             "G M4 retry discarded");
     }
 
@@ -210,7 +210,7 @@ public final class SystemResetSelfTest {
             "K mixed order accepted");
         require("S".equals(CoordinatorStateV1.currentSizeCode()) &&
             "PO-K-P01|1|S".equals(
-                CoordinatorStateV1.currentM4SimulationBatchPayload()),
+                CoordinatorStateV1.currentM4BatchPayload()),
             "K first product is S");
         require(CoordinatorStateV1.recordBottleDone(),
             "K first product complete");
@@ -219,7 +219,7 @@ public final class SystemResetSelfTest {
             "L".equals(CoordinatorStateV1.currentSizeCode()) &&
             CoordinatorStateV1.currentCapacityMl() == 500 &&
             "PO-K-P02|2|L".equals(
-                CoordinatorStateV1.currentM4SimulationBatchPayload()),
+                CoordinatorStateV1.currentM4BatchPayload()),
             "K second product is L");
     }
 

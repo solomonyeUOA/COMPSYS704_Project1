@@ -23,6 +23,8 @@ public final class Member4DemoStateV1 {
         phase = FILL;
         nextActionMs = System.currentTimeMillis() + 500L;
         activeContext = contextForIndex();
+        Member4MachineStateV1.acceptBatchStart(batchPayload());
+        Member4MachineStateV1.acceptRecognition(recognitionResult());
         passPublished = false;
         nextRecipeMs = 0L;
         nextPollMs = 0L;
@@ -43,6 +45,8 @@ public final class Member4DemoStateV1 {
                 bottleIndex = 1;
                 phase = FILL;
                 activeContext = contextForIndex();
+                Member4MachineStateV1.acceptBatchStart(batchPayload());
+                Member4MachineStateV1.acceptRecognition(recognitionResult());
                 return NONE;
             }
             if (!passPublished) {
@@ -55,11 +59,13 @@ public final class Member4DemoStateV1 {
     }
 
     public static synchronized String recognitionRequest() {
-        return bottleId() + "|" + (bottleIndex == 0 ? "S" : "L");
+        return bottleId() + "|" + batchId() + "|" +
+            (bottleIndex == 0 ? "S" : "L");
     }
 
     public static synchronized String recognitionResult() {
-        return bottleId() + (bottleIndex == 0 ? "|S|200" : "|L|500");
+        return bottleId() + "|" + batchId() +
+            (bottleIndex == 0 ? "|S|200" : "|L|500");
     }
 
     public static synchronized String context() {
@@ -113,6 +119,14 @@ public final class Member4DemoStateV1 {
 
     private static String bottleId() {
         return bottleIndex == 0 ? "M4-DEMO-S" : "M4-DEMO-L";
+    }
+
+    private static String batchId() {
+        return bottleIndex == 0 ? "M4-DEMO-P01" : "M4-DEMO-P02";
+    }
+
+    private static String batchPayload() {
+        return batchId() + "|1|" + (bottleIndex == 0 ? "S" : "L");
     }
 
     private static String contextForIndex() {

@@ -20,6 +20,7 @@ public final class Member2Member4SelfTest {
                 "|L|500|GEOM_L|PACK_L");
             String lane = small ? "LANE_S" : "LANE_L";
             String pack = small ? "PACK_S" : "PACK_L";
+            String batchId = "Q" + quantity + (small ? "-S-BATCH" : "-L-BATCH");
             long cycleStart = index * 1000L;
 
             check(unloader.acceptProfile(context),
@@ -47,7 +48,9 @@ public final class Member2Member4SelfTest {
                 "retry is separated by an ABSENT reaction");
 
             String retry = offer.nextReactionValue(600L);
-            check(sortPack.acceptBottleReady(retry, cycleStart + 600L),
+            check(sortPack.acceptBottleReady(
+                retry, batchId, cycleStart + 600L
+            ),
                 "M4 accepts retained retry " + bottleId);
             check((bottleId + "|SET_LANE|" + lane).equals(
                 sortPack.takePlantCommand()),
@@ -73,7 +76,9 @@ public final class Member2Member4SelfTest {
                 "M4 completes accepted bottle " + bottleId);
 
             check(!sortPack.acceptBottleReady(
-                offer.nextReactionValue(1200L), cycleStart + 1200L
+                offer.nextReactionValue(1200L),
+                batchId,
+                cycleStart + 1200L
             ), "late copy cannot restart completed bottle " + bottleId);
             check(sortPack.takePlantCommand() == null,
                 "late duplicate causes no work " + bottleId);

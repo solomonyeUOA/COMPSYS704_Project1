@@ -1,6 +1,7 @@
 // Validates one S/L context per bottleId and distributes unchanged profiles.
 
 BottleContextRegistry(
+    input String signal M4_BATCH_START;
     input String signal BOTTLE_RECOGNISED;
     input String signal M4_SYSTEM_RESET;
 
@@ -9,6 +10,7 @@ BottleContextRegistry(
     output String signal UNLOAD_PROFILE;
     output String signal M4_SYSTEM_RESET_ACK;
     output String signal M4_WORKPIECE_OBSERVATION;
+    output String signal M4_SIM_BATCH_READY;
 )
 ->{
     System.out.println("M4 BottleContextRegistryCD started");
@@ -16,6 +18,17 @@ BottleContextRegistry(
     {loop {
         present(M4_SYSTEM_RESET) {
             M4SystemResetStateV1.request(#M4_SYSTEM_RESET);
+        }
+        present(M4_BATCH_START) {
+            String acceptedBatch = Member4MachineStateV1.acceptBatchStart(
+                #M4_BATCH_START
+            );
+            if (acceptedBatch != null) {
+                emit M4_SIM_BATCH_READY(acceptedBatch);
+            }
+            else {
+                System.out.println("M4 Registry rejected batch start");
+            }
         }
         M4SystemResetStateV1.tick();
         String resetAck = M4SystemResetStateV1.takeAck();

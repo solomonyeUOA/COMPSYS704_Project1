@@ -46,6 +46,18 @@ public final class M1SortPackBatchEndSelfTest {
         CoordinatorStateV1.resetForTest();
         require(CoordinatorStateV1.nextSortPackBatchEnd(10000L) == null,
             "system reset clears unsent batch boundaries");
+
+        require(CoordinatorStateV1.accept("PO 001|1|P1,60,40,2"),
+            "transport-hostile OrderV1 identity remains a valid order");
+        String canonical = "OID~504F20303031-P01|2|S";
+        require(canonical.equals(CoordinatorStateV1.currentProductBatchPayload()),
+            "Coordinator establishes a transport-safe production contract");
+        require(!CoordinatorStateV1.recordBottleDone() &&
+            CoordinatorStateV1.recordBottleDone(),
+            "canonical batch reaches its declared quantity");
+        require(CoordinatorStateV1.finishCurrentSortPackBatch(11000L) &&
+            canonical.equals(CoordinatorStateV1.nextSortPackBatchEnd(11000L)),
+            "formal packaging boundary comes from the production contract");
         System.out.println("M1SortPackBatchEndSelfTest PASSED");
     }
 

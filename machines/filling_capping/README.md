@@ -96,6 +96,8 @@ uses the real M2 peers.
   `SORT_PACK_BATCH_END=batchId|quantity|sizeCode`; M4 waits for every declared
   placement before closing a non-empty partial package. Repeated boundaries
   are idempotent, and bottles from different batches never share a package.
+  The M4 registry records each bottle's explicit recognition `batchId`, so the
+  Sort/Pack receiver does not infer batch identity from bottle naming.
   This does not replace M2's unloading or `BOTTLE_DONE` responsibility.
 - Completion and command transport uses bounded repeated copies with absent
   gaps for the course runtime; state models de-duplicate them by bottle and
@@ -222,8 +224,8 @@ Generated Java and class files are build artifacts and must not be committed.
 `RecognitionSimulatorCD` supplies the environmental stimulus that a physical
 camera/size sensor would provide. It is included only in
 `member4_simulation.xml`. The canonical `member4_system.xml` still has no
-automatic recognition source, although this draft adds reset/twin and status
-integration to that XML. `RECOGNITION_REQUEST` remains internal to M4.
+automatic recognition source. `M4_BATCH_START` is present in both mappings,
+while `RECOGNITION_REQUEST` remains internal to M4.
 
 Use these two simulation mappings together:
 
@@ -233,7 +235,7 @@ machines/filling_capping/member4_simulation.xml
 ```
 
 When POS submits a product quantity and bottle size, M1 publishes
-`M4_SIM_BATCH_REQUEST:String` on simulation-only port 11014:
+`M4_BATCH_START:String` to M4's Registry on port 11011:
 
 ```text
 <orderId>-P<two-digit product index>|<quantity>|<sizeCode>
@@ -242,21 +244,32 @@ PO0002-P01|2|L
 ```
 
 `sizeCode` is `S` or `L` only. Every batch owns its own size, so one run may
-mix both bottle types, and the recognition request M4 generates for that
-batch carries it as `<bottleId>|S` or `<bottleId>|L`.
+mix both bottle types. The Registry validates and stores the contract. In the
+simulation mapping it then forwards the same payload as the internal
+`M4_SIM_BATCH_READY` signal on port 11014. Recognition preserves the batch
+association without requiring the local sensor to know the M1 identity:
 
-M1 sends at most three identical copies, each PRESENT for 200 ms with a
-600 ms ABSENT gap between copies. M4 accepts one logical batch
+```text
+RECOGNITION_REQUEST  = <bottleId>|<sizeCode>
+BOTTLE_RECOGNISED    = <bottleId>|<batchId>|<sizeCode>|<capacityMl>
+```
+
+The registry retains `batchId` internally while the existing five-field
+cross-member bottle profile remains unchanged.
+
+M1 sends at most three identical batch-start copies, each PRESENT for 200 ms
+with a 600 ms ABSENT gap between copies. M4 accepts one logical batch
 idempotently, generates `PO0001-P01-B001` through `PO0001-P01-B003`, then
 waits for a different batch. The same ID with the same quantity and the same
 size never restarts; the same ID with a different quantity **or** a different
 size is a protocol conflict; a different ID cannot interleave while a batch is
 active. A request whose size code is neither `S` nor `L` is `INVALID`.
 
-The integrated receiver strictly rejects two-field `batchId|quantity`
-requests. That form remains supported only by the standalone legacy Java
-entry point, where the configured `m4.sim.size` supplies the size. Integrated
-requests always carry exactly three fields, including `S` or `L`.
+The integrated simulator strictly rejects two-field `batchId|quantity`
+contracts. That form remains supported only by the standalone legacy Java
+entry point, where the configured `m4.sim.size` supplies the size. Formal
+batch starts and internal simulator-ready messages always carry exactly three
+fields, including `S` or `L`.
 
 Launch M4 integrated simulation without quantity or size VM arguments:
 

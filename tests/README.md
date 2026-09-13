@@ -96,13 +96,12 @@ copy of a completed order ID cannot restart that order. It also verifies that
 a held `BOTTLE_DONE` window counts once and re-arms only after an `ABSENT`
 reaction.
 
-`M1M4BatchSyncSelfTest` verifies the simulation-only batch contract: retries
+`M1M4BatchSyncSelfTest` verifies the formal M1 -> M4 batch contract: retries
 retain an identical `<orderId>-Pnn|quantity|sizeCode` payload, a product transition
 creates the next deterministic batch ID, conflicting quantities do not mutate
 the current identity, conflicting sizes are rejected, and the generated Coordinator exposes the expected
-`M4_SIM_BATCH_REQUEST` value. It also verifies that an order ID `OrderV1`
-accepts but the simulation transport cannot represent only skips the trigger:
-the order is still accepted and no batch identity is retained. Held-delivery
+`M4_BATCH_START` value. It also verifies collision-free encoding for a valid
+`OrderV1` order ID that cannot be placed directly on the signal transport. Held-delivery
 cases cover delayed sampling within each 200 ms window, 600 ms ABSENT gaps,
 receiver deduplication, bounded expiration and reset cancellation.
 
@@ -235,14 +234,14 @@ evidence, or the still-undefined M1 FT String payload field order.
 New POS submissions use ORDER V2:
 `orderId|productCount|productId,sizeCode,A%,B%,quantity;...`, where `S` is
 200 mL and `L` is 500 mL. `OrderV1` remains accepted by the Coordinator and
-defaults to the S/200 mL profile. The simulation-only M4 payload is now
+defaults to the S/200 mL profile. The formal M4 batch payload is
 `batchId|quantity|sizeCode`. The Reset System button is the POS user entry
 point; POS does not reset downstream components directly.
 
 ### Coordinator coverage
 
 Coordinator retains the selected size/capacity as part of the active order,
-publishes the size-aware M4 simulation batch, and owns the complete reset
+publishes the size-aware `M4_BATCH_START` contract, and owns the complete reset
 fan-out/ACK barrier. These are responsibilities of the existing Coordinator,
 not separate size or reset subsystems.
 
