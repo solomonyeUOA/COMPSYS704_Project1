@@ -183,7 +183,7 @@ public final class ABSVisualisation {
         );
         frame.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
         JPanel overview = new JPanel(new GridBagLayout());
-        overview.setBorder(BorderFactory.createEmptyBorder(6, 10, 12, 10));
+        overview.setBorder(BorderFactory.createEmptyBorder(4, 8, 10, 8));
         frame.setContentPane(overview);
         detailDialogs = new JDialog[MACHINE_NAMES.length];
         detailPanels = new ModuleDetailPanel[MACHINE_NAMES.length];
@@ -207,7 +207,7 @@ public final class ABSVisualisation {
         JPanel schematicPanel = new JPanel(new BorderLayout());
         schematicPanel.setBorder(BorderFactory.createCompoundBorder(
             BorderFactory.createTitledBorder("Live twin plant schematic (not measured positions)"),
-            BorderFactory.createEmptyBorder(8, 2, 8, 2)
+            BorderFactory.createEmptyBorder(4, 2, 4, 2)
         ));
         schematicPanel.add(productionLinePanel, BorderLayout.CENTER);
 
@@ -223,13 +223,13 @@ public final class ABSVisualisation {
         GridBagConstraints column = new GridBagConstraints();
         column.fill = GridBagConstraints.BOTH;
         column.weighty = 1.0;
-        column.weightx = 0.78;
-        schematicPanel.setPreferredSize(new Dimension(0, 460));
-        schematicPanel.setMinimumSize(new Dimension(0, 420));
+        column.weightx = 0.82;
+        schematicPanel.setPreferredSize(new Dimension(0, 520));
+        schematicPanel.setMinimumSize(new Dimension(0, 450));
         dashboard.add(schematicPanel, column);
         column.gridx = 1;
-        column.weightx = 0.22;
-        column.insets = new Insets(0, 10, 0, 0);
+        column.weightx = 0.18;
+        column.insets = new Insets(0, 6, 0, 0);
         dashboard.add(overviewSummaryPanel, column);
         addOverviewRow(overview, dashboard, 0, 1.0);
         addOverviewRow(overview, teamIpExtensionsPanel, 2, 0.0);
@@ -239,7 +239,7 @@ public final class ABSVisualisation {
         JPanel progressPanel = new JPanel(new BorderLayout(10, 4));
         progressPanel.setBorder(BorderFactory.createCompoundBorder(
             BorderFactory.createTitledBorder("Current production batch"),
-            BorderFactory.createEmptyBorder(3, 12, 6, 12)
+            BorderFactory.createEmptyBorder(2, 10, 4, 10)
         ));
         progressLabel = new JLabel(
             "Waiting for batch data",
@@ -252,7 +252,7 @@ public final class ABSVisualisation {
         progressBar.setValue(0);
         progressBar.setStringPainted(true);
         progressBar.setString("Waiting for batch data");
-        progressBar.setPreferredSize(new Dimension(540, 24));
+        progressBar.setPreferredSize(new Dimension(540, 20));
         progressPanel.add(progressBar, BorderLayout.CENTER);
 
         JPanel countPanel = new JPanel(new FlowLayout(
@@ -769,8 +769,8 @@ public final class ABSVisualisation {
             setLayout(new GridBagLayout());
             setOpaque(false);
             setBorder(BorderFactory.createTitledBorder("Operational Overview"));
-            setPreferredSize(new Dimension(0, 460));
-            setMinimumSize(new Dimension(0, 420));
+            setPreferredSize(new Dimension(0, 520));
+            setMinimumSize(new Dimension(270, 450));
             JPanel quantities = new JPanel(new GridLayout(1, 2, 5, 0));
             quantities.add(required);
             quantities.add(completed);
@@ -1183,24 +1183,10 @@ public final class ABSVisualisation {
                 BorderFactory.createEmptyBorder(2, 7, 7, 7)
             ));
             JPanel cardRow = new JPanel(new GridBagLayout());
-            JPanel m1 = new JPanel(new BorderLayout(0, 10));
-            m1.setBackground(new Color(225, 240, 249));
-            m1.setBorder(BorderFactory.createCompoundBorder(
-                BorderFactory.createLineBorder(new Color(40, 123, 168)),
-                BorderFactory.createEmptyBorder(12, 10, 12, 10)));
-            JLabel m1Title = new JLabel("<html><center>M1<br>HIERARCHICAL VISUALISATION</center></html>", SwingConstants.CENTER);
-            m1Title.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 14));
-            m1.add(m1Title, BorderLayout.NORTH);
-            JLabel m1Flow = new JLabel("<html><center>GP PRODUCTION FLOW<br><br>REPRESENTS / OBSERVES<br>NEVER CONTROLS</center></html>", SwingConstants.CENTER);
-            m1Flow.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 12));
-            m1.add(m1Flow, BorderLayout.CENTER);
             GridBagConstraints cell = new GridBagConstraints();
             cell.fill = GridBagConstraints.BOTH;
             cell.weighty = 1;
-            cell.weightx = 0.30;
-            m1.setPreferredSize(new Dimension(0, 160));
-            m1.setMinimumSize(new Dimension(0, 140));
-            cardRow.add(m1, cell);
+            cell.weightx = 0.5;
             for (int position = 0; position < cards.length; position++) {
                 final int extensionIndex = VISIBLE_EXTENSIONS[position];
                 TeamIpCard card = new TeamIpCard(extensionIndex);
@@ -1211,11 +1197,10 @@ public final class ABSVisualisation {
                     }
                 });
                 cards[position] = card;
-                cell.gridx = position + 1;
-                cell.weightx = 0.35;
-                cell.insets = new Insets(0, 9, 0, 0);
-                card.setPreferredSize(new Dimension(0, 160));
-                card.setMinimumSize(new Dimension(0, 140));
+                cell.gridx = position;
+                cell.insets = new Insets(0, position == 0 ? 0 : 7, 0, 0);
+                card.setPreferredSize(new Dimension(0, 132));
+                card.setMinimumSize(new Dimension(0, 116));
                 cardRow.add(card, cell);
             }
             add(cardRow, BorderLayout.CENTER);
