@@ -222,8 +222,8 @@ public final class ProductionOverviewSelfTest {
 
         Container cardRow = cards[0].getParent();
         require(cardRow == cards[1].getParent() &&
-            cardRow.getComponentCount() == 3,
-            "M1, M2 and M4 occupy three columns");
+            cardRow.getComponentCount() == 2,
+            "M2 and M4 are the only overview columns");
         require(cardRow.getLayout() instanceof java.awt.GridBagLayout,
             "IP columns use weighted layout");
         require(cardRow.getPreferredSize().height >= 100,
