@@ -11,6 +11,9 @@ import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.GraphicsEnvironment;
 import java.awt.GridLayout;
+import java.awt.GridBagLayout;
+import java.awt.GridBagConstraints;
+import java.awt.Insets;
 import java.awt.Point;
 import java.awt.Polygon;
 import java.awt.Rectangle;
@@ -179,7 +182,9 @@ public final class ABSVisualisation {
             "Automated Bottling System - Live Twin Visualisation" + SimulationTiming.demoSuffix()
         );
         frame.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
-        frame.setLayout(new BorderLayout(12, 10));
+        JPanel overview = new JPanel(new GridBagLayout());
+        overview.setBorder(BorderFactory.createEmptyBorder(6, 10, 12, 10));
+        frame.setContentPane(overview);
         detailDialogs = new JDialog[MACHINE_NAMES.length];
         detailPanels = new ModuleDetailPanel[MACHINE_NAMES.length];
         teamIpDialogs = new JDialog[
@@ -189,30 +194,7 @@ public final class ABSVisualisation {
             ABSVisualisationTeamIpModel.EXTENSION_COUNT
         ];
 
-        JPanel header = new JPanel();
-        header.setLayout(new BoxLayout(header, BoxLayout.Y_AXIS));
-        header.setBorder(BorderFactory.createEmptyBorder(14, 12, 2, 12));
-        JLabel title = new JLabel(
-            "AUTOMATED BOTTLING SYSTEM",
-            SwingConstants.CENTER
-        );
-        title.setAlignmentX(Component.CENTER_ALIGNMENT);
-        title.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 22));
-        header.add(title);
-
-        JLabel subtitle = new JLabel(
-            "Confirmed bottle events shared by overview, details and digital twins",
-            SwingConstants.CENTER
-        );
-        subtitle.setAlignmentX(Component.CENTER_ALIGNMENT);
-        subtitle.setForeground(new Color(75, 82, 92));
-        subtitle.setBorder(BorderFactory.createEmptyBorder(4, 0, 0, 0));
-        header.add(subtitle);
-        header.add(Box.createVerticalStrut(10));
         overviewSummaryPanel = new OverviewSummaryPanel();
-        overviewSummaryPanel.setAlignmentX(Component.CENTER_ALIGNMENT);
-        header.add(overviewSummaryPanel);
-        frame.add(header, BorderLayout.NORTH);
 
         productionLinePanel = new ProductionLinePanel(
             new DetailWindowOpener() {
@@ -225,7 +207,7 @@ public final class ABSVisualisation {
         JPanel schematicPanel = new JPanel(new BorderLayout());
         schematicPanel.setBorder(BorderFactory.createCompoundBorder(
             BorderFactory.createTitledBorder("Live twin plant schematic (not measured positions)"),
-            BorderFactory.createEmptyBorder(5, 5, 5, 5)
+            BorderFactory.createEmptyBorder(8, 2, 8, 2)
         ));
         schematicPanel.add(productionLinePanel, BorderLayout.CENTER);
 
@@ -237,26 +219,33 @@ public final class ABSVisualisation {
                 }
             }
         );
-        JPanel hierarchyPanel = new JPanel(new BorderLayout(0, 8));
-        hierarchyPanel.setBorder(BorderFactory.createEmptyBorder(0, 8, 0, 8));
-        hierarchyPanel.add(schematicPanel, BorderLayout.CENTER);
-        hierarchyPanel.add(teamIpExtensionsPanel, BorderLayout.SOUTH);
-        frame.add(hierarchyPanel, BorderLayout.CENTER);
+        JPanel dashboard = new JPanel(new GridBagLayout());
+        GridBagConstraints column = new GridBagConstraints();
+        column.fill = GridBagConstraints.BOTH;
+        column.weighty = 1.0;
+        column.weightx = 0.78;
+        schematicPanel.setPreferredSize(new Dimension(0, 460));
+        schematicPanel.setMinimumSize(new Dimension(0, 420));
+        dashboard.add(schematicPanel, column);
+        column.gridx = 1;
+        column.weightx = 0.22;
+        column.insets = new Insets(0, 10, 0, 0);
+        dashboard.add(overviewSummaryPanel, column);
+        addOverviewRow(overview, dashboard, 0, 1.0);
+        addOverviewRow(overview, teamIpExtensionsPanel, 2, 0.0);
 
-        JPanel footer = new JPanel(new BorderLayout(0, 6));
-        footer.setBorder(BorderFactory.createEmptyBorder(0, 10, 10, 10));
-        footer.add(createLegendPanel(), BorderLayout.NORTH);
+        JPanel footer = new JPanel(new BorderLayout(0, 4));
 
-        JPanel progressPanel = new JPanel(new BorderLayout(10, 7));
+        JPanel progressPanel = new JPanel(new BorderLayout(10, 4));
         progressPanel.setBorder(BorderFactory.createCompoundBorder(
             BorderFactory.createTitledBorder("Current production batch"),
-            BorderFactory.createEmptyBorder(7, 16, 10, 16)
+            BorderFactory.createEmptyBorder(3, 12, 6, 12)
         ));
         progressLabel = new JLabel(
             "Waiting for batch data",
             SwingConstants.CENTER
         );
-        progressLabel.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 16));
+        progressLabel.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 14));
         progressPanel.add(progressLabel, BorderLayout.NORTH);
 
         progressBar = new JProgressBar(0, 1);
@@ -278,7 +267,7 @@ public final class ABSVisualisation {
         countPanel.add(labellerStatusLabel);
         progressPanel.add(countPanel, BorderLayout.SOUTH);
         footer.add(progressPanel, BorderLayout.CENTER);
-        frame.add(footer, BorderLayout.SOUTH);
+        addOverviewRow(overview, footer, 1, 0.0);
 
         animationTimer = new Timer(
             ANIMATION_DELAY_MILLIS,
@@ -322,11 +311,23 @@ public final class ABSVisualisation {
             }
         });
 
-        frame.setPreferredSize(new Dimension(1400, 860));
-        frame.setMinimumSize(new Dimension(1120, 760));
+        frame.setPreferredSize(new Dimension(1600, 900));
+        frame.setMinimumSize(new Dimension(1440, 860));
         frame.pack();
         frame.setLocationByPlatform(true);
         frame.setResizable(true);
+    }
+
+    private static void addOverviewRow(JPanel parent, JPanel child,
+        int row, double weight) {
+        GridBagConstraints constraints = new GridBagConstraints();
+        constraints.gridx = 0;
+        constraints.gridy = row;
+        constraints.weightx = 1.0;
+        constraints.weighty = weight;
+        constraints.fill = GridBagConstraints.BOTH;
+        constraints.insets = new Insets(row == 0 ? 0 : 6, 0, 0, 0);
+        parent.add(child, constraints);
     }
 
     /** Starts Swing asynchronously; headless tests retain console evidence. */
@@ -718,19 +719,23 @@ public final class ABSVisualisation {
     }
 
     private static JPanel createLegendPanel() {
-        JPanel legend = new JPanel(new FlowLayout(FlowLayout.CENTER, 9, 2));
-        legend.add(new JLabel("Controller status:"));
-        legend.add(createLegendChip("WAITING", -1));
-        legend.add(createLegendChip("IDLE", 0));
-        legend.add(createLegendChip("READY", 1));
-        legend.add(createLegendChip("BUSY", 2));
-        legend.add(createLegendChip("DONE", 3));
-        legend.add(createLegendChip("FAULT", 4));
+        JPanel legend = new JPanel(new BorderLayout(0, 5));
+        legend.setBorder(BorderFactory.createEmptyBorder(5, 8, 5, 8));
+        legend.add(new JLabel("CONTROLLER STATUS"), BorderLayout.NORTH);
+        JPanel badges = new JPanel(new GridLayout(2, 3, 4, 4));
+        badges.add(createLegendChip("WAITING", -1));
+        badges.add(createLegendChip("IDLE", 0));
+        badges.add(createLegendChip("READY", 1));
+        badges.add(createLegendChip("BUSY", 2));
+        badges.add(createLegendChip("DONE", 3));
+        badges.add(createLegendChip("FAULT", 4));
+        legend.add(badges, BorderLayout.CENTER);
         JLabel note = new JLabel(
-            "  Bottle locations follow confirmed twin events; controller badges are separate observations."
+            "<html>Bottle locations follow confirmed twin events;<br>controller badges are separate<br>observations.</html>"
         );
         note.setForeground(new Color(75, 82, 92));
-        legend.add(note);
+        note.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 11));
+        legend.add(note, BorderLayout.SOUTH);
         return legend;
     }
 
@@ -761,16 +766,26 @@ public final class ABSVisualisation {
         private final SummaryCard system = new SummaryCard("SYSTEM STATE");
 
         OverviewSummaryPanel() {
-            setLayout(new GridLayout(1, 6, 8, 0));
+            setLayout(new GridBagLayout());
             setOpaque(false);
-            setPreferredSize(new Dimension(1340, 72));
-            setMaximumSize(new Dimension(Integer.MAX_VALUE, 72));
-            add(activeOrder);
-            add(required);
-            add(completed);
-            add(bottle);
-            add(stage);
-            add(system);
+            setBorder(BorderFactory.createTitledBorder("Operational Overview"));
+            setPreferredSize(new Dimension(0, 460));
+            setMinimumSize(new Dimension(0, 420));
+            JPanel quantities = new JPanel(new GridLayout(1, 2, 5, 0));
+            quantities.add(required);
+            quantities.add(completed);
+            JPanel[] rows = {activeOrder, stage, bottle, quantities, system,
+                createLegendPanel()};
+            for (int i = 0; i < rows.length; i++) {
+                GridBagConstraints cell = new GridBagConstraints();
+                cell.gridx = 0;
+                cell.gridy = i;
+                cell.weightx = 1;
+                cell.weighty = i == 5 ? 1.6 : 1;
+                cell.fill = GridBagConstraints.BOTH;
+                cell.insets = new Insets(3, 3, 3, 3);
+                add(rows[i], cell);
+            }
             syncState();
         }
 
@@ -803,25 +818,27 @@ public final class ABSVisualisation {
             setBackground(new Color(246, 249, 252));
             setBorder(BorderFactory.createCompoundBorder(
                 BorderFactory.createLineBorder(new Color(205, 215, 225)),
-                BorderFactory.createEmptyBorder(7, 9, 7, 9)
+                BorderFactory.createEmptyBorder(4, 8, 4, 8)
             ));
             JLabel title = new JLabel(heading);
             title.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 10));
             title.setForeground(new Color(91, 107, 122));
             add(title, BorderLayout.NORTH);
             value = new JLabel("--");
-            value.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 13));
+            value.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 12));
             value.setForeground(new Color(37, 52, 67));
             add(value, BorderLayout.CENTER);
         }
 
         void setValue(String text, boolean attention) {
-            value.setText(text == null || text.length() == 0 ? "--" : text);
+            String display = text == null || text.length() == 0 ? "--" : text;
+            value.setText("<html>" + display.replace("&", "&amp;")
+                .replace("<", "&lt;").replace(">", "&gt;") + "</html>");
             setBackground(attention ? new Color(252, 244, 231) :
                 new Color(246, 249, 252));
             value.setForeground(attention ? new Color(151, 91, 25) :
                 new Color(37, 52, 67));
-            setToolTipText(value.getText());
+            setToolTipText(display);
         }
     }
 
@@ -1165,14 +1182,25 @@ public final class ABSVisualisation {
                 ),
                 BorderFactory.createEmptyBorder(2, 7, 7, 7)
             ));
-            add(new TeamIpHierarchyStrip(), BorderLayout.NORTH);
-
-            JPanel cardRow = new JPanel(new GridLayout(
-                1,
-                VISIBLE_EXTENSIONS.length,
-                9,
-                0
-            ));
+            JPanel cardRow = new JPanel(new GridBagLayout());
+            JPanel m1 = new JPanel(new BorderLayout(0, 10));
+            m1.setBackground(new Color(225, 240, 249));
+            m1.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(new Color(40, 123, 168)),
+                BorderFactory.createEmptyBorder(12, 10, 12, 10)));
+            JLabel m1Title = new JLabel("<html><center>M1<br>HIERARCHICAL VISUALISATION</center></html>", SwingConstants.CENTER);
+            m1Title.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 14));
+            m1.add(m1Title, BorderLayout.NORTH);
+            JLabel m1Flow = new JLabel("<html><center>GP PRODUCTION FLOW<br><br>REPRESENTS / OBSERVES<br>NEVER CONTROLS</center></html>", SwingConstants.CENTER);
+            m1Flow.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 12));
+            m1.add(m1Flow, BorderLayout.CENTER);
+            GridBagConstraints cell = new GridBagConstraints();
+            cell.fill = GridBagConstraints.BOTH;
+            cell.weighty = 1;
+            cell.weightx = 0.30;
+            m1.setPreferredSize(new Dimension(0, 160));
+            m1.setMinimumSize(new Dimension(0, 140));
+            cardRow.add(m1, cell);
             for (int position = 0; position < cards.length; position++) {
                 final int extensionIndex = VISIBLE_EXTENSIONS[position];
                 TeamIpCard card = new TeamIpCard(extensionIndex);
@@ -1183,10 +1211,13 @@ public final class ABSVisualisation {
                     }
                 });
                 cards[position] = card;
-                cardRow.add(card);
+                cell.gridx = position + 1;
+                cell.weightx = 0.35;
+                cell.insets = new Insets(0, 9, 0, 0);
+                card.setPreferredSize(new Dimension(0, 160));
+                card.setMinimumSize(new Dimension(0, 140));
+                cardRow.add(card, cell);
             }
-            cardRow.setPreferredSize(new Dimension(0, 100));
-            cardRow.setMinimumSize(new Dimension(0, 84));
             add(cardRow, BorderLayout.CENTER);
             syncState();
         }
@@ -1207,8 +1238,8 @@ public final class ABSVisualisation {
 
         TeamIpHierarchyStrip() {
             setOpaque(false);
-            setPreferredSize(new Dimension(0, 62));
-            setMinimumSize(new Dimension(0, 58));
+            setPreferredSize(new Dimension(0, 66));
+            setMinimumSize(new Dimension(0, 66));
         }
 
         @Override
@@ -1329,17 +1360,20 @@ public final class ABSVisualisation {
             g2.setColor(new Color(208, 216, 224));
             g2.drawLine(12, 21, width - 12, 21);
 
+            Graphics2D diagram = (Graphics2D)g2.create();
+            diagram.translate(0, Math.max(0, (height - 116) / 2));
             switch (extensionIndex) {
                 case ABSVisualisationTeamIpModel.M2_DIGITAL_TWIN:
-                    paintM2Mini(g2, width);
+                    paintM2Mini(diagram, width);
                     break;
                 case ABSVisualisationTeamIpModel.M3_FAULT_TOLERANCE:
-                    paintM3Mini(g2, width);
+                    paintM3Mini(diagram, width);
                     break;
                 default:
-                    paintM4Mini(g2, width);
+                    paintM4Mini(diagram, width);
                     break;
             }
+            diagram.dispose();
 
             paintFooter(g2, width, height, value, accent);
             if (isFocusOwner()) {
@@ -1470,10 +1504,10 @@ public final class ABSVisualisation {
             }
             g2.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 8));
             g2.setColor(TeamIpGraphics.statusColor(extensionIndex, value));
-            TeamIpGraphics.centered(g2, status, width / 2, height - 13);
+            TeamIpGraphics.centered(g2, status, width / 2, height - 24);
             g2.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 8));
             g2.setColor(accent);
-            g2.drawString("OPEN DETAIL  >", width - 79, height - 3);
+            g2.drawString("OPEN DETAIL  >", width - 87, height - 9);
         }
     }
 
@@ -3266,16 +3300,12 @@ public final class ABSVisualisation {
             ));
             drawArrow(g2, centreX - 55, centreY + 26,
                 centreX - 59, centreY + 15);
-            g2.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 10));
+            g2.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 8));
             g2.setColor(new Color(79, 88, 99));
             drawCenteredText(g2, "6-position symbolic process map",
-                centreX, y + 174);
-            drawCenteredText(
-                g2,
-                shared.getRotaryPhase(),
-                centreX,
-                y + 188
-            );
+                centreX, y + 180);
+            TeamIpGraphics.wrappedCentered(g2, shared.getRotaryPhase(),
+                x + 6, y + 183, width - 12, 28, 9);
             if (done) {
                 drawDoneTick(g2, x + width - 18, y + 42);
             }
@@ -3811,6 +3841,8 @@ public final class ABSVisualisation {
             int[] statuses,
             boolean[] received
         ) {
+            // Reserve a separate footer below the mechanism and bottle label.
+            height += 18;
             ABSVisualisationFlowModel.ModuleSnapshot module =
                 renderModule(index);
             boolean historicalDone = received[index] &&

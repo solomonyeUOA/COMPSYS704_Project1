@@ -31,6 +31,8 @@ public final class POSProductPresetSelfTest {
 
     private static void runCases() {
         POSVisualisation.ProductInputRow row = row("P1", "3", "25", "75");
+        require(row.selectablePresetCountForTest() == 3,
+            "POS exposes only the three product types; product ID is derived");
         assertPreset(row, POSVisualisation.ProductPreset.P1, "P1", "25", "75");
         require("PO-P1|1|P1,S,25,75,3".equals(
             POSVisualisation.buildOrderPayloadForTest("PO-P1", row)

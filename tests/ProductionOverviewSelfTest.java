@@ -58,6 +58,8 @@ public final class ProductionOverviewSelfTest {
         final int[] opened = {-1};
         ABSVisualisation.ProductionLinePanel overview = overviewWithClickRecorder(opened);
         require(overview.getPreferredSize().width == 1360, "overview accommodates all modules");
+        require(overview.getPreferredSize().height == 420,
+            "overview retains the full-height live process canvas");
         for (int i = 0; i < NAMES.length; i++) {
             require(overview.moduleAtDesignPoint(CENTRES[i][0], CENTRES[i][1]) == i,
                 "distinct hit region for " + NAMES[i]);
@@ -220,15 +222,16 @@ public final class ProductionOverviewSelfTest {
 
         Container cardRow = cards[0].getParent();
         require(cardRow == cards[1].getParent() &&
-            cardRow.getComponentCount() == 2,
-            "the card row has no empty third slot");
-        require(cardRow.getLayout() instanceof java.awt.GridLayout &&
-            ((java.awt.GridLayout)cardRow.getLayout()).getColumns() == 2,
-            "remaining cards use an intentional two-column layout");
-        extensions.setSize(1400, 170);
+            cardRow.getComponentCount() == 3,
+            "M1, M2 and M4 occupy three columns");
+        require(cardRow.getLayout() instanceof java.awt.GridBagLayout,
+            "IP columns use weighted layout");
+        require(cardRow.getPreferredSize().height >= 100,
+            "Team-IP summaries reserve room for diagram, status and detail link");
+        extensions.setSize(1400, 202);
         layout(extensions);
         require(cards[0].getWidth() == cards[1].getWidth() &&
-            cards[0].getWidth() > 600,
+            cards[0].getWidth() > 400,
             "M2 and M4 divide the available width evenly");
 
         cards[0].doClick();
