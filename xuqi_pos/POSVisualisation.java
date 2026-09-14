@@ -156,7 +156,7 @@ public final class POSVisualisation {
             BoxLayout.Y_AXIS
         ));
         JScrollPane productScroll = new JScrollPane(productListPanel);
-        productScroll.setPreferredSize(new Dimension(520, 285));
+        productScroll.setPreferredSize(new Dimension(520, 240));
         productScroll.setBorder(BorderFactory.createEmptyBorder());
 
         addProductButton = new JButton("Add Product");
@@ -241,7 +241,7 @@ public final class POSVisualisation {
         form.add(completionStatus, constraints);
 
         frame.add(form, BorderLayout.CENTER);
-        frame.setPreferredSize(new Dimension(600, 690));
+        frame.setPreferredSize(new Dimension(600, 635));
         frame.pack();
         frame.setLocationByPlatform(true);
         frame.setResizable(false);
@@ -890,16 +890,14 @@ public final class POSVisualisation {
 
         addFormLabel(panel, constraints, 0, "Product Type");
         addFormField(panel, constraints, 0, row.productPreset);
-        addFormLabel(panel, constraints, 1, "Product ID / Name");
-        addFormField(panel, constraints, 1, row.productId);
-        addFormLabel(panel, constraints, 2, "Bottle Size");
-        addFormField(panel, constraints, 2, row.bottleSize);
-        addFormLabel(panel, constraints, 3, "Quantity");
-        addFormField(panel, constraints, 3, row.quantity);
-        addFormLabel(panel, constraints, 4, "Liquid A %");
-        addFormField(panel, constraints, 4, row.liquidA);
-        addFormLabel(panel, constraints, 5, "Liquid B %");
-        addFormField(panel, constraints, 5, row.liquidB);
+        addFormLabel(panel, constraints, 1, "Bottle Size");
+        addFormField(panel, constraints, 1, row.bottleSize);
+        addFormLabel(panel, constraints, 2, "Quantity");
+        addFormField(panel, constraints, 2, row.quantity);
+        addFormLabel(panel, constraints, 3, "Liquid A %");
+        addFormField(panel, constraints, 3, row.liquidA);
+        addFormLabel(panel, constraints, 4, "Liquid B %");
+        addFormField(panel, constraints, 4, row.liquidB);
         return panel;
     }
 
@@ -1014,7 +1012,11 @@ public final class POSVisualisation {
             String liquidBValue
         ) {
             productPreset = new JComboBox<ProductPreset>(
-                ProductPreset.values()
+                new ProductPreset[] {
+                    ProductPreset.P1,
+                    ProductPreset.P2,
+                    ProductPreset.P3
+                }
             );
             productId = new JTextField(productIdValue, 14);
             bottleSize = new JComboBox<SizeOption>(new SizeOption[] {
@@ -1122,6 +1124,10 @@ public final class POSVisualisation {
         }
 
         void selectPresetForTest(ProductPreset preset) {
+            if (preset == ProductPreset.CUSTOM) {
+                changePreset(preset);
+                return;
+            }
             productPreset.setSelectedItem(preset);
         }
 
@@ -1154,6 +1160,10 @@ public final class POSVisualisation {
         boolean customFieldsEditableForTest() {
             return productId.isEditable() && liquidA.isEditable() &&
                 liquidB.isEditable();
+        }
+
+        int selectablePresetCountForTest() {
+            return productPreset.getItemCount();
         }
     }
 
