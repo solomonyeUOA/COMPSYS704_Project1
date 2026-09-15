@@ -6,6 +6,7 @@ import java.util.Map;
  * LOCAL_RECOVERY_INTENT; the Conveyor Controller retains actuator authority.
  */
 public final class M2TransferFaultAdapterModelV2_1 {
+    private static final long FAULT_EVENT_RETRY_MILLIS = 500L;
     private final Map<String, String> priorRequests =
         new LinkedHashMap<String, String>();
     private M2TransferFaultProtocolV2_1.FaultEvent activeEvent;
@@ -13,6 +14,8 @@ public final class M2TransferFaultAdapterModelV2_1 {
     private String pendingAck;
     private String pendingIntent;
     private String pendingResult;
+    private long nextFaultEventMillis;
+    private final Map<String, String> completedEvents = new LinkedHashMap<String, String>();
 
     public boolean onLocalFault(String payload) {
         M2TransferFaultProtocolV2_1.FaultEvent event;
@@ -22,11 +25,14 @@ public final class M2TransferFaultAdapterModelV2_1 {
         catch (IllegalArgumentException exception) {
             return false;
         }
+        String completed = completedEvents.get(event.sourceEpoch + "|" + event.eventId);
+        if (completed != null) return completed.equals(payload);
         if (activeEvent != null) {
             return activeEvent.raw.equals(payload);
         }
         activeEvent = event;
         pendingFaultEvent = payload;
+        nextFaultEventMillis = 0L;
         return true;
     }
 
@@ -90,7 +96,9 @@ public final class M2TransferFaultAdapterModelV2_1 {
             return false;
         }
         pendingResult = payload;
+        completedEvents.put(activeEvent.sourceEpoch + "|" + activeEvent.eventId, activeEvent.raw);
         activeEvent = null;
+        pendingFaultEvent = null;
         return true;
     }
 
@@ -108,8 +116,17 @@ public final class M2TransferFaultAdapterModelV2_1 {
     }
 
     public String takeFaultEvent() {
-        String result = pendingFaultEvent;
+        return takeFaultEvent(System.currentTimeMillis());
+    }
+
+    String takeFaultEvent(long nowMillis) {
+        if (activeEvent == null || nowMillis < nextFaultEventMillis) {
+            return null;
+        }
+        String result = pendingFaultEvent == null ?
+            activeEvent.raw : pendingFaultEvent;
         pendingFaultEvent = null;
+        nextFaultEventMillis = nowMillis + FAULT_EVENT_RETRY_MILLIS;
         return result;
     }
 

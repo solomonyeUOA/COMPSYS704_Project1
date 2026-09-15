@@ -28,6 +28,7 @@ public final class M2MachineStateV1 {
     private static String pendingTransferTestRequestId;
     private static String pendingTransferTestFault;
     private static String lastTransferTestRequestId;
+    private static String lastCancelledTransferTestRequestId;
 
     private static final Queue<String> loaderWorkpieceUpdates =
         new ArrayDeque<String>();
@@ -80,6 +81,7 @@ public final class M2MachineStateV1 {
         pendingTransferTestRequestId = null;
         pendingTransferTestFault = null;
         lastTransferTestRequestId = null;
+        lastCancelledTransferTestRequestId = null;
         loaderWorkpieceUpdates.clear();
         loaderResourceUpdates.clear();
         conveyorWorkpieceUpdates.clear();
@@ -301,8 +303,7 @@ public final class M2MachineStateV1 {
                 "CONVEYOR-1", "CONVEYOR", conveyor.getActiveBottleId(),
                 M2StatusV1.BUSY, "MOVE_TO_P1", "-"
             ));
-            if ("ARRIVAL_TIMEOUT".equals(pendingTransferTestFault) &&
-                conveyor.injectFault(pendingTransferTestFault, getSourceEpoch())) {
+            if (injectPendingEntryFault()) {
                 consumeTransferTestFault();
             }
         }
@@ -315,6 +316,12 @@ public final class M2MachineStateV1 {
 
     public static synchronized boolean acceptP1Feedback(String payload) {
         if (!M2SystemResetStateV1.allowBottle(bottleIdFromContext(payload))) { return false; }
+        String[] sensorFields = payload == null ? new String[0] : payload.split("\\|", -1);
+        if (sensorFields.length == 6 && sensorFields[0].equals(conveyor.getActiveBottleId()) &&
+            "true".equals(sensorFields[1]) && "false".equals(sensorFields[2])) {
+            conveyor.observeEntrySensors(true, true, false, getSourceEpoch());
+            return false;
+        }
         int before = conveyor.getStatus();
         boolean accepted = conveyor.acceptP1Feedback(payload);
         if (accepted) { conveyorTransferOffer.acknowledge(bottleIdFromContext(payload)); }
@@ -342,7 +349,7 @@ public final class M2MachineStateV1 {
             String bottleId = payload.split("\\|", -1)[6];
             conveyorResourceUpdates.add(resourceUpdate(
                 "CONVEYOR-1", "CONVEYOR", bottleId, M2StatusV1.FAULT,
-                "STOPPED", "ARRIVAL_TIMEOUT"
+                "STOPPED", conveyor.getFaultCode()
             ));
         }
         return payload;
@@ -544,7 +551,7 @@ public final class M2MachineStateV1 {
                 "REMOVE_FROM_P6", "-"
             ));
             if (isUnloaderTestFault(pendingTransferTestFault) &&
-                unloader.injectFault(pendingTransferTestFault, getSourceEpoch())) {
+                unloader.armDepartureTimeout(System.currentTimeMillis(), getSourceEpoch())) {
                 consumeTransferTestFault();
                 return null;
             }
@@ -555,8 +562,25 @@ public final class M2MachineStateV1 {
     public static synchronized boolean armTransferTestFault(String payload) {
         String[] fields = payload == null ? new String[0] :
             payload.split("\\|", -1);
-        if (fields.length != 2 || fields[0].isEmpty() ||
-            !isTransferTestFault(fields[1])) {
+        if (fields.length != 2 || fields[0].isEmpty()) {
+            return false;
+        }
+        if ("CANCEL".equals(fields[1])) {
+            if (fields[0].equals(lastCancelledTransferTestRequestId)) {
+                return true;
+            }
+            if (fields[0].equals(lastTransferTestRequestId)) {
+                return false;
+            }
+            if (fields[0].equals(pendingTransferTestRequestId)) {
+                pendingTransferTestRequestId = null;
+                pendingTransferTestFault = null;
+            }
+            lastCancelledTransferTestRequestId = fields[0];
+            return true;
+        }
+        if (!isTransferTestFault(fields[1]) ||
+            fields[0].equals(lastCancelledTransferTestRequestId)) {
             return false;
         }
         if (fields[0].equals(lastTransferTestRequestId) ||
@@ -568,18 +592,18 @@ public final class M2MachineStateV1 {
         }
         pendingTransferTestRequestId = fields[0];
         pendingTransferTestFault = fields[1];
-        if ("ARRIVAL_TIMEOUT".equals(fields[1]) &&
-            conveyor.injectFault(fields[1], getSourceEpoch())) {
+        if (injectPendingEntryFault()) {
             consumeTransferTestFault();
         }
         else if (isUnloaderTestFault(fields[1]) &&
-            unloader.injectFault(fields[1], getSourceEpoch())) {
+            unloader.armDepartureTimeout(System.currentTimeMillis(), getSourceEpoch())) {
             consumeTransferTestFault();
         }
         return true;
     }
 
     public static synchronized String takeUnloaderFault() {
+        unloader.tickDeparture(System.currentTimeMillis());
         String payload = unloader.takeFaultPayload();
         if (payload != null) {
             String[] fields = payload.split("\\|", -1);
@@ -591,10 +615,21 @@ public final class M2MachineStateV1 {
         return payload;
     }
 
+    static synchronized void tickUnloaderFault(long nowMillis) {
+        unloader.tickDeparture(nowMillis);
+    }
+
     public static synchronized long recoverTransferTestFault(
         String faultCode,
         long expectedStateVersion
     ) {
+        if ("PHOTO_EYE_FAILURE".equals(faultCode) || "POSITION_CONFLICT".equals(faultCode)) {
+            long entryVersion = conveyor.recoverInjectedFault(faultCode, expectedStateVersion);
+            if (entryVersion >= 0L) conveyorResourceUpdates.add(resourceUpdate(
+                "CONVEYOR-1", "CONVEYOR", conveyor.getActiveBottleId(), M2StatusV1.READY,
+                "ENTRY_RECONCILED", "-"));
+            return entryVersion;
+        }
         long version = unloader.recoverInjectedFault(
             faultCode,
             expectedStateVersion
@@ -803,13 +838,21 @@ public final class M2MachineStateV1 {
 
     private static boolean isTransferTestFault(String faultCode) {
         return "ARRIVAL_TIMEOUT".equals(faultCode) ||
+            "PHOTO_EYE_FAILURE".equals(faultCode) || "POSITION_CONFLICT".equals(faultCode) ||
             isUnloaderTestFault(faultCode);
     }
 
     private static boolean isUnloaderTestFault(String faultCode) {
-        return "DEPARTURE_TIMEOUT".equals(faultCode) ||
-            "PHOTO_EYE_FAILURE".equals(faultCode) ||
-            "POSITION_CONFLICT".equals(faultCode);
+        return "DEPARTURE_TIMEOUT".equals(faultCode);
+    }
+
+    private static boolean injectPendingEntryFault() {
+        if ("PHOTO_EYE_FAILURE".equals(pendingTransferTestFault))
+            return conveyor.observeEntrySensors(false, false, true, getSourceEpoch());
+        if ("POSITION_CONFLICT".equals(pendingTransferTestFault))
+            return conveyor.observeEntrySensors(true, true, false, getSourceEpoch());
+        return "ARRIVAL_TIMEOUT".equals(pendingTransferTestFault) &&
+            conveyor.injectFault(pendingTransferTestFault, getSourceEpoch());
     }
 
     private static void consumeTransferTestFault() {

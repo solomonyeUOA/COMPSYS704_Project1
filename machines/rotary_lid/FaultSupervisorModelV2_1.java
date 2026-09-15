@@ -36,13 +36,12 @@ public final class FaultSupervisorModelV2_1 {
         new HashMap<String, Integer>();
 
     private String activeEpoch;
+    private final Map<String, Long> sourceVersions = new HashMap<String, Long>();
     private long latestStateVersion = -1;
     private FaultProtocolV2_1.FaultEvent activeEvent;
     private FaultPolicyV2_1 activePolicy;
     private State state = State.IDLE;
     private int activeAttempt;
-    private boolean manualEvidenceRecorded;
-    private FaultProtocolV2_1.RecoveryResult deferredControllerEvidence;
     private String decision = "IDLE";
     private String latestEvidence = "NONE";
     private long stateEnteredAtMs = System.currentTimeMillis();
@@ -59,7 +58,6 @@ public final class FaultSupervisorModelV2_1 {
     private int automaticAttempts;
     private int verifiedRecoveries;
     private int resourceWaits;
-    private int manualEscalations;
     private int recoveryFailures;
     private long traceSequence;
     private long completedRecoverySequence;
@@ -103,8 +101,12 @@ public final class FaultSupervisorModelV2_1 {
             clearActiveRecovery();
             latestStateVersion = -1;
         }
-        if (latestStateVersion >= 0 &&
-            event.stateVersion <= latestStateVersion) {
+        Long sourceVersion = sourceVersions.get(versionSource(event));
+        long comparisonVersion = activeEvent != null &&
+            versionSource(activeEvent).equals(versionSource(event)) ? latestStateVersion :
+            sourceVersion == null ? -1L : sourceVersion.longValue();
+        if (event.stateVersion <= comparisonVersion) {
+
             reject("STALE_STATE " + key);
             return false;
         }
@@ -128,10 +130,9 @@ public final class FaultSupervisorModelV2_1 {
         activeEpoch = event.sourceEpoch;
         latestStateVersion = event.stateVersion;
         activeEvent = event;
+        sourceVersions.put(versionSource(event), event.stateVersion);
         activePolicy = policy;
         activeAttempt = 0;
-        manualEvidenceRecorded = false;
-        deferredControllerEvidence = null;
         pendingFaultAlert = payload;
         latestEvidence = "FAULT_EVENT_VALIDATED";
         record("FAULT " + key + " " + policy.summary());
@@ -157,7 +158,6 @@ public final class FaultSupervisorModelV2_1 {
             transition(State.WAITING_SAFE_STOP);
             decision = "NO_BLIND_RETRY_WAITING_SAFE_STOP";
             pendingSafeStopRequest = safeStopRequest(event);
-            manualEscalations++;
         }
         return true;
     }
@@ -204,7 +204,7 @@ public final class FaultSupervisorModelV2_1 {
         }
         else {
             transition(State.LOCKED_OUT);
-            decision = "MANUAL_RECONCILIATION_REQUIRED";
+            decision = "SAFE_HOLD_NO_AUTOMATIC_RECOVERY";
             queueRecoveryFailed("NO_AUTOMATIC_ACTION");
         }
         return true;
@@ -330,24 +330,8 @@ public final class FaultSupervisorModelV2_1 {
     public synchronized boolean recordManualEvidence(
         ManualReconciliationEvidenceV2_1 evidence
     ) {
-        if (evidence == null || activeEvent == null ||
-            (state != State.LOCKED_OUT &&
-                state != State.MANUAL_RECOVERY) ||
-            !activeEvent.eventId.equals(evidence.eventId) ||
-            !activeEvent.sourceEpoch.equals(evidence.sourceEpoch) ||
-            !activeEvent.subsystem.equals(evidence.subsystem) ||
-            !activeEvent.bottleId.equals(evidence.bottleId) ||
-            activeEvent.stateVersion != evidence.stateVersion) {
-            reject("INVALID_MANUAL_EVIDENCE");
-            return false;
-        }
-        manualEvidenceRecorded = true;
-        latestEvidence = "MANUAL " + evidence.evidenceCode + " by " +
-            evidence.operatorId;
-        decision = "AWAIT_NEWER_CONTROLLER_EVIDENCE";
-        record("MANUAL_EVIDENCE " + evidence.eventId + " " +
-            evidence.evidenceCode + " operator=" + evidence.operatorId);
-        return true;
+        // Compatibility entry point: unattended recovery rejects operator evidence.
+        return false;
     }
 
     public synchronized boolean confirmManualControllerEvidence(
@@ -357,71 +341,22 @@ public final class FaultSupervisorModelV2_1 {
         String serviceEvidence,
         long resultingStateVersion
     ) {
-        if (!manualEvidenceRecorded || activeEvent == null ||
-            state != State.LOCKED_OUT ||
-            !activeEvent.eventId.equals(eventId) ||
-            !activeEvent.sourceEpoch.equals(sourceEpoch) ||
-            resultingStateVersion <= activeEvent.stateVersion ||
-            !containsAllEvidence(safeEvidence, activePolicy.safeEvidence) ||
-            !containsAllEvidence(serviceEvidence,
-                activePolicy.serviceEvidence)) {
-            reject("INVALID_MANUAL_CONTROLLER_EVIDENCE");
-            return false;
-        }
-        latestStateVersion = resultingStateVersion;
-        transition(State.RECOVERY_READY);
-        decision = "VERIFIED_READY_AWAIT_M1";
-        latestEvidence = safeEvidence + ";" + serviceEvidence;
-        verifiedRecoveries++;
-        pendingRecoveryReady = recoveryReady(resultingStateVersion);
-        record("MANUAL_RECOVERY_READY " + eventId);
-        return true;
+        // Compatibility entry point: unattended recovery rejects operator evidence.
+        return false;
     }
 
     public synchronized boolean deferManualControllerEvidence(String payload) {
-        FaultProtocolV2_1.RecoveryResult result;
-        try {
-            result = FaultProtocolV2_1.parseRecoveryResult(payload);
-        }
-        catch (IllegalArgumentException exception) {
-            reject("INVALID_DEFERRED_CONTROLLER_EVIDENCE");
-            return false;
-        }
-        if (state != State.LOCKED_OUT || activeEvent == null ||
-            !activeEvent.eventId.equals(result.eventId) ||
-            !activeEvent.sourceEpoch.equals(result.sourceEpoch) ||
-            result.attempt != activeAttempt ||
-            !"SUCCESS".equals(result.outcome) ||
-            result.resultingStateVersion <= activeEvent.stateVersion ||
-            !containsAllEvidence(result.safeEvidence,
-                activePolicy.safeEvidence) ||
-            !containsAllEvidence(result.serviceEvidence,
-                activePolicy.serviceEvidence)) {
-            reject("INVALID_DEFERRED_CONTROLLER_EVIDENCE");
-            return false;
-        }
-        deferredControllerEvidence = result;
-        latestEvidence = "CONTROLLER_EVIDENCE_AWAITING_RECONCILIATION";
-        record("DEFERRED_CONTROLLER_EVIDENCE " + result.eventId);
-        return true;
+        // Compatibility entry point: unattended recovery rejects operator evidence.
+        return false;
     }
 
     public synchronized boolean applyDeferredControllerEvidence() {
-        if (!manualEvidenceRecorded || deferredControllerEvidence == null) {
-            return false;
-        }
-        FaultProtocolV2_1.RecoveryResult result = deferredControllerEvidence;
-        return confirmManualControllerEvidence(
-            result.eventId,
-            result.sourceEpoch,
-            result.safeEvidence,
-            result.serviceEvidence,
-            result.resultingStateVersion
-        );
+        // Compatibility entry point: unattended recovery rejects operator evidence.
+        return false;
     }
 
     public synchronized boolean hasManualEvidenceRecorded() {
-        return manualEvidenceRecorded;
+        return false;
     }
 
     public synchronized boolean confirmResourceRestored(
@@ -771,7 +706,7 @@ public final class FaultSupervisorModelV2_1 {
         return new FaultSupervisorMetricsV2_1(
             validEvents, rejectedMessages, duplicateMessages,
             automaticAttempts, verifiedRecoveries, resourceWaits,
-            manualEscalations, recoveryFailures, 0
+            0, recoveryFailures, 0
         );
     }
 
@@ -791,12 +726,12 @@ public final class FaultSupervisorModelV2_1 {
         automaticAttempts = 0;
         verifiedRecoveries = 0;
         resourceWaits = 0;
-        manualEscalations = 0;
         recoveryFailures = 0;
         traceSequence = 0;
         clearCompletedRecovery();
         clearActiveRecovery();
         clearOutputs();
+        sourceVersions.clear();
     }
 
     /** Clears active recovery while retaining correlation tombstones. */
@@ -963,15 +898,23 @@ public final class FaultSupervisorModelV2_1 {
     }
 
     private void clearActiveRecovery() {
+        if (activeEvent != null) sourceVersions.put(versionSource(activeEvent), latestStateVersion);
         activeEvent = null;
         activePolicy = null;
         activeAttempt = 0;
-        manualEvidenceRecorded = false;
-        deferredControllerEvidence = null;
         transition(State.IDLE);
         decision = "IDLE";
         latestEvidence = "NONE";
         pendingRecoveryRequest = null;
+    }
+
+    private static String versionSource(FaultProtocolV2_1.FaultEvent event) {
+        String owner = event.subsystem;
+        if ("TRANSFER".equals(owner)) {
+            if (event.eventId.startsWith("M2-UNLOADER-")) owner = "M2_UNLOADER";
+            else if (event.eventId.startsWith("M2-TRANSFER-")) owner = "M2_CONVEYOR";
+        }
+        return event.sourceEpoch + "|" + owner;
     }
 
     private void clearCompletedRecovery() {

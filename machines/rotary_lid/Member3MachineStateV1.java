@@ -6,9 +6,9 @@ public final class Member3MachineStateV1 {
     public static final int DONE = 3;
     public static final int FAULT = 4;
 
-    private static RotaryControllerModelV1 rotary =
+    private static volatile RotaryControllerModelV1 rotary =
         new RotaryControllerModelV1();
-    private static LidLoaderControllerModelV1 lidLoader =
+    private static volatile LidLoaderControllerModelV1 lidLoader =
         new LidLoaderControllerModelV1();
     private static long lastRotaryTickMs = java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(System.nanoTime());
     private static long lastLidTickMs = java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(System.nanoTime());
@@ -17,15 +17,73 @@ public final class Member3MachineStateV1 {
     private static BoundedSignalOfferV1 lidDoneOffer =
         new BoundedSignalOfferV1(3);
     private static long nextCycleId = 1;
-    private static String pendingRotaryTestFault;
-    private static LidLoaderControllerModelV1.Fault pendingLidTestFault;
+    // GUI calls must not acquire the machine monitor while holding the injection monitor.
+    private static final java.util.concurrent.atomic.AtomicReference<String> machineInjection =
+        new java.util.concurrent.atomic.AtomicReference<String>();
+    private static ControllerStandbyV1 rotaryPair = new ControllerStandbyV1("ROTARY CONTROLLER");
+    private static ControllerStandbyV1 lidPair = new ControllerStandbyV1("LID CONTROLLER");
+    private static RotaryControllerModelV1 rotaryCheckpoint;
+    private static LidLoaderControllerModelV1 lidCheckpoint;
+    private static final java.util.concurrent.atomic.AtomicReference<String> controllerInjection =
+        new java.util.concurrent.atomic.AtomicReference<String>();
+    private static volatile String controllerTelemetry = "|ROTARY_CTRL,A,false,false,AVAILABLE,0|LID_CTRL,A,false,false,AVAILABLE,0";
+
+    public static String controllerTelemetry() { return controllerTelemetry; }
+    private static void publishControllerTelemetry() {
+        controllerTelemetry = "|ROTARY_CTRL," + rotaryPair.telemetry() + "|LID_CTRL," + lidPair.telemetry();
+    }
+
+    public static boolean armControllerFailure(String code) {
+        return controllerInjection.compareAndSet(null, code);
+    }
+
+    public static boolean cancelControllerFailure(String code) {
+        String pending = controllerInjection.get();
+        return code != null && code.equals(pending) && controllerInjection.compareAndSet(pending, null);
+    }
+
+    public static synchronized String controllerRedundancySnapshot() {
+        return rotaryPair.snapshot() + "\n" + lidPair.snapshot();
+    }
+
+    public static synchronized FaultMonitoringStateV2_1.ComponentSnapshot[] controllerMonitoringSnapshot() {
+        ControllerStandbyV1[] pairs = {rotaryPair, lidPair};
+        String[] names = {"ROTARY CONTROLLER PAIR", "LID CONTROLLER PAIR"};
+        FaultMonitoringStateV2_1.ComponentSnapshot[] result = new FaultMonitoringStateV2_1.ComponentSnapshot[2];
+        for (int i = 0; i < pairs.length; i++) {
+            String state = pairs[i].telemetry().split(",")[3];
+            result[i] = new FaultMonitoringStateV2_1.ComponentSnapshot(names[i], "M3", state,
+                "LOCAL CONTROLLER PAIR", -1, -1, pairs[i].snapshot());
+        }
+        return result;
+    }
+
+    private static boolean prepareController(boolean isRotary) {
+        ControllerStandbyV1 pair = isRotary ? rotaryPair : lidPair;
+        if (pair.available()) {
+            if (isRotary) rotaryCheckpoint = new RotaryControllerModelV1(rotary);
+            else lidCheckpoint = new LidLoaderControllerModelV1(lidLoader);
+            pair.checkpoint();
+        }
+        String code = isRotary ? "ROTARY_CONTROLLER_FAILURE" : "LID_CONTROLLER_FAILURE";
+        if (cancelControllerFailure(code)) {
+            pair.failActive();
+            FaultInjectionStateV2_1.consumed(code);
+        }
+        if (pair.takeover(SystemWatchdogV1.isDriveFailoverEnabled())) {
+            if (isRotary) rotary = new RotaryControllerModelV1(rotaryCheckpoint);
+            else lidLoader = new LidLoaderControllerModelV1(lidCheckpoint);
+        }
+        publishControllerTelemetry();
+        return pair.available();
+    }
 
     private Member3MachineStateV1() {
     }
 
     /** Status polling is observational and must never advance a machine. */
     public static synchronized int getRotaryStatus() {
-        return rotary.getStatus();
+        return rotaryPair.available() ? rotary.getStatus() : FAULT;
     }
 
     /** Compatibility alias for older local tests; not a V2.1 interface name. */
@@ -35,13 +93,31 @@ public final class Member3MachineStateV1 {
 
     /** Status polling is observational and must never advance a machine. */
     public static synchronized int getLidStatus() {
-        return lidLoader.getStatus();
+        if (lidLoader.isRetryingPick() && lidLoader.getStatus() == DONE &&
+            FaultSupervisorStateV2_1.isOperationHeld()) return BUSY;
+        return lidPair.available() ? lidLoader.getStatus() : FAULT;
+    }
+
+    public static synchronized String[] pickRecoveryState() {
+        return new String[] {lidLoader.getFaultEventId(), lidLoader.getActiveBottleId(),
+            lidLoader.getState().name(), lidLoader.getFault().name()};
+    }
+
+    public static synchronized boolean startPickRetry(String event, String epoch, String bottle) {
+        if (!SystemWatchdogV1.isDriveFailoverEnabled() || !lidPair.available() ||
+            M3SystemResetStateV1.isQuarantined() || !event.equals(FaultSupervisorStateV2_1.activeEventId()) ||
+            !epoch.equals(FaultSupervisorStateV2_1.activeEpoch()) ||
+            !"WAITING_RESULT".equals(FaultSupervisorStateV2_1.stateName()) ||
+            !bottle.equals(lidLoader.getActiveBottleId())) return false;
+        boolean started = lidLoader.retryPick(event);
+        if (started) lastLidTickMs = java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(System.nanoTime());
+        return started;
     }
 
     public static synchronized boolean requestRotation(
         boolean stationBarrierSatisfied
     ) {
-        if (M3SystemResetStateV1.isQuarantined() ||
+        if (!rotaryPair.available() || M3SystemResetStateV1.isQuarantined() ||
             FaultSupervisorStateV2_1.isOperationHeld()) {
             return false;
         }
@@ -52,10 +128,11 @@ public final class Member3MachineStateV1 {
         if (started) {
             nextCycleId++;
             lastRotaryTickMs = java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(System.nanoTime());
-            if (pendingRotaryTestFault != null &&
-                rotary.injectFault(pendingRotaryTestFault)) {
-                FaultInjectionStateV2_1.consumed(pendingRotaryTestFault);
-                pendingRotaryTestFault = null;
+            String code = machineInjection.get();
+            if (isRotaryTestFault(code) && machineInjection.compareAndSet(code, null)) {
+                if ("POSITION_SENSOR_FAILURE".equals(code)) Member3PlantStateV1.queueRotaryFeedbackFailure();
+                else rotary.injectFault(code);
+                FaultInjectionStateV2_1.consumed(code);
                 reportRotaryFaultIfPresent();
             }
         }
@@ -66,7 +143,10 @@ public final class Member3MachineStateV1 {
         long elapsedMs,
         boolean tableAlignedWithSensor
     ) {
+        if (!prepareController(true)) return;
         rotary.tick(elapsedMs, tableAlignedWithSensor);
+        if (rotary.getStatus() == DONE) rotaryPair.completed();
+        publishControllerTelemetry();
         reportRotaryFaultIfPresent();
         recordRotaryHeartbeat();
     }
@@ -75,15 +155,14 @@ public final class Member3MachineStateV1 {
         boolean tableAlignedWithSensor
     ) {
         long now = java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(System.nanoTime());
-        rotary.tick(Math.max(0, now - lastRotaryTickMs),
-            tableAlignedWithSensor);
+        tickRotary(Math.max(0, now - lastRotaryTickMs), tableAlignedWithSensor);
         lastRotaryTickMs = now;
         reportRotaryFaultIfPresent();
         recordRotaryHeartbeat();
     }
 
     public static synchronized boolean takeRotationDoneEvent() {
-        if (rotary.getStatus() != DONE || rotationDonePublished) {
+        if (!rotaryPair.available() || rotary.getStatus() != DONE || rotationDonePublished) {
             return false;
         }
         rotationDonePublished = true;
@@ -97,6 +176,142 @@ public final class Member3MachineStateV1 {
         }
         return acknowledged;
     }
+
+
+
+    public static synchronized boolean isRotaryMotorEnabled() {
+        return rotaryPair.available() && rotary.isMotorEnabled();
+    }
+
+    public static synchronized boolean requestLidLoad(
+        String bottleId,
+        boolean lidAvailable
+    ) {
+        if (!lidPair.available() || M3SystemResetStateV1.isQuarantined() ||
+            FaultSupervisorStateV2_1.isOperationHeld()) {
+            return false;
+        }
+        if (lidLoader.getStatus() == DONE) {
+            return false;
+        }
+        boolean started = lidLoader.requestLoad(
+            bottleId,
+            lidAvailable
+        );
+        if (started) {
+            lastLidTickMs = java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(System.nanoTime());
+            String code = machineInjection.get();
+            if (code != null && !isRotaryTestFault(code) && machineInjection.compareAndSet(code, null)) {
+                lidLoader.injectFault(LidLoaderControllerModelV1.Fault.valueOf(code));
+                FaultInjectionStateV2_1.consumed(code);
+            }
+        }
+        reportLidFaultIfPresent();
+        return started;
+    }
+
+    public static synchronized void tickLidLoader(
+        long elapsedMs,
+        boolean lidPicked,
+        boolean lidPlaced
+    ) {
+        if (!prepareController(false)) return;
+        if (lidLoader.isRetryingPick() && !FaultSupervisorStateV2_1.permitsLocalPickMotion()) {
+            recordLidHeartbeat();
+            return;
+        }
+        lidLoader.tick(elapsedMs, lidPicked, lidPlaced);
+        if (lidLoader.getStatus() == DONE) lidPair.completed();
+        publishControllerTelemetry();
+        reportLidFaultIfPresent();
+        recordLidHeartbeat();
+    }
+
+    public static synchronized void tickLidLoaderNow(
+        boolean lidPicked,
+        boolean lidPlaced
+    ) {
+        long now = java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(System.nanoTime());
+        tickLidLoader(Math.max(0, now - lastLidTickMs), lidPicked, lidPlaced);
+        lastLidTickMs = now;
+        reportLidFaultIfPresent();
+        recordLidHeartbeat();
+    }
+
+    public static synchronized boolean takeLidDoneEvent() {
+        return takeLidDoneBottleId() != null;
+    }
+
+    public static synchronized String takeLidDoneBottleId() {
+        if (lidLoader.isRetryingPick() && FaultSupervisorStateV2_1.isOperationHeld()) return null;
+        if (!lidPair.available() || lidLoader.getStatus() != DONE) {
+            return null;
+        }
+        if (!lidDonePublished) {
+            String bottleId = lidLoader.takeCompletedBottleId();
+            if (bottleId != null) {
+                lidDoneOffer.arm(bottleId, bottleId);
+                lidDonePublished = true;
+            }
+        }
+        return lidDoneOffer.nextReactionValue();
+    }
+
+    public static synchronized boolean isLidPickEnabled() {
+        return lidPair.available() && FaultSupervisorStateV2_1.permitsLocalPickMotion() && lidLoader.isPickActuatorEnabled();
+    }
+
+    public static synchronized boolean isLidPlaceEnabled() {
+        return lidPair.available() && FaultSupervisorStateV2_1.permitsLocalPickMotion() && lidLoader.isPlaceActuatorEnabled();
+    }
+
+    public static synchronized boolean acknowledgeLidDone() {
+        if (lidLoader.isRetryingPick() && FaultSupervisorStateV2_1.isOperationHeld()) return false;
+        boolean acknowledged = lidLoader.acknowledgeDone();
+        if (acknowledged) {
+            lidDonePublished = false;
+            lidDoneOffer = new BoundedSignalOfferV1(3);
+        }
+        return acknowledged;
+    }
+
+
+
+    public static boolean armTestFault(String faultCode) {
+        if (faultCode == null || rotary.getStatus() == FAULT || lidLoader.getStatus() == FAULT) {
+            return false;
+        }
+        if (isRotaryTestFault(faultCode)) {
+            return machineInjection.compareAndSet(null, faultCode);
+        }
+        try {
+            LidLoaderControllerModelV1.Fault fault =
+                LidLoaderControllerModelV1.Fault.valueOf(faultCode);
+            if (fault != LidLoaderControllerModelV1.Fault.NONE) {
+                return machineInjection.compareAndSet(null, faultCode);
+            }
+        }
+        catch (IllegalArgumentException ignored) {
+        }
+        return false;
+    }
+
+    public static boolean cancelArmedTestFault(String faultCode) {
+        String pending = machineInjection.get();
+        return faultCode != null && faultCode.equals(pending) && machineInjection.compareAndSet(pending, null);
+    }
+
+    public static void clearPendingTestFaults() {
+        machineInjection.set(null);
+        controllerInjection.set(null);
+    }
+
+    private static boolean isRotaryTestFault(String code) {
+        return "ALIGNMENT_TIMEOUT".equals(code) || "MOTOR_STALL".equals(code) ||
+            "POSITION_SENSOR_FAILURE".equals(code);
+    }
+
+
 
     public static synchronized boolean resetRotaryFault(
         RotaryRecoveryEvidenceV1 evidence
@@ -116,94 +331,6 @@ public final class Member3MachineStateV1 {
             FaultSupervisorStateV2_1.resolveLocalFault("ROTARY", eventId);
         }
         return reset;
-    }
-
-    public static synchronized boolean isRotaryMotorEnabled() {
-        return rotary.isMotorEnabled();
-    }
-
-    public static synchronized boolean requestLidLoad(
-        String bottleId,
-        boolean lidAvailable
-    ) {
-        if (M3SystemResetStateV1.isQuarantined() ||
-            FaultSupervisorStateV2_1.isOperationHeld()) {
-            return false;
-        }
-        if (lidLoader.getStatus() == DONE) {
-            return false;
-        }
-        boolean started = lidLoader.requestLoad(
-            bottleId,
-            lidAvailable
-        );
-        if (started) {
-            lastLidTickMs = java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(System.nanoTime());
-            if (pendingLidTestFault != null &&
-                lidLoader.injectFault(pendingLidTestFault)) {
-                FaultInjectionStateV2_1.consumed(pendingLidTestFault.name());
-                pendingLidTestFault = null;
-            }
-        }
-        reportLidFaultIfPresent();
-        return started;
-    }
-
-    public static synchronized void tickLidLoader(
-        long elapsedMs,
-        boolean lidPicked,
-        boolean lidPlaced
-    ) {
-        lidLoader.tick(elapsedMs, lidPicked, lidPlaced);
-        reportLidFaultIfPresent();
-        recordLidHeartbeat();
-    }
-
-    public static synchronized void tickLidLoaderNow(
-        boolean lidPicked,
-        boolean lidPlaced
-    ) {
-        long now = java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(System.nanoTime());
-        lidLoader.tick(Math.max(0, now - lastLidTickMs),
-            lidPicked, lidPlaced);
-        lastLidTickMs = now;
-        reportLidFaultIfPresent();
-        recordLidHeartbeat();
-    }
-
-    public static synchronized boolean takeLidDoneEvent() {
-        return takeLidDoneBottleId() != null;
-    }
-
-    public static synchronized String takeLidDoneBottleId() {
-        if (lidLoader.getStatus() != DONE) {
-            return null;
-        }
-        if (!lidDonePublished) {
-            String bottleId = lidLoader.takeCompletedBottleId();
-            if (bottleId != null) {
-                lidDoneOffer.arm(bottleId, bottleId);
-                lidDonePublished = true;
-            }
-        }
-        return lidDoneOffer.nextReactionValue();
-    }
-
-    public static synchronized boolean isLidPickEnabled() {
-        return lidLoader.isPickActuatorEnabled();
-    }
-
-    public static synchronized boolean isLidPlaceEnabled() {
-        return lidLoader.isPlaceActuatorEnabled();
-    }
-
-    public static synchronized boolean acknowledgeLidDone() {
-        boolean acknowledged = lidLoader.acknowledgeDone();
-        if (acknowledged) {
-            lidDonePublished = false;
-            lidDoneOffer = new BoundedSignalOfferV1(3);
-        }
-        return acknowledged;
     }
 
     public static synchronized boolean resetLidFault(
@@ -228,46 +355,12 @@ public final class Member3MachineStateV1 {
         return reset;
     }
 
-    public static synchronized boolean armTestFault(String faultCode) {
-        if (pendingRotaryTestFault != null || pendingLidTestFault != null ||
-            rotary.getStatus() == FAULT || lidLoader.getStatus() == FAULT) {
-            return false;
-        }
-        if ("ALIGNMENT_TIMEOUT".equals(faultCode) ||
-            "MOTOR_STALL".equals(faultCode) ||
-            "POSITION_SENSOR_FAILURE".equals(faultCode)) {
-            pendingRotaryTestFault = faultCode;
-            return true;
-        }
-        try {
-            LidLoaderControllerModelV1.Fault fault =
-                LidLoaderControllerModelV1.Fault.valueOf(faultCode);
-            if (fault != LidLoaderControllerModelV1.Fault.NONE) {
-                pendingLidTestFault = fault;
-                return true;
-            }
-        }
-        catch (IllegalArgumentException ignored) {
-        }
-        return false;
-    }
-
-    public static synchronized boolean recoverActiveTestFault() {
-        if (rotary.getStatus() == FAULT) {
-            return resetRotaryFault(new RotaryRecoveryEvidenceV1(
-                true, true, true
-            ));
-        }
-        if (lidLoader.getStatus() == FAULT) {
-            return resetLidFault(new LidRecoveryEvidenceV1(
-                true, true, true, true, true
-            ));
-        }
-        return true;
-    }
-
     /** Restores deterministic state before a simulation or test run. */
     public static synchronized void reset() {
+        rotaryPair = new ControllerStandbyV1("ROTARY CONTROLLER");
+        lidPair = new ControllerStandbyV1("LID CONTROLLER");
+        controllerInjection.set(null);
+        publishControllerTelemetry();
         rotary = new RotaryControllerModelV1();
         lidLoader = new LidLoaderControllerModelV1();
         lastRotaryTickMs = java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(System.nanoTime());
@@ -276,8 +369,7 @@ public final class Member3MachineStateV1 {
         lidDonePublished = false;
         lidDoneOffer = new BoundedSignalOfferV1(3);
         nextCycleId = 1;
-        pendingRotaryTestFault = null;
-        pendingLidTestFault = null;
+        clearPendingTestFaults();
         FaultInjectionStateV2_1.reset();
         FaultSupervisorStateV2_1.reset();
     }
@@ -296,8 +388,7 @@ public final class Member3MachineStateV1 {
         rotationDonePublished = false;
         lidDonePublished = false;
         lidDoneOffer = new BoundedSignalOfferV1(3);
-        pendingRotaryTestFault = null;
-        pendingLidTestFault = null;
+        clearPendingTestFaults();
         FaultInjectionStateV2_1.reset();
         FaultSupervisorStateV2_1.systemReset();
     }

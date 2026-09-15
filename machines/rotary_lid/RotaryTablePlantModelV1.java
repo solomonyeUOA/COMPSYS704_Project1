@@ -1,10 +1,13 @@
 import java.util.HashMap;
-import java.util.Map;
 import java.util.HashSet;
+import java.util.Map;
+import java.util.Iterator;
+import java.util.LinkedHashSet;
 import java.util.Set;
 
 /** Six-position Plant model with bottle-correlated station barriers. */
 public final class RotaryTablePlantModelV1 {
+    private static final int EVENT_HISTORY_LIMIT = 20000;
     public static final int POSITION_COUNT = 6;
     public static final int LOAD_POSITION = 0;
     public static final int FILL_POSITION = 1;
@@ -17,17 +20,50 @@ public final class RotaryTablePlantModelV1 {
     private final Map<String, BottleContextV1> contexts =
         new HashMap<String, BottleContextV1>();
     private boolean moving;
+    private final RedundantDriveV1 drive;
+    private final RedundantPositionFeedbackV1 feedback;
+
+    public RotaryTablePlantModelV1() { this(new RedundantDriveV1("ROTARY MOTOR")); }
+    RotaryTablePlantModelV1(RedundantDriveV1 drive) {
+        this(drive, new RedundantPositionFeedbackV1());
+    }
+    RotaryTablePlantModelV1(RedundantDriveV1 drive, RedundantPositionFeedbackV1 feedback) {
+        this.drive = drive;
+        this.feedback = feedback;
+    }
+    public RedundantDriveV1 drive() { return drive; }
+    public RedundantPositionFeedbackV1 feedback() { return feedback; }
     private boolean movementComplete;
     private boolean aligned = true;
     private boolean alignmentFault;
     private boolean triggerLatched;
     private long movementStartMs;
+    private long lastMotionTickMs;
+    private double angle;
+    private double targetAngle;
+    private double speed;
+    public double angle() { return angle; }
+    public double targetAngle() { return targetAngle; }
+    public double speed() { return speed; }
+    public String physicalSnapshot() {
+        return String.format(java.util.Locale.ROOT, "angle=%.2f target=%.2f speed=%.2f deg/s", angle, targetAngle, speed);
+    }
     private long pendingCycleId;
     private long lastCommittedCycleId;
     private int completedSteps;
     private String fillOfferId;
     private String capOfferId;
     private String labelOfferId;
+    private final LinkedHashSet<String> filledBottleIds =
+        new LinkedHashSet<String>();
+    private final LinkedHashSet<String> liddedBottleIds =
+        new LinkedHashSet<String>();
+    private final LinkedHashSet<String> cappedBottleIds =
+        new LinkedHashSet<String>();
+    private final LinkedHashSet<String> labelledBottleIds =
+        new LinkedHashSet<String>();
+    private final LinkedHashSet<String> clearedBottleIds =
+        new LinkedHashSet<String>();
 
     public boolean registerContext(String payload) {
         BottleContextV1 context;
@@ -85,6 +121,8 @@ public final class RotaryTablePlantModelV1 {
             moving = true;
             aligned = false;
             movementStartMs = nowMs;
+            lastMotionTickMs = nowMs;
+            targetAngle = angle + 60.0;
             pendingCycleId = cycleId;
             started = true;
         }
@@ -94,13 +132,31 @@ public final class RotaryTablePlantModelV1 {
 
     /** Completes physical movement but waits for a sensor-confirmed commit. */
     public boolean tick(long nowMs) {
+        feedback.sample(aligned);
+        if (moving) {
+            if (!feedback.trusted()) drive.inhibit("POSITION_FEEDBACK_UNTRUSTED");
+            int previous = drive.switchCount();
+            boolean permitted = drive.permitMotion(!alignmentFault, nowMs);
+            long delta = Math.max(0L, nowMs - lastMotionTickMs);
+            speed = permitted ? 60000.0 / RotaryControllerModelV1.ROTATION_TIME_MS : 0.0;
+            if (permitted) angle = Math.min(targetAngle, angle + delta * speed / 1000.0);
+            // Retain completed travel, but do not count unpowered time as motion.
+            if (!permitted || previous != drive.switchCount())
+                movementStartMs += Math.max(0L, nowMs - lastMotionTickMs);
+            lastMotionTickMs = nowMs;
+            if (!permitted) return false;
+        }
         if (!moving || nowMs - movementStartMs <
             RotaryControllerModelV1.ROTATION_TIME_MS) {
             return false;
         }
         moving = false;
+        angle = targetAngle;
+        speed = 0.0;
         movementComplete = true;
         aligned = !alignmentFault;
+        feedback.sample(aligned);
+        if (aligned) drive.completed();
         return true;
     }
 
@@ -110,7 +166,7 @@ public final class RotaryTablePlantModelV1 {
         if (cycleId > 0 && cycleId == lastCommittedCycleId) {
             return true;
         }
-        if (!movementComplete || !aligned || cycleId != pendingCycleId ||
+        if (!movementComplete || !isAligned() || cycleId != pendingCycleId ||
             cycleId <= lastCommittedCycleId) {
             return false;
         }
@@ -123,21 +179,37 @@ public final class RotaryTablePlantModelV1 {
     }
 
     public boolean markFilled(String bottleId) {
+        if (filledBottleIds.contains(bottleId)) {
+            return true;
+        }
         BottleStateV1 bottle = matchingBottle(FILL_POSITION, bottleId);
-        if (bottle == null || bottle.isFilled()) {
+        if (bottle == null) {
             return false;
         }
+        if (bottle.isFilled()) {
+            remember(filledBottleIds, bottleId);
+            return true;
+        }
         bottle.markFilled();
+        remember(filledBottleIds, bottleId);
         return true;
     }
 
     public boolean markLidPlaced(String bottleId) {
+        if (liddedBottleIds.contains(bottleId)) {
+            return true;
+        }
         BottleStateV1 bottle = matchingBottle(LID_POSITION, bottleId);
-        if (bottle == null || bottle.hasLid()) {
+        if (bottle == null) {
             return false;
+        }
+        if (bottle.hasLid()) {
+            remember(liddedBottleIds, bottleId);
+            return true;
         }
         try {
             bottle.markLidPlaced();
+            remember(liddedBottleIds, bottleId);
             return true;
         }
         catch (IllegalStateException exception) {
@@ -145,13 +217,25 @@ public final class RotaryTablePlantModelV1 {
         }
     }
 
+    public boolean hasRecordedLidPlacement(String bottleId) {
+        return liddedBottleIds.contains(bottleId);
+    }
+
     public boolean markCapped(String bottleId) {
+        if (cappedBottleIds.contains(bottleId)) {
+            return true;
+        }
         BottleStateV1 bottle = matchingBottle(CAPPER_POSITION, bottleId);
-        if (bottle == null || bottle.isCapped()) {
+        if (bottle == null) {
             return false;
+        }
+        if (bottle.isCapped()) {
+            remember(cappedBottleIds, bottleId);
+            return true;
         }
         try {
             bottle.markCapped();
+            remember(cappedBottleIds, bottleId);
             return true;
         }
         catch (IllegalStateException exception) {
@@ -160,12 +244,20 @@ public final class RotaryTablePlantModelV1 {
     }
 
     public boolean markLabelled(String bottleId) {
+        if (labelledBottleIds.contains(bottleId)) {
+            return true;
+        }
         BottleStateV1 bottle = matchingBottle(LABEL_POSITION, bottleId);
-        if (bottle == null || bottle.isLabelled()) {
+        if (bottle == null) {
             return false;
+        }
+        if (bottle.isLabelled()) {
+            remember(labelledBottleIds, bottleId);
+            return true;
         }
         try {
             bottle.markLabelled();
+            remember(labelledBottleIds, bottleId);
             return true;
         }
         catch (IllegalStateException exception) {
@@ -175,6 +267,9 @@ public final class RotaryTablePlantModelV1 {
 
     /** Accepts P6_CLEAR only for the labelled bottle physically at P6. */
     public boolean clearP6(String bottleId) {
+        if (clearedBottleIds.contains(bottleId)) {
+            return true;
+        }
         BottleStateV1 bottle = matchingBottle(LABEL_POSITION, bottleId);
         if (bottle == null || !bottle.isLabelled()) {
             return false;
@@ -182,11 +277,26 @@ public final class RotaryTablePlantModelV1 {
         positions[LABEL_POSITION] = null;
         contexts.remove(bottleId);
         labelOfferId = null;
+        remember(clearedBottleIds, bottleId);
         return true;
     }
 
+    private static void remember(
+        LinkedHashSet<String> history,
+        String bottleId
+    ) {
+        if (history.size() >= EVENT_HISTORY_LIMIT) {
+            Iterator<String> oldest = history.iterator();
+            if (oldest.hasNext()) {
+                oldest.next();
+                oldest.remove();
+            }
+        }
+        history.add(bottleId);
+    }
+
     public boolean canRotate() {
-        if (moving || movementComplete || !aligned || !hasAnyBottle() ||
+        if (moving || movementComplete || !isAligned() || !hasAnyBottle() ||
             positions[LABEL_POSITION] != null) {
             return false;
         }
@@ -247,7 +357,7 @@ public final class RotaryTablePlantModelV1 {
     }
 
     public boolean isAligned() {
-        return aligned;
+        return feedback.read(aligned);
     }
 
     public boolean isMoving() {
@@ -302,7 +412,9 @@ public final class RotaryTablePlantModelV1 {
     }
 
     public void safeStopAndClear() {
+        drive.interruptAction();
         moving = false;
+        speed = 0.0;
         movementComplete = false;
         aligned = true;
         alignmentFault = false;

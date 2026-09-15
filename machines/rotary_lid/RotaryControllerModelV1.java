@@ -11,7 +11,7 @@ public final class RotaryControllerModelV1 {
         FAULT
     }
 
-    private State state = State.READY;
+    private volatile State state = State.READY;
     private long stateElapsedMs = 0;
     private int tablePosition = 0;
     private boolean motorEnabled = false;
@@ -24,6 +24,20 @@ public final class RotaryControllerModelV1 {
 
     public RotaryControllerModelV1() {
         this(0L);
+    }
+
+    /** Independent standby checkpoint; immutable strings and scalar state only. */
+    public RotaryControllerModelV1(RotaryControllerModelV1 source) {
+        state = source.state;
+        stateElapsedMs = source.stateElapsedMs;
+        tablePosition = source.tablePosition;
+        motorEnabled = source.motorEnabled;
+        faultReason = source.faultReason;
+        faultCode = source.faultCode;
+        activeCycleId = source.activeCycleId;
+        lastCompletedCycleId = source.lastCompletedCycleId;
+        faultSequence = source.faultSequence;
+        faultEventId = source.faultEventId;
     }
 
     public RotaryControllerModelV1(long initialFaultSequence) {

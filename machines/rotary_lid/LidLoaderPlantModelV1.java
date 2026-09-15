@@ -15,20 +15,41 @@ public final class LidLoaderPlantModelV1 {
     }
 
     private Action action = Action.IDLE;
+    private final RedundantDriveV1 pickDrive;
+    private final RedundantDriveV1 placeDrive;
+    public RedundantDriveV1 pickDrive() { return pickDrive; }
+    public RedundantDriveV1 placeDrive() { return placeDrive; }
     private final int magazineCapacity;
     private int magazineCount;
     private long actionStartMs;
+    private long lastMotionTickMs;
     private long placedSensorUntilMs;
     private boolean pickFault;
     private boolean placeFault;
     private boolean pickTriggerLatched;
     private boolean placeTriggerLatched;
+    private boolean lidHeld;
+    private boolean loadLost;
+    private long completedPlacements;
+    public long completedPlacements() { return completedPlacements; }
+    public void loseHeldLid() { loadLost = true; lidHeld = false; }
+    public String physicalSnapshot() {
+        return "action=" + action + " lidHeld=" + lidHeld + " loadLost=" + loadLost;
+    }
 
     public LidLoaderPlantModelV1() {
         this(MAGAZINE_CAPACITY);
     }
 
     public LidLoaderPlantModelV1(int initialMagazineCount) {
+        this(initialMagazineCount, new RedundantDriveV1("LID PICK DRIVE"),
+            new RedundantDriveV1("LID PLACE DRIVE"));
+    }
+
+    LidLoaderPlantModelV1(int initialMagazineCount, RedundantDriveV1 pick,
+        RedundantDriveV1 place) {
+        pickDrive = pick;
+        placeDrive = place;
         if (MAGAZINE_CAPACITY <= 0) {
             throw new IllegalStateException("lid magazine geometry gives no usable capacity");
         }
@@ -44,6 +65,7 @@ public final class LidLoaderPlantModelV1 {
             magazineCount > 0) {
             action = Action.PICKING;
             actionStartMs = nowMs;
+            lastMotionTickMs = nowMs;
             started = true;
         }
         pickTriggerLatched = enabled;
@@ -55,6 +77,7 @@ public final class LidLoaderPlantModelV1 {
         if (enabled && !placeTriggerLatched && action == Action.PICKED) {
             action = Action.PLACING;
             actionStartMs = nowMs;
+            lastMotionTickMs = nowMs;
             started = true;
         }
         placeTriggerLatched = enabled;
@@ -62,9 +85,22 @@ public final class LidLoaderPlantModelV1 {
     }
 
     public void tick(long nowMs) {
+        RedundantDriveV1 current = action == Action.PICKING ? pickDrive :
+            action == Action.PLACING ? placeDrive : null;
+        if (current != null) {
+            if (loadLost || (action == Action.PLACING && !lidHeld)) current.inhibit("LID_NOT_RETAINED");
+            int previous = current.switchCount();
+            boolean permitted = current.permitMotion(!pickFault && !placeFault, nowMs);
+            if (!permitted || previous != current.switchCount())
+                actionStartMs += Math.max(0L, nowMs - lastMotionTickMs);
+            lastMotionTickMs = nowMs;
+            if (!permitted) return;
+        }
         if (action == Action.PICKING && !pickFault &&
             nowMs - actionStartMs >= PICK_TIME_MS) {
             action = Action.PICKED;
+            lidHeld = true;
+            pickDrive.completed();
         }
         else if (action == Action.PLACING && !placeFault &&
             nowMs - actionStartMs >= PLACE_TIME_MS) {
@@ -73,8 +109,17 @@ public final class LidLoaderPlantModelV1 {
                 throw new IllegalStateException("completed placement without magazine inventory");
             }
             magazineCount--;
+            completedPlacements++;
+            lidHeld = false;
             placedSensorUntilMs = nowMs + PLACED_SENSOR_HOLD_MS;
+            placeDrive.completed();
         }
+    }
+
+    public void pauseMotion(long nowMs) {
+        if (action == Action.PICKING || action == Action.PLACING)
+            actionStartMs += Math.max(0L, nowMs - lastMotionTickMs);
+        lastMotionTickMs = nowMs;
     }
 
     /** Returns the number of lids accepted without exceeding physical capacity. */
@@ -102,7 +147,10 @@ public final class LidLoaderPlantModelV1 {
     }
 
     public void cancelAction() {
+        pickDrive.interruptAction();
+        placeDrive.interruptAction();
         action = Action.IDLE;
+        lidHeld = false;
         actionStartMs = 0L;
         placedSensorUntilMs = 0L;
         pickFault = false;
@@ -116,7 +164,7 @@ public final class LidLoaderPlantModelV1 {
     }
 
     public boolean isLidPicked() {
-        return action == Action.PICKED || action == Action.PLACING;
+        return lidHeld && (action == Action.PICKED || action == Action.PLACING);
     }
 
     public boolean isLidPlacedSensorActive(long nowMs) {
@@ -140,7 +188,7 @@ public final class LidLoaderPlantModelV1 {
     }
 
     public boolean isNoLidHeld() {
-        return action == Action.IDLE || action == Action.PICKING;
+        return !lidHeld;
     }
 
     public boolean isPlacementSensorHealthy() {

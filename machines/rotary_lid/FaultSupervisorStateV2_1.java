@@ -52,6 +52,31 @@ public final class FaultSupervisorStateV2_1 {
         return accepted;
     }
 
+    public static synchronized boolean localPickAck(String event, String epoch, boolean accepted, String reason) {
+        if (!matchingPick(event, epoch)) return false;
+        return MODEL.onRecoveryAck("V2|" + event + "|" + epoch + "|1|" +
+            (accepted ? "ACCEPTED" : "REJECTED") + "|" + reason + "|" + MODEL.getActiveStateVersion());
+    }
+
+    public static synchronized boolean localPickResult(String event, String epoch, boolean verified) {
+        if (!matchingPick(event, epoch)) return false;
+        long version = Math.max(localStateVersion, MODEL.getActiveStateVersion()) + 1;
+        boolean accepted = MODEL.onRecoveryResult("V2|" + event + "|" + epoch + "|1|" +
+            (verified ? "SUCCESS|actuator_home+no_lid_held|lid_picked|" : "FAILED|-|-|") + version);
+        if (accepted) localStateVersion = version;
+        return accepted;
+    }
+
+    private static boolean matchingPick(String event, String epoch) {
+        return event.equals(MODEL.getActiveEventId()) && epoch.equals(MODEL.getActiveEpoch()) &&
+            "LID".equals(MODEL.getActiveSubsystem()) && "PICK_TIMEOUT".equals(MODEL.getActiveFaultCode());
+    }
+
+    public static boolean permitsLocalPickMotion() {
+        return !("LID".equals(MODEL.getActiveSubsystem()) && "PICK_TIMEOUT".equals(MODEL.getActiveFaultCode())) ||
+            ("WAITING_RESULT".equals(MODEL.getState().name()) && SystemWatchdogV1.isDriveFailoverEnabled());
+    }
+
     public static boolean onRecoveryResult(String payload) {
         FaultMonitoringStateV2_1.peerTraffic(
             FaultMonitoringStateV2_1.M2_LINK,
@@ -99,16 +124,23 @@ public final class FaultSupervisorStateV2_1 {
             FaultMonitoringStateV2_1.M1_LINK,
             "FT_RESUME_DECISION"
         );
-        if (FaultGuiActionsV2_1.isTestMode() &&
-            isResumeDecision(payload) &&
+        if (isResumeDecision(payload) &&
             !FaultTestControlStateV2_1.hasPendingResumeRequest() &&
             !isTrustedAutomaticResumeDecision(payload)) {
             return false;
         }
+        boolean pickReady = matchingPick(MODEL.getActiveEventId(), MODEL.getActiveEpoch()) &&
+            "RECOVERY_READY".equals(MODEL.getState().name());
+        String pickEvent = MODEL.getActiveEventId();
         boolean accepted = MODEL.onResumeDecision(payload);
         if (accepted) {
             RECOVERY_READY_OFFER.discard();
             FaultTestControlStateV2_1.acknowledge();
+            if (pickReady && isResumeDecision(payload)) {
+                MODEL.resolveLocalFault("LID", pickEvent);
+                DriveEventsV1.record("LID PICK RECOVERY", "FAILOVER_VERIFIED", 1,
+                    "Original bottle completed; automatic M1 Resume accepted", false);
+            }
         }
         return accepted;
     }
@@ -222,7 +254,7 @@ public final class FaultSupervisorStateV2_1 {
 
     /** Holds every new M3 machine action until verified recovery is released. */
     public static boolean isOperationHeld() {
-        return !"IDLE".equals(MODEL.getState().name());
+        return SystemWatchdogV1.isSafeError() || !"IDLE".equals(MODEL.getState().name());
     }
 
     public static String decision() {

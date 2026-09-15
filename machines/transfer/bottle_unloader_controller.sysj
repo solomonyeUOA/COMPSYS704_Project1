@@ -74,6 +74,7 @@ BottleUnloaderController(
     {loop {
         String fault = M2MachineStateV1.takeUnloaderFault();
         if (fault != null) {
+            M2TransferFaultAdapterStateV2_1.onLocalFault(fault);
             emit LOCAL_TRANSFER_FAULT(fault);
         }
         pause;
