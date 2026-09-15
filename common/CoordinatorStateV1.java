@@ -603,7 +603,10 @@ public final class CoordinatorStateV1 {
     }
 
     /** Records a validated alert without changing order execution. */
-    public static boolean recordFtFaultAlert(String payload) {
+    public static synchronized boolean recordFtFaultAlert(String payload) {
+        if (isPresentPayload(payload) && payload.equals(latestFtFaultAlert)) {
+            return false;
+        }
         if (!admitFtEvidence(payload)) {
             return false;
         }
@@ -621,7 +624,11 @@ public final class CoordinatorStateV1 {
      * unavailable. This is coordination state only; it does not control a
      * machine actuator and therefore cannot establish FT_SAFE_STOP_ACK.
      */
-    public static boolean recordFtSafeStopRequest(String payload) {
+    public static synchronized boolean recordFtSafeStopRequest(String payload) {
+        if (isPresentPayload(payload) &&
+            payload.equals(pendingFtSafeStopRequest)) {
+            return false;
+        }
         if (!admitFtEvidence(payload)) {
             return false;
         }
@@ -641,8 +648,11 @@ public final class CoordinatorStateV1 {
         if (isPresentPayload(payload) &&
             payload.equals(lastFtAutomaticResumeReady) &&
             isPresentPayload(lastFtAutomaticResumeDecision)) {
-            pendingFtAutomaticResumeDecision = lastFtAutomaticResumeDecision;
+                pendingFtAutomaticResumeDecision = lastFtAutomaticResumeDecision;
             return true;
+        }
+        if (isPresentPayload(payload) && payload.equals(latestFtRecoveryReady)) {
+            return false;
         }
         if (!admitFtEvidence(payload)) {
             return false;
@@ -679,7 +689,10 @@ public final class CoordinatorStateV1 {
     }
 
     /** Records/escalates a failed recovery and retains the M1 hold. */
-    public static boolean recordFtRecoveryFailed(String payload) {
+    public static synchronized boolean recordFtRecoveryFailed(String payload) {
+        if (isPresentPayload(payload) && payload.equals(latestFtRecoveryFailed)) {
+            return false;
+        }
         if (!admitFtEvidence(payload)) {
             return false;
         }
@@ -745,6 +758,7 @@ public final class CoordinatorStateV1 {
             ftVisualState = "NORMAL";
             ftVisualSafeStop = "RELEASED";
             ftVisualRecovery = "RESUMED_BY_TEST_OPERATOR";
+            retiredFtKeys.add(fields[2] + "|" + fields[1]);
             queueFtVisualEvidence();
             return "V2|" + fields[1] + "|" + fields[2] +
                 "|RESUME|GUI_TEST_APPROVAL|" + fields[4];

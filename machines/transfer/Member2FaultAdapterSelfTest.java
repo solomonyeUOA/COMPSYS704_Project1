@@ -39,6 +39,20 @@ public final class Member2FaultAdapterSelfTest {
         check(stale.takeAck().contains("|REJECTED|"),
             "rejected request is acknowledged safely");
 
+        M2TransferFaultAdapterModelV2_1 reliable =
+            new M2TransferFaultAdapterModelV2_1();
+        check(reliable.onLocalFault(event), "reliable adapter accepts fault");
+        check(event.equals(reliable.takeFaultEvent(1000L)),
+            "first fault event is emitted");
+        check(reliable.takeFaultEvent(1499L) == null,
+            "fault retry is rate limited");
+        check(event.equals(reliable.takeFaultEvent(1500L)),
+            "unacknowledged fault event is retransmitted");
+        check(reliable.onLocalRecoveryEvidence(result),
+            "reliable adapter accepts recovery completion");
+        check(reliable.takeFaultEvent(2000L) == null,
+            "retransmission stops after recovery completion");
+
         System.out.println("Member2FaultAdapterSelfTest PASSED");
     }
 

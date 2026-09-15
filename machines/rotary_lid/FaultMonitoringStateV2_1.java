@@ -129,6 +129,15 @@ public final class FaultMonitoringStateV2_1 {
                 heartbeats.get(GUI_WORKER), "Swing refresh worker", now)
         };
 
+        ComponentSnapshot[] drives = Member3PlantStateV1.driveMonitoringSnapshot();
+        int originalLength = components.length;
+        components = java.util.Arrays.copyOf(components, originalLength + drives.length);
+        System.arraycopy(drives, 0, components, originalLength, drives.length);
+        ComponentSnapshot[] controllers = Member3MachineStateV1.controllerMonitoringSnapshot();
+        originalLength = components.length;
+        components = java.util.Arrays.copyOf(components, originalLength + controllers.length);
+        System.arraycopy(controllers, 0, components, originalLength, controllers.length);
+
         FaultSupervisorMetricsV2_1 metrics =
             FaultSupervisorStateV2_1.metricsSnapshot();
         String monitoredHealth = systemHealth(
@@ -169,7 +178,7 @@ public final class FaultMonitoringStateV2_1 {
             watchdog.active, watchdog.faultComponent, watchdog.faultReason,
             watchdog.action, watchdog.resetCount, watchdog.recoveryAttempt,
             watchdog.lastResetMs, watchdog.lastFaultMs,
-            watchdog.manualInterventionRequired,
+            watchdog.safeError,
             watchdog.notificationSequence, watchdog.notificationTitle,
             watchdog.notificationMessage
         );
@@ -276,6 +285,7 @@ public final class FaultMonitoringStateV2_1 {
             return "CRITICAL";
         }
         for (ComponentSnapshot component : components) {
+            if ("SAFE_ERROR".equals(component.state)) return "CRITICAL";
             if ("UNRESPONSIVE".equals(component.heartbeat) &&
                 "M3".equals(component.owner)) {
                 return "CRITICAL";
@@ -286,6 +296,9 @@ public final class FaultMonitoringStateV2_1 {
             return "DEGRADED";
         }
         for (ComponentSnapshot component : components) {
+            if (("LOCAL DRIVE STATE".equals(component.heartbeat) ||
+                "LOCAL CONTROLLER PAIR".equals(component.heartbeat)) &&
+                !"AVAILABLE".equals(component.state)) return "DEGRADED";
             if ("LATE".equals(component.heartbeat)) {
                 return "DEGRADED";
             }
@@ -375,7 +388,7 @@ public final class FaultMonitoringStateV2_1 {
         public final int watchdogRecoveryAttempt;
         public final long watchdogLastResetMs;
         public final long watchdogLastFaultMs;
-        public final boolean watchdogManualInterventionRequired;
+        public final boolean watchdogSafeError;
         public final long watchdogNotificationSequence;
         public final String watchdogNotificationTitle;
         public final String watchdogNotificationMessage;
@@ -402,7 +415,7 @@ public final class FaultMonitoringStateV2_1 {
             String watchdogFaultReason, String watchdogAction,
             int watchdogResetCount, int watchdogRecoveryAttempt,
             long watchdogLastResetMs, long watchdogLastFaultMs,
-            boolean watchdogManualInterventionRequired,
+            boolean watchdogSafeError,
             long watchdogNotificationSequence,
             String watchdogNotificationTitle,
             String watchdogNotificationMessage
@@ -450,8 +463,8 @@ public final class FaultMonitoringStateV2_1 {
             this.watchdogRecoveryAttempt = watchdogRecoveryAttempt;
             this.watchdogLastResetMs = watchdogLastResetMs;
             this.watchdogLastFaultMs = watchdogLastFaultMs;
-            this.watchdogManualInterventionRequired =
-                watchdogManualInterventionRequired;
+            this.watchdogSafeError =
+                watchdogSafeError;
             this.watchdogNotificationSequence = watchdogNotificationSequence;
             this.watchdogNotificationTitle = watchdogNotificationTitle;
             this.watchdogNotificationMessage = watchdogNotificationMessage;

@@ -13,8 +13,6 @@ public final class SystemWatchdogV1 {
     public static final long STARTUP_GRACE_MS = 6000L;
     public static final long HEARTBEAT_TIMEOUT_MS = 4000L;
     public static final int MISSES_TO_FAULT = 3;
-    public static final long RESET_COOLDOWN_MS = 30000L;
-    public static final long RESET_ACCEPT_TIMEOUT_MS = 8000L;
     public static final int MAX_AUTOMATIC_RESETS = 3;
 
     private static final Set<String> REQUIRED_LOCAL = new HashSet<String>();
@@ -24,10 +22,13 @@ public final class SystemWatchdogV1 {
     private static final Map<String, Integer> MISSES =
         new HashMap<String, Integer>();
     private static final List<String> HISTORY = new ArrayList<String>();
+
     private static final BoundedStringSignalOfferV1 RESET_REQUEST =
         new BoundedStringSignalOfferV1(3, 500L, 100L);
+    private static long resetRequestedAtMs = -1L;
+    public static final long RESET_ACCEPT_TIMEOUT_MS = 8000L;
 
-    private static boolean active = Boolean.parseBoolean(
+    private static volatile boolean active = Boolean.parseBoolean(
         System.getProperty("m3.watchdog.enabled", "true")
     );
     private static long startedAtMs = System.currentTimeMillis();
@@ -41,16 +42,14 @@ public final class SystemWatchdogV1 {
     private static int recoveryAttempt;
     private static long lastResetMs = -1L;
     private static long lastFaultMs = -1L;
-    private static long resetRequestedAtMs = -1L;
     private static String pendingResetId;
     private static String lastObservedResetId;
     private static String recoveryComponent = "None";
     private static String recoveryReason = "None";
-    private static boolean pendingResetAutomatic;
     private static boolean resetInProgress;
     private static boolean verifyingRecovery;
     private static int healthyVerificationSamples;
-    private static boolean safeError;
+    private static volatile boolean safeError;
     private static long notificationSequence;
     private static String notificationTitle = "";
     private static String notificationMessage = "";
@@ -75,16 +74,10 @@ public final class SystemWatchdogV1 {
         MISSES.clear();
         healthyVerificationSamples = 0;
         if (!enabled) {
-            if (pendingResetAutomatic) {
-                RESET_REQUEST.discard();
-                pendingResetId = null;
-                resetRequestedAtMs = -1L;
-                pendingResetAutomatic = false;
-            }
             verifyingRecovery = false;
             health = safeError ? "FAULT" : "HEALTHY";
             action = safeError ?
-                "SAFE / ERROR state; manual intervention required" :
+                "SAFE / ERROR state; no safe backup available" :
                 "Monitoring disabled";
             audit("WATCHDOG_TOGGLE", faultComponent, faultReason,
                 "OFF", recoveryAttempt, "DISABLED", safeError);
@@ -93,12 +86,15 @@ public final class SystemWatchdogV1 {
         startedAtMs = System.currentTimeMillis();
         health = safeError ? "FAULT" : "WARNING";
         action = safeError ?
-            "SAFE / ERROR state; manual intervention required" :
+            "SAFE / ERROR state; no safe backup available" :
             "Startup grace period";
         audit("WATCHDOG_TOGGLE", faultComponent, faultReason,
             "ON", recoveryAttempt, safeError ? "SAFE_ERROR" : "ACTIVE",
             safeError);
     }
+
+    public static boolean isDriveFailoverEnabled() { return active && !safeError; }
+    public static boolean isSafeError() { return safeError; }
 
     public static synchronized void observe(
         String component,
@@ -144,7 +140,8 @@ public final class SystemWatchdogV1 {
         return RESET_REQUEST.nextValue(now);
     }
 
-    /** Explicit operator action remains available when automatic monitoring is off. */
+
+
     public static synchronized boolean requestManualSystemReset() {
         if (pendingResetId != null || M3SystemResetStateV1.isQuarantined()) {
             return false;
@@ -159,9 +156,7 @@ public final class SystemWatchdogV1 {
             pendingResetId = null;
             return false;
         }
-        pendingResetAutomatic = false;
         resetRequestedAtMs = now;
-        resetCount++;
         lastResetMs = now;
         health = "RESETTING";
         action = "Manual system reset requested from M1";
@@ -181,14 +176,15 @@ public final class SystemWatchdogV1 {
         if (resetId == null || resetId.equals(lastObservedResetId)) {
             return;
         }
+        RESET_REQUEST.discard();
+        resetRequestedAtMs = -1L;
         lastObservedResetId = resetId;
+        resetCount++;
         lastResetMs = nowMs;
         resetInProgress = true;
         health = "RESETTING";
         action = "M1 reset received; waiting for M3 safe-state acknowledgement";
-        RESET_REQUEST.discard();
         pendingResetId = null;
-        resetRequestedAtMs = -1L;
         OBSERVATIONS.clear();
         MISSES.clear();
         audit("RESET_ACCEPTED", recoveryComponent, recoveryReason,
@@ -196,12 +192,17 @@ public final class SystemWatchdogV1 {
     }
 
     private static void tickAt(long nowMs) {
-        if (!active) {
-            if (pendingResetId != null && !pendingResetAutomatic) {
+        if (pendingResetId != null) {
+            if (nowMs - resetRequestedAtMs >= RESET_ACCEPT_TIMEOUT_MS) {
+                RESET_REQUEST.discard();
+                enterSafeError("Manual reset acknowledgement timeout", nowMs);
+            } else {
                 health = "RESETTING";
                 action = "Manual reset requested; waiting for M1";
-                return;
             }
+            return;
+        }
+        if (!active) {
             if (resetInProgress) {
                 if (M3SystemResetStateV1.isQuarantined()) {
                     health = "RESETTING";
@@ -211,7 +212,7 @@ public final class SystemWatchdogV1 {
             }
             health = safeError ? "FAULT" : "HEALTHY";
             action = safeError ?
-                "SAFE / ERROR state; manual intervention required" :
+                "SAFE / ERROR state; no safe backup available" :
                 "Monitoring disabled";
             return;
         }
@@ -222,7 +223,7 @@ public final class SystemWatchdogV1 {
 
         if (safeError) {
             health = "FAULT";
-            action = "SAFE / ERROR state; manual intervention required";
+            action = "SAFE / ERROR state; no safe backup available";
             return;
         }
 
@@ -237,32 +238,6 @@ public final class SystemWatchdogV1 {
             healthyVerificationSamples = 0;
             health = "WARNING";
             action = "Reset complete; verifying component heartbeats";
-        }
-
-        if (pendingResetId != null) {
-            if (pendingResetAutomatic && resetRequestedAtMs >= 0L &&
-                nowMs - resetRequestedAtMs >= RESET_ACCEPT_TIMEOUT_MS) {
-                RESET_REQUEST.discard();
-                pendingResetId = null;
-                resetRequestedAtMs = -1L;
-                pendingResetAutomatic = false;
-                audit("RESET_NO_ACK", recoveryComponent, recoveryReason,
-                    "Existing system reset", recoveryAttempt,
-                    "NO_ACK", recoveryAttempt >= MAX_AUTOMATIC_RESETS);
-                if (recoveryAttempt >= MAX_AUTOMATIC_RESETS) {
-                    enterSafeError("Maximum recovery attempts reached", nowMs);
-                }
-                else {
-                    health = "WARNING";
-                    action = "Reset not acknowledged; waiting for bounded retry";
-                }
-                return;
-            }
-            health = "RESETTING";
-            action = pendingResetAutomatic ?
-                "Automatic reset requested; waiting for M1" :
-                "Manual reset requested; waiting for M1";
-            return;
         }
 
         Set<String> targets = new HashSet<String>(REQUIRED_LOCAL);
@@ -390,50 +365,8 @@ public final class SystemWatchdogV1 {
         lastFaultMs = nowMs;
         recoveryComponent = component;
         recoveryReason = reason;
-        if (!isAutomaticResetEligible(reason)) {
-            enterSafeError("Fault is not eligible for automatic reset", nowMs);
-            return true;
-        }
-        if (recoveryAttempt >= MAX_AUTOMATIC_RESETS) {
-            enterSafeError("Maximum recovery attempts reached", nowMs);
-            return true;
-        }
-        if (lastResetMs >= 0L && nowMs - lastResetMs < RESET_COOLDOWN_MS) {
-            health = "WARNING";
-            action = "Waiting for reset cooldown; retry " +
-                (recoveryAttempt + 1) + "/" + MAX_AUTOMATIC_RESETS;
-            return true;
-        }
-
-        pendingResetId = "RST" + nowMs;
-        if (!RESET_REQUEST.begin(pendingResetId, nowMs)) {
-            pendingResetId = null;
-            enterSafeError("Reset request channel unavailable", nowMs);
-            return true;
-        }
-        recoveryAttempt++;
-        resetCount++;
-        lastResetMs = nowMs;
-        resetRequestedAtMs = nowMs;
-        pendingResetAutomatic = true;
-        health = "RESETTING";
-        action = "Automatic existing system reset; attempt " +
-            recoveryAttempt + "/" + MAX_AUTOMATIC_RESETS;
-        audit("WATCHDOG_INTERVENTION", component, reason,
-            "Existing system reset", recoveryAttempt, "REQUESTED", false);
-        notifyGui(
-            "Watchdog Intervention",
-            "Fault detected: " + component + " - " + reason + "\n" +
-            "Action: Attempting existing system reset\n" +
-            "Retry: " + recoveryAttempt + " / " + MAX_AUTOMATIC_RESETS
-        );
+        enterSafeError("No verified redundant process for this heartbeat failure", nowMs);
         return true;
-    }
-
-    private static boolean isAutomaticResetEligible(String reason) {
-        return reason != null &&
-            (reason.startsWith("heartbeat timeout") ||
-             reason.startsWith("heartbeat not received"));
     }
 
     private static boolean isCommunicationComponent(String component) {
@@ -463,17 +396,14 @@ public final class SystemWatchdogV1 {
     }
 
     private static void enterSafeError(String result, long nowMs) {
-        RESET_REQUEST.discard();
         pendingResetId = null;
-        resetRequestedAtMs = -1L;
-        pendingResetAutomatic = false;
         resetInProgress = false;
         verifyingRecovery = false;
         safeError = true;
         health = "FAULT";
         faultComponent = recoveryComponent;
         faultReason = recoveryReason;
-        action = "SAFE / ERROR state; manual intervention required";
+        action = "SAFE / ERROR state; no safe backup available";
         lastFaultMs = nowMs;
         audit("WATCHDOG_RECOVERY", recoveryComponent, recoveryReason,
             "Stop automatic recovery", recoveryAttempt, result, true);
@@ -482,7 +412,7 @@ public final class SystemWatchdogV1 {
             "Module: " + recoveryComponent + "\n" +
             result + ".\n" +
             "System has entered SAFE / ERROR state.\n" +
-            "Manual intervention is required."
+            "No automatic continuation is permitted."
         );
     }
 
@@ -493,7 +423,7 @@ public final class SystemWatchdogV1 {
         String attemptedAction,
         int attempt,
         String result,
-        boolean manualRequired
+        boolean safeStopRequired
     ) {
         String entry = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS").format(
             new Date()
@@ -504,7 +434,7 @@ public final class SystemWatchdogV1 {
             " | action=" + value(attemptedAction, "None") +
             " | attempt=" + attempt + "/" + MAX_AUTOMATIC_RESETS +
             " | result=" + value(result, "-") +
-            " | manualRequired=" + manualRequired;
+            " | safeStopRequired=" + safeStopRequired;
         HISTORY.add(entry);
         while (HISTORY.size() > 200) {
             HISTORY.remove(0);
@@ -543,12 +473,10 @@ public final class SystemWatchdogV1 {
         recoveryAttempt = 0;
         lastResetMs = -1L;
         lastFaultMs = -1L;
-        resetRequestedAtMs = -1L;
         pendingResetId = null;
         lastObservedResetId = null;
         recoveryComponent = "None";
         recoveryReason = "None";
-        pendingResetAutomatic = false;
         resetInProgress = false;
         verifyingRecovery = false;
         healthyVerificationSamples = 0;
@@ -561,6 +489,7 @@ public final class SystemWatchdogV1 {
         MISSES.clear();
         HISTORY.clear();
         RESET_REQUEST.discard();
+        resetRequestedAtMs = -1L;
     }
 
     static synchronized void tickForTest(long nowMs) {
@@ -589,7 +518,7 @@ public final class SystemWatchdogV1 {
         public final long lastResetMs;
         public final long lastFaultMs;
         public final String pendingResetId;
-        public final boolean manualInterventionRequired;
+        public final boolean safeError;
         public final long notificationSequence;
         public final String notificationTitle;
         public final String notificationMessage;
@@ -598,7 +527,7 @@ public final class SystemWatchdogV1 {
             boolean active, String health, String faultComponent,
             String faultReason, String action, int resetCount,
             int recoveryAttempt, long lastResetMs, long lastFaultMs,
-            String pendingResetId, boolean manualInterventionRequired,
+            String pendingResetId, boolean safeError,
             long notificationSequence, String notificationTitle,
             String notificationMessage
         ) {
@@ -612,7 +541,7 @@ public final class SystemWatchdogV1 {
             this.lastResetMs = lastResetMs;
             this.lastFaultMs = lastFaultMs;
             this.pendingResetId = pendingResetId;
-            this.manualInterventionRequired = manualInterventionRequired;
+            this.safeError = safeError;
             this.notificationSequence = notificationSequence;
             this.notificationTitle = notificationTitle;
             this.notificationMessage = notificationMessage;

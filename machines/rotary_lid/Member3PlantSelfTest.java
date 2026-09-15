@@ -13,6 +13,8 @@ public final class Member3PlantSelfTest {
         testBoundedSignalWindows();
         testCapOfferCompletionCorrelation();
         testDelayedAndDuplicateRotationCommit();
+        testDelayedStageConfirmationsAreIdempotent();
+        testRetiredBottleEventsAreAbsorbedAfterReset();
         System.out.println("Member3PlantSelfTest PASSED");
     }
 
@@ -265,11 +267,66 @@ public final class Member3PlantSelfTest {
         require(Member3PlantStateV1.markCapped("CAP1"), "matching completion accepted");
         require(Member3PlantStateV1.nextCapOfferWindow() == null,
             "matching completion cancels cap retransmission");
-        require(!Member3PlantStateV1.markCapped("CAP1"), "duplicate completion is rejected");
+        require(Member3PlantStateV1.markCapped("CAP1"),
+            "duplicate completion is acknowledged idempotently");
         require(Member3PlantStateV1.canRotate(), "capped bottle releases barrier");
         Member3PlantStateV1.reset();
         require(Member3PlantStateV1.nextCapOfferWindow() == null,
             "reset clears pending cap context");
+    }
+
+    private static void testDelayedStageConfirmationsAreIdempotent() {
+        RotaryTablePlantModelV1 table = new RotaryTablePlantModelV1();
+        require(table.registerContext(context("RETRY1")), "retry context accepted");
+        require(table.loadBottle("RETRY1"), "retry bottle loaded");
+        rotate(table, 1, 0);
+        require(table.markFilled("RETRY1"), "first fill accepted");
+        require(table.markFilled("RETRY1"), "same-position fill retry accepted");
+        rotate(table, 2, 1000);
+        require(table.markFilled("RETRY1"), "late fill retry accepted");
+        require(table.markLidPlaced("RETRY1"), "first lid accepted");
+        require(table.markLidPlaced("RETRY1"), "lid retry accepted");
+        rotate(table, 3, 2000);
+        require(table.markLidPlaced("RETRY1"), "late lid retry accepted");
+        require(table.markCapped("RETRY1"), "first cap accepted");
+        require(table.markCapped("RETRY1"), "cap retry accepted");
+        rotate(table, 4, 3000);
+        require(table.markCapped("RETRY1"), "late cap retry accepted");
+        rotate(table, 5, 4000);
+        require(table.markLabelled("RETRY1"), "first label accepted");
+        require(table.markLabelled("RETRY1"), "label retry accepted");
+        require(table.clearP6("RETRY1"), "first P6 clear accepted");
+        require(table.markLabelled("RETRY1"), "late label retry accepted");
+        require(table.clearP6("RETRY1"), "P6 clear retry accepted");
+        require(table.getBottleAt(5) == null,
+            "duplicate confirmations never recreate a cleared bottle");
+    }
+
+    private static void testRetiredBottleEventsAreAbsorbedAfterReset() {
+        Member3PlantStateV1.reset();
+        String bottleId = "RESET-RETRY-B001";
+        require(Member3PlantStateV1.registerBottleContext(context(bottleId)),
+            "reset retry context accepted");
+        require(Member3PlantStateV1.acceptLoadRequest(bottleId),
+            "reset retry bottle loaded");
+        Member3PlantStateV1.systemReset();
+        require(Member3PlantStateV1.acceptLoadRequest(bottleId),
+            "retired load retry is absorbed");
+        require(Member3PlantStateV1.registerBottleContext(context(bottleId)),
+            "retired context retry is absorbed");
+        require(Member3PlantStateV1.markFilled(bottleId),
+            "retired fill retry is absorbed");
+        require(Member3PlantStateV1.markLidPlaced(bottleId),
+            "retired lid retry is absorbed");
+        require(Member3PlantStateV1.markCapped(bottleId),
+            "retired cap retry is absorbed");
+        require(Member3PlantStateV1.markLabelled(bottleId),
+            "retired label retry is absorbed");
+        require(Member3PlantStateV1.clearP6(bottleId),
+            "retired clear retry is absorbed");
+        require(Member3PlantStateV1.pendingLoadCount() == 0,
+            "retired retries do not re-enter the production queue");
+        Member3PlantStateV1.reset();
     }
 
     private static void advancePlantFacade(long cycle) {

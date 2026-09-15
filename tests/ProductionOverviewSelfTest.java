@@ -58,8 +58,8 @@ public final class ProductionOverviewSelfTest {
         final int[] opened = {-1};
         ABSVisualisation.ProductionLinePanel overview = overviewWithClickRecorder(opened);
         require(overview.getPreferredSize().width == 1360, "overview accommodates all modules");
-        require(overview.getPreferredSize().height == 420,
-            "overview retains the full-height live process canvas");
+        require(overview.getPreferredSize().height == 528,
+            "overview retains process coordinates plus the read-only redundancy strip");
         for (int i = 0; i < NAMES.length; i++) {
             require(overview.moduleAtDesignPoint(CENTRES[i][0], CENTRES[i][1]) == i,
                 "distinct hit region for " + NAMES[i]);
@@ -68,7 +68,7 @@ public final class ProductionOverviewSelfTest {
         require(overview.moduleAtDesignPoint(1006, 224) == -1, "label/unloader connector is not a station");
         require(overview.moduleAtDesignPoint(1350, 224) == -1, "right margin is not sort/pack");
         // Exercise the actual scaled mouse listener and tooltip conversion.
-        overview.setSize(680, 210);
+        overview.setSize(680, 264);
         for (int i = 0; i < NAMES.length; i++) {
             MouseEvent click = new MouseEvent(overview, MouseEvent.MOUSE_CLICKED,
                 1L, 0, CENTRES[i][0] / 2, CENTRES[i][1] / 2,

@@ -1,5 +1,60 @@
 /** Shared Plant state used by the Member 3 SystemJ Plant clock-domains. */
 public final class Member3PlantStateV1 {
+    private static final String visualEpoch = java.util.UUID.randomUUID().toString();
+    private static long visualSequence;
+    private static long nextVisualNanos;
+    public static synchronized String nextRedundancyTelemetry() {
+        long now = System.nanoTime();
+        if (now < nextVisualNanos) return null;
+        nextVisualNanos = now + 250000000L;
+        return "M3R1|" + visualEpoch + "|" + (++visualSequence) + "|" + System.currentTimeMillis() +
+            "|ROTARY," + rotary.drive().visualTelemetry() +
+            "|PICK," + lid.pickDrive().visualTelemetry() +
+            "|PLACE," + lid.placeDrive().visualTelemetry() +
+            "|POSITION," + rotary.feedback().visualTelemetry() + Member3MachineStateV1.controllerTelemetry();
+    }
+    // Atomic handoff avoids acquiring the Plant lock while the GUI injection lock is held.
+    private static final java.util.concurrent.atomic.AtomicReference<String> pendingRedundantFault =
+        new java.util.concurrent.atomic.AtomicReference<String>();
+    public static boolean armRedundantFault(String code) {
+        return FaultInjectionStateV2_1.isRedundantDevice(code) &&
+            pendingRedundantFault.compareAndSet(null, code);
+    }
+    public static boolean cancelRedundantFault(String code) {
+        String pending = pendingRedundantFault.get();
+        return code != null && code.equals(pending) && pendingRedundantFault.compareAndSet(pending, null);
+    }
+    public static void clearPendingRedundantFault() { pendingRedundantFault.set(null); }
+
+    private static void applyRedundantFault(String code, RedundantDriveV1 drive) {
+        String pending = pendingRedundantFault.get();
+        if (!code.equals(pending) || !pendingRedundantFault.compareAndSet(pending, null)) return;
+        if (drive == null) rotary.feedback().failActive();
+        else drive.fail(drive.activeChannel(), true);
+        FaultInjectionStateV2_1.consumed(code);
+    }
+    private static void applyPhysicalFault(String axis, RedundantDriveV1 drive) {
+        String code = pendingRedundantFault.get();
+        if (!FaultInjectionStateV2_1.isPhysicalFault(code) || !code.startsWith(axis + "_") ||
+            !pendingRedundantFault.compareAndSet(code, null)) return;
+        String failure = code.substring(axis.length() + 1);
+        if ("FEEDBACK_DISAGREEMENT".equals(failure)) rotary.feedback().disagree();
+        else if ("LOAD_LOSS".equals(failure)) lid.loseHeldLid();
+        else {
+            if ("BACKUP_FAILURE".equals(failure)) drive.fail(1 - drive.activeChannel(), true);
+            else drive.mechanism().inject(failure);
+            drive.fail(drive.activeChannel(), true);
+        }
+        FaultInjectionStateV2_1.consumed(code);
+    }
+    private static final java.util.concurrent.atomic.AtomicBoolean rotaryDriveFailurePending =
+        new java.util.concurrent.atomic.AtomicBoolean();
+
+    /** Nonblocking controller-to-Plant request; avoids taking the Plant lock from the controller. */
+    public static void queueRotaryDriveFailure() { rotaryDriveFailurePending.set(true); }
+    private static final java.util.concurrent.atomic.AtomicBoolean rotaryFeedbackFailurePending =
+        new java.util.concurrent.atomic.AtomicBoolean();
+    public static void queueRotaryFeedbackFailure() { rotaryFeedbackFailurePending.set(true); }
     private static final java.util.Set<String> retiredBottleIds =
         new java.util.HashSet<String>();
     private static final java.util.Queue<String> pendingLoadQueue =
@@ -27,6 +82,9 @@ public final class Member3PlantStateV1 {
     }
 
     public static synchronized void reset() {
+        clearPendingRedundantFault();
+        rotaryFeedbackFailurePending.set(false);
+        rotaryDriveFailurePending.set(false);
         rotary = new RotaryTablePlantModelV1();
         lid = new LidLoaderPlantModelV1();
         fillOffer = new BoundedSignalOfferV1(3);
@@ -43,13 +101,16 @@ public final class Member3PlantStateV1 {
 
     /** Clears work in flight while preserving physical lid inventory. */
     public static synchronized void systemReset() {
+        clearPendingRedundantFault();
+        rotaryFeedbackFailurePending.set(false);
+        rotaryDriveFailurePending.set(false);
         retiredBottleIds.addAll(rotary.activeBottleIds());
         retiredBottleIds.addAll(pendingLoadIds);
         int magazineCount = lid.getMagazineCount();
         rotary.safeStopAndClear();
-        rotary = new RotaryTablePlantModelV1();
+        rotary = new RotaryTablePlantModelV1(rotary.drive(), rotary.feedback());
         lid.cancelAction();
-        lid = new LidLoaderPlantModelV1(magazineCount);
+        lid = new LidLoaderPlantModelV1(magazineCount, lid.pickDrive(), lid.placeDrive());
         fillOffer = new BoundedSignalOfferV1(3);
         labelOffer = new BoundedSignalOfferV1(3);
         capOffer = new BoundedSignalOfferV1(3);
@@ -63,6 +124,32 @@ public final class Member3PlantStateV1 {
     public static synchronized boolean isResetSafe() {
         return !rotary.isMoving() && rotary.isAligned() &&
             lid.isActuatorHome() && lid.isNoLidHeld();
+    }
+
+    private static RedundantDriveV1 drive(String name) {
+        if ("ROTARY".equals(name)) return rotary.drive();
+        if ("PICK".equals(name)) return lid.pickDrive();
+        if ("PLACE".equals(name)) return lid.placeDrive();
+        throw new IllegalArgumentException("unknown M3 drive: " + name);
+    }
+
+    public static synchronized boolean injectDriveFailure(String name, int channel) {
+        if (!FaultGuiActionsV2_1.isTestMode() || M3SystemResetStateV1.isQuarantined()) return false;
+        RedundantDriveV1 selected = drive(name);
+        selected.fail(channel, true);
+        return true;
+    }
+
+    public static synchronized String driveSnapshot() {
+        return rotary.drive().snapshot() + "\n\n" + lid.pickDrive().snapshot() +
+            "\n\n" + lid.placeDrive().snapshot() + "\n" + rotary.physicalSnapshot() + "\n" + lid.physicalSnapshot();
+    }
+
+    public static synchronized FaultMonitoringStateV2_1.ComponentSnapshot[] driveMonitoringSnapshot() {
+        return new FaultMonitoringStateV2_1.ComponentSnapshot[] {
+            rotary.drive().monitoringSnapshot(), lid.pickDrive().monitoringSnapshot(),
+            lid.placeDrive().monitoringSnapshot(), rotary.feedback().monitoringSnapshot()
+        };
     }
 
     public static synchronized boolean loadBottle(String id) {
@@ -79,9 +166,11 @@ public final class Member3PlantStateV1 {
      * occupied or M3 is fault-held. Repeated transport copies are idempotent.
      */
     public static synchronized boolean acceptLoadRequest(String id) {
-        if (M3SystemResetStateV1.isQuarantined() ||
-            retiredBottleIds.contains(id) || !validBottleId(id)) {
+        if (M3SystemResetStateV1.isQuarantined() || !validBottleId(id)) {
             return false;
+        }
+        if (retiredBottleIds.contains(id)) {
+            return true;
         }
         if (rotary.hasActiveBottle(id) || pendingLoadIds.contains(id)) {
             FaultSupervisorStateV2_1.onRecoveredTransferHandoff(id);
@@ -181,7 +270,7 @@ public final class Member3PlantStateV1 {
         }
         String bottleId = payload == null ? null : payload.split("\\|", -1)[0];
         if (retiredBottleIds.contains(bottleId)) {
-            return false;
+            return true;
         }
         return rotary.registerContext(payload);
     }
@@ -195,13 +284,28 @@ public final class Member3PlantStateV1 {
             enabled = false;
             cycleId = 0L;
         }
-        rotary.setMotorCommand(enabled, cycleId, java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(System.nanoTime()));
+        boolean started = rotary.setMotorCommand(enabled, cycleId,
+            java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(System.nanoTime()));
+        if (started && rotaryDriveFailurePending.getAndSet(false)) {
+            rotary.drive().fail(rotary.drive().activeChannel(), true);
+        }
+        if (started && rotaryFeedbackFailurePending.getAndSet(false)) {
+            rotary.feedback().failActive();
+        }
     }
 
     public static synchronized boolean updateRotary() {
-        boolean aligned = rotary.tick(
-            java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(System.nanoTime())
-        );
+        return updateRotaryAt(java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(System.nanoTime()));
+    }
+
+    static synchronized boolean updateRotaryAt(long nowMs) {
+        if (SystemWatchdogV1.isSafeError()) return false;
+        if (rotary.isMoving()) {
+            applyPhysicalFault("ROTARY", rotary.drive());
+            applyRedundantFault("ROTARY_DRIVE_FAILURE", rotary.drive());
+            applyRedundantFault("ROTARY_FEEDBACK_FAILURE", null);
+        }
+        boolean aligned = rotary.tick(nowMs);
         FaultMonitoringStateV2_1.heartbeat(
             FaultMonitoringStateV2_1.ROTARY_PLANT,
             true,
@@ -222,7 +326,8 @@ public final class Member3PlantStateV1 {
         if (M3SystemResetStateV1.isQuarantined()) {
             return false;
         }
-        boolean accepted = rotary.markFilled(bottleId);
+        boolean accepted = retiredBottleIds.contains(bottleId) ||
+            rotary.markFilled(bottleId);
         if (accepted) {
             fillOffer.acknowledge(bottleId);
         }
@@ -233,8 +338,12 @@ public final class Member3PlantStateV1 {
         if (M3SystemResetStateV1.isQuarantined()) {
             return false;
         }
+        if (retiredBottleIds.contains(bottleId)) {
+            return true;
+        }
+        boolean duplicate = rotary.hasRecordedLidPlacement(bottleId);
         boolean accepted = rotary.markLidPlaced(bottleId);
-        if (accepted) {
+        if (accepted && !duplicate) {
             twinOutbox.add("V1|W|M3-LID-" + (++twinEventSequence) +
                 "|" + bottleId + "|LIDDED|LID-1|-|" +
                 System.currentTimeMillis());
@@ -246,7 +355,8 @@ public final class Member3PlantStateV1 {
         if (M3SystemResetStateV1.isQuarantined()) {
             return false;
         }
-        boolean accepted = rotary.markCapped(bottleId);
+        boolean accepted = retiredBottleIds.contains(bottleId) ||
+            rotary.markCapped(bottleId);
         if (accepted) {
             capOffer.acknowledge(bottleId);
         }
@@ -257,7 +367,8 @@ public final class Member3PlantStateV1 {
         if (M3SystemResetStateV1.isQuarantined()) {
             return false;
         }
-        boolean accepted = rotary.markLabelled(bottleId);
+        boolean accepted = retiredBottleIds.contains(bottleId) ||
+            rotary.markLabelled(bottleId);
         if (accepted) {
             labelOffer.acknowledge(bottleId);
             if (bottleId.equals(pendingP6ClearId) &&
@@ -272,7 +383,8 @@ public final class Member3PlantStateV1 {
         if (M3SystemResetStateV1.isQuarantined()) {
             return false;
         }
-        if (rotary.clearP6(bottleId)) {
+        if (retiredBottleIds.contains(bottleId) ||
+            rotary.clearP6(bottleId)) {
             pendingP6ClearId = null;
             return true;
         }
@@ -373,6 +485,17 @@ public final class Member3PlantStateV1 {
         return rotary.snapshot();
     }
 
+    public static synchronized M3PickRecoveryV1.PlantEvidence pickRecoveryEvidence(String bottle) {
+        boolean matching = bottle != null && bottle.equals(rotary.getBottleWaitingForLidId());
+        boolean drives = ("AVAILABLE".equals(lid.pickDrive().monitoringState()) ||
+            "DEGRADED".equals(lid.pickDrive().monitoringState())) &&
+            ("AVAILABLE".equals(lid.placeDrive().monitoringState()) ||
+            "DEGRADED".equals(lid.placeDrive().monitoringState()));
+        return new M3PickRecoveryV1.PlantEvidence(matching && !M3SystemResetStateV1.isQuarantined(),
+            lid.isActuatorHome(), lid.isNoLidHeld(), lid.isLidAvailable(), drives,
+            lid.completedPlacements());
+    }
+
     public static synchronized String positionLabel(int position) {
         return rotary.positionLabel(position);
     }
@@ -392,7 +515,20 @@ public final class Member3PlantStateV1 {
     }
 
     public static synchronized void updateLidLoader() {
-        lid.tick(java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(System.nanoTime()));
+        updateLidLoaderAt(java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(System.nanoTime()));
+    }
+
+    static synchronized void updateLidLoaderAt(long nowMs) {
+        if (SystemWatchdogV1.isSafeError()) return;
+        if (!FaultSupervisorStateV2_1.permitsLocalPickMotion()) {
+            lid.pauseMotion(nowMs);
+            return;
+        }
+        if ("PICKING".equals(lid.getActionName())) applyPhysicalFault("PICK", lid.pickDrive());
+        if ("PLACING".equals(lid.getActionName())) applyPhysicalFault("PLACE", lid.placeDrive());
+        if ("PICKING".equals(lid.getActionName())) applyRedundantFault("PICK_DRIVE_FAILURE", lid.pickDrive());
+        if ("PLACING".equals(lid.getActionName())) applyRedundantFault("PLACE_DRIVE_FAILURE", lid.placeDrive());
+        lid.tick(nowMs);
         FaultMonitoringStateV2_1.heartbeat(
             FaultMonitoringStateV2_1.LID_PLANT,
             true,

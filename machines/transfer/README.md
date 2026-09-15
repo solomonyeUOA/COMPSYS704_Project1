@@ -45,6 +45,21 @@ view are integrated additions to the original group boundary.
   receives `TRANSFER_RECOVERY_REQUEST` on 13002. It sends an abstract local
   intent; only the Conveyor Controller can operate the motor.
 
+## Transfer fault injection locations
+
+The simulation assigns `PHOTO_EYE_FAILURE` to the entry Conveyor's P1
+sensor-health observation. `POSITION_CONFLICT` injects inconsistent entry/P1
+occupancy evidence: P1 reports a bottle while the entry has not cleared. Both
+stop the entry motor and prevent `LOAD_BOTTLE`; both require manual reconciliation.
+These are simulation definitions, not a claim about unspecified assignment hardware.
+
+`DEPARTURE_TIMEOUT` belongs to P6 unloading. Injection simulates missing departure
+confirmation: the controller remains BUSY for 2000 ms (scaled in slow-demo mode),
+then faults. No `P6_CLEAR`, `BOTTLE_DONE`, or sort handoff is allowed before valid
+removal evidence. Recovery retains the interrupted bottle for another verified attempt.
+The timeout is currently part of the test-injection model, not a new general
+hardware watchdog. The existing V2.1 fault codes and manual recovery policy remain.
+
 ## M4 contract implemented by M2
 
 M2 validates and preserves this full context unchanged:

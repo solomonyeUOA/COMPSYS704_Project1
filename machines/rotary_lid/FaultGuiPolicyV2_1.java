@@ -8,24 +8,21 @@ public final class FaultGuiPolicyV2_1 {
     }
 
     public static boolean canConfirmSafeStop(String state) {
-        return "WAITING_SAFE_STOP".equals(state);
+        return false;
     }
 
     public static boolean canReturnControllerEvidence(
         String state,
         String decision
     ) {
-        return "WAITING_ACK".equals(state) ||
-            "RESOURCE_WAIT".equals(state) ||
-            ("LOCKED_OUT".equals(state) && decision != null &&
-                decision.startsWith("AWAIT_NEWER"));
+        return false;
     }
 
     public static boolean canRecordManualEvidence(String state) {
-        return "LOCKED_OUT".equals(state);
+        return false;
     }
 
     public static boolean canResume(String state) {
-        return "RECOVERY_READY".equals(state);
+        return false;
     }
 }
