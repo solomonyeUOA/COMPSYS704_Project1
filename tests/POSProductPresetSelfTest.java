@@ -31,45 +31,45 @@ public final class POSProductPresetSelfTest {
 
     private static void runCases() {
         POSVisualisation.ProductInputRow row = row("P1", "3", "25", "75");
-        require(row.selectablePresetCountForTest() == 3,
-            "POS exposes only the three product types; product ID is derived");
-        assertPreset(row, POSVisualisation.ProductPreset.P1, "P1", "25", "75");
-        require("PO-P1|1|P1,S,25,75,3".equals(
+        require(row.selectablePresetCountForTest() == 4,
+            "POS exposes three presets and a Custom recipe");
+        assertPreset(row, POSVisualisation.ProductPreset.P1, "P1", "25.0", "75.0");
+        require("PO-P1|1|P1,S,25.0,75.0,3".equals(
             POSVisualisation.buildOrderPayloadForTest("PO-P1", row)
         ), "P1 preset encoding");
 
         row.selectPresetForTest(POSVisualisation.ProductPreset.P2);
         row.setSizeAndQuantityForTest(OrderV2.LARGE, "2");
-        assertPreset(row, POSVisualisation.ProductPreset.P2, "P2", "50", "50");
-        require("PO-P2|1|P2,L,50,50,2".equals(
+        assertPreset(row, POSVisualisation.ProductPreset.P2, "P2", "50.0", "50.0");
+        require("PO-P2|1|P2,L,50.0,50.0,2".equals(
             POSVisualisation.buildOrderPayloadForTest("PO-P2", row)
         ), "P1 -> P2 and P2 encoding");
 
         row.selectPresetForTest(POSVisualisation.ProductPreset.P3);
         row.setSizeAndQuantityForTest(OrderV2.SMALL, "5");
-        assertPreset(row, POSVisualisation.ProductPreset.P3, "P3", "75", "25");
-        require("PO-P3|1|P3,S,75,25,5".equals(
+        assertPreset(row, POSVisualisation.ProductPreset.P3, "P3", "75.0", "25.0");
+        require("PO-P3|1|P3,S,75.0,25.0,5".equals(
             POSVisualisation.buildOrderPayloadForTest("PO-P3", row)
         ), "P2 -> P3 and P3 encoding");
 
         row.selectPresetForTest(POSVisualisation.ProductPreset.CUSTOM);
         require(row.customFieldsEditableForTest(),
             "preset -> Custom unlocks ID and ratios");
-        row.setCustomValuesForTest("JUICE_X", "40", "60");
+        row.setCustomValuesForTest("JUICE_X", "40.5", "59.5");
         row.setSizeAndQuantityForTest(OrderV2.LARGE, "2");
-        require("PO-C|1|JUICE_X,L,40,60,2".equals(
+        require("PO-C|1|JUICE_X,L,40.5,59.5,2".equals(
             POSVisualisation.buildOrderPayloadForTest("PO-C", row)
         ), "custom name, ratios, size and quantity preserved");
 
         row.selectPresetForTest(POSVisualisation.ProductPreset.P1);
-        assertPreset(row, POSVisualisation.ProductPreset.P1, "P1", "25", "75");
+        assertPreset(row, POSVisualisation.ProductPreset.P1, "P1", "25.0", "75.0");
         row.selectPresetForTest(POSVisualisation.ProductPreset.CUSTOM);
         require("JUICE_X".equals(row.productIdForTest()) &&
-            "40".equals(row.liquidAForTest()) &&
-            "60".equals(row.liquidBForTest()),
+            "40.5".equals(row.liquidAForTest()) &&
+            "59.5".equals(row.liquidBForTest()),
             "Custom draft remains row-local after preset display");
 
-        row.setCustomValuesForTest("BAD", "40", "50");
+        row.setCustomValuesForTest("BAD", "40.5", "50.0");
         expectInvalid(row, "Custom A+B validation");
 
         POSVisualisation.ProductInputRow p1 = row("P1", "2", "25", "75");
@@ -84,8 +84,8 @@ public final class POSProductPresetSelfTest {
             p2,
             custom
         );
-        require(("PO-MIXED|3|P1,S,25,75,2;" +
-            "P2,L,50,50,1;MYPRODUCT,S,30,70,3").equals(mixed),
+        require(("PO-MIXED|3|P1,S,25.0,75.0,2;" +
+            "P2,L,50.0,50.0,1;MYPRODUCT,S,30.0,70.0,3").equals(mixed),
             "independent preset/custom rows encode in order");
         require("P1".equals(p1.productIdForTest()) &&
             "P2".equals(p2.productIdForTest()) &&

@@ -15,12 +15,15 @@ ABSVisualisationPlant(
     input Integer signal VIZ_UNLOADER_STATUS;
     input Integer signal VIZ_REQUIRED_BOTTLES;
     input Integer signal VIZ_COMPLETED_BOTTLES;
+    input String signal VIZ_RECIPE;
     // Optional M1 IP-only projection of Coordinator-observed M3 evidence.
     input String signal VIZ_FT_EVIDENCE;
     input String signal VIZ_SYSTEM_RESET;
     input Integer signal VIZ_LABELLER_STATUS;
     input Integer signal VIZ_SORT_PACK_STATUS;
     input String signal VIZ_TWIN_SNAPSHOT;
+    input String signal M4_FILLER_A_STATE;
+    input String signal M4_FILLER_B_STATE;
     input String signal M4_CAPPER_STATE;
 )
 ->{
@@ -85,6 +88,10 @@ ABSVisualisationPlant(
         );
     } pause;}}
     ||
+    {loop {present(VIZ_RECIPE) {
+        ABSVisualisation.updateRecipe(#VIZ_RECIPE);
+    } pause;}}
+    ||
     {loop {present(VIZ_FT_EVIDENCE) {
         ABSVisualisation.updateFtEvidence(#VIZ_FT_EVIDENCE);
     } pause;}}
@@ -103,6 +110,14 @@ ABSVisualisationPlant(
     ||
     {loop {present(VIZ_TWIN_SNAPSHOT) {
         ABSVisualisation.updateTwinSnapshot(#VIZ_TWIN_SNAPSHOT);
+    } pause;}}
+    ||
+    {loop {present(M4_FILLER_A_STATE) {
+        ABSVisualisation.updateM4FillerState(#M4_FILLER_A_STATE);
+    } pause;}}
+    ||
+    {loop {present(M4_FILLER_B_STATE) {
+        ABSVisualisation.updateM4FillerState(#M4_FILLER_B_STATE);
     } pause;}}
     ||
     {loop {present(M4_CAPPER_STATE) {

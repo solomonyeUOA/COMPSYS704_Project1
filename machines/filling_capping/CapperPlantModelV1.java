@@ -36,6 +36,9 @@ public final class CapperPlantModelV1 {
     private Stage stage = Stage.IDLE;
     private String activeBottleId;
     private String geometryProfile = "-";
+    private String gripZSetpoint = "-";
+    private String clampSetpoint = "-";
+    private boolean positionConfirmed;
     private long stageStartMs;
     private boolean clamped;
     private boolean lowered;
@@ -80,6 +83,7 @@ public final class CapperPlantModelV1 {
         }
         if ("SAFE_STOP".equals(action)) {
             activeBottleId = bottleId;
+            positionConfirmed = false;
             gripping = false;
             twisted = false;
             // Keep the clamp if the gripper is not safely raised.
@@ -101,14 +105,20 @@ public final class CapperPlantModelV1 {
         }
         if ("SET_GEOMETRY".equals(action) &&
             (stage == Stage.IDLE || stage == Stage.COMPLETE)) {
-            if (!M4BottleContextV1.GEOMETRY_SMALL.equals(value) &&
-                !M4BottleContextV1.GEOMETRY_LARGE.equals(value)) {
+            final M4GeometryProfileV1 profile;
+            try {
+                profile = M4GeometryProfileV1.forId(value);
+            }
+            catch (IllegalArgumentException exception) {
                 fault(bottleId, "UNKNOWN_GEOMETRY");
                 return false;
             }
             retirePreviousBottle(bottleId);
             activeBottleId = bottleId;
             geometryProfile = value;
+            gripZSetpoint = profile.getCapperGripZ();
+            clampSetpoint = profile.getClampSetpoint();
+            positionConfirmed = false;
             clamped = false;
             lowered = false;
             gripping = false;
@@ -117,7 +127,8 @@ public final class CapperPlantModelV1 {
             remember(payload);
             return true;
         }
-        if ("CLAMP".equals(action) && stage == Stage.POSITIONED) {
+        if ("CLAMP".equals(action) && stage == Stage.POSITIONED &&
+            positionConfirmed) {
             begin(Stage.CLAMPING, "CLAMPED|-", nowMs);
             remember(payload);
             return true;
@@ -175,6 +186,7 @@ public final class CapperPlantModelV1 {
         switch (stage) {
             case POSITIONING:
                 stage = Stage.POSITIONED;
+                positionConfirmed = true;
                 break;
             case CLAMPING:
                 clamped = true;
@@ -236,13 +248,28 @@ public final class CapperPlantModelV1 {
         return geometryProfile;
     }
 
+    public String getGripZSetpoint() {
+        return gripZSetpoint;
+    }
+
+    public String getClampSetpoint() {
+        return clampSetpoint;
+    }
+
+    public boolean isPositionConfirmed() {
+        return positionConfirmed;
+    }
+
     public String getStageName() {
         return stage.name();
     }
 
     public String snapshot() {
         return "CapperPlant[stage=" + stage + ",bottle=" + activeBottleId +
-            ",geometry=" + geometryProfile + ",clamped=" + clamped +
+            ",geometry=" + geometryProfile + ",gripZ=" + gripZSetpoint +
+            ",clampSetpoint=" + clampSetpoint +
+            ",positionConfirmed=" + positionConfirmed +
+            ",clamped=" + clamped +
             ",lowered=" + lowered + ",gripping=" + gripping +
             ",twisted=" + twisted + "]";
     }
@@ -257,6 +284,9 @@ public final class CapperPlantModelV1 {
         feedback.clear();
         activeBottleId = null;
         geometryProfile = "-";
+        gripZSetpoint = "-";
+        clampSetpoint = "-";
+        positionConfirmed = false;
         clamped = false;
         lowered = false;
         gripping = false;
@@ -341,6 +371,7 @@ public final class CapperPlantModelV1 {
     private void fault(String bottleId, String reason) {
         gripping = false;
         twisted = false;
+        positionConfirmed = false;
         stage = Stage.FAULT;
         pendingFeedback = null;
         feedback.add(bottleId + "|FAULT|" + reason);

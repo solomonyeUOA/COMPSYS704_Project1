@@ -51,16 +51,22 @@ different bottle.
 | `RecognitionPlantCD` | 12011 | `RECOGNITION_REQUEST` |
 | `SortPackPlantCD` | 12012 | Sort/Pack commands / test fault injection |
 
-`CapperControllerCD` also publishes optional, display-only
-`M4_CAPPER_STATE` telemetry directly to `ABSVisualisationPlantCD:11008`:
+The Filler and Capper controllers also publish optional, display-only telemetry
+directly to `ABSVisualisationPlantCD:11008`:
 
 ```text
+M4_FILLER_A_STATE / M4_FILLER_B_STATE:
+V1|A-or-B|bottleId|sizeCode|geometryProfile|stage|status|targetMl|measuredMl
+
+M4_CAPPER_STATE:
 V1|bottleId|sizeCode|geometryProfile|stage|status
 ```
 
-The M1 IP uses it to show the actual `GEOM_S`/`GEOM_L` selection and Capper
-arm stage. The signal is read-only, has bounded repeated copies, and cannot
-issue commands or change Controller state.
+The M1 IP uses these signals to show the actual bottle at Filler A and B, the
+selected `GEOM_S`/`GEOM_L` profile, the filling stage and the Capper arm stage.
+Each signal is read-only, has bounded repeated copies, and cannot issue commands
+or change Controller state. The retained M2 WorkpieceTwin still confirms the
+combined `FILLED` stage after Filler B.
 
 M3 sends the full canonical context as `BOTTLE_AT_FILL` at Position 2 and as
 `BOTTLE_AT_CAP` at Position 4. M4 emits `MARK_FILLED(bottleId)` and
@@ -75,14 +81,20 @@ uses the real M2 peers.
 
 ## Control and safety behaviour
 
-- The batch recipe is stored as integer percentages from 0 to 100. A status
+- The batch recipe is stored in tenths-of-percent units from 0 to 1000:
+  `333` means 33.3%. The A and B values must total `1000` (100.0%). A status
   request is read-only and never starts an actuator.
-- Each filler computes `targetMl = capacityMl * ratio / 100`. For 60/40 this
-  gives 120/80 mL for `S` and 300/200 mL for `L`.
+- Filler A computes the nearest whole-mL target with
+  `targetMl = round(capacityMl * ratio / 1000)`. Filler B doses the measured
+  remaining capacity, so rounding can never overfill the bottle. For 33.3/66.7
+  this gives 67/133 mL for `S` and 167/333 mL for `L`.
 - Filler B accepts only a matching, measured `FILL_A_DONE`; it cannot start
   before Filler A safely closes its valves and completes refill.
-- `GEOM_S`/`GEOM_L` selects nozzle and Capper Z/clamp positioning before an
-  operation begins.
+- `GEOM_S` selects `NOZZLE_Z_S`, `GRIP_Z_S` and `CLAMP_NARROW`; `GEOM_L`
+  selects `NOZZLE_Z_L`, `GRIP_Z_L` and `CLAMP_WIDE`. These are symbolic
+  calibration points because the simulation has no millimetre-valued actuator
+  interface. The Plant must publish `PROFILE_CONFIRMED` before the Filler may
+  open its injector or the Capper may close its positioning jaws.
 - Valve interlocks, measured-volume checks, identity checks and per-stage
   timeouts enter `FAULT`, de-energise the Plant and suppress completion.
 - Calibration remains explicit and configurable: `m4.toleranceMl`,

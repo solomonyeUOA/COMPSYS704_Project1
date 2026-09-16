@@ -20,6 +20,9 @@ public final class BottleSizeVisualisationSelfTest {
             "S total height is smaller than L total height");
         require(small.bodyWidth(70) < large.bodyWidth(70),
             "S bottle silhouette is narrower than L");
+        require(small.clampTargetGap(70, 6) <
+                large.clampTargetGap(70, 6),
+            "S profile selects a narrower clamp opening than L");
         require("Small (S) - 200 mL".equals(small.getDisplayLabel()),
             "small profile has truthful capacity label");
         require("Large (L) - 500 mL".equals(large.getDisplayLabel()),
@@ -65,6 +68,7 @@ public final class BottleSizeVisualisationSelfTest {
         System.out.println("FILLER_S_TARGET_LOWER_THAN_L = PASS");
         System.out.println("LID_S_TARGET_LOWER_THAN_L = PASS");
         System.out.println("CAPPER_S_TARGET_LOWER_THAN_L = PASS");
+        System.out.println("CAPPER_S_CLAMP_NARROWER_THAN_L = PASS");
         System.out.println("LABELLER_S_TARGET_LOWER_THAN_L = PASS");
         System.out.println("SIZE_SWITCH_S_TO_L = PASS");
         System.out.println("SIZE_SWITCH_L_TO_S = PASS");

@@ -28,8 +28,9 @@ Coordinator; reset and size are not separate M1 subsystems.
 ### Visualisation (IP)
 
 Visualisation is a read-only hierarchical observer. It consumes Coordinator
-telemetry and reset notification without owning machine control or reset
-orchestration. Reusable protocol/state/transport helpers remain in `common/`.
+telemetry, reset notification and display-only M4 Filler/Capper stage telemetry
+without owning machine control or reset orchestration. Reusable
+protocol/state/transport helpers remain in `common/`.
 
 ## M1 extension interfaces
 
@@ -48,6 +49,7 @@ separate reset subsystem.
 | Coordinator -> M4 | `M4_SYSTEM_RESET` | Coordinator reset fan-out |
 | M4 -> Coordinator | `M4_SYSTEM_RESET_ACK` | Matching safe-state acknowledgement |
 | Coordinator -> Visualisation | `VIZ_SYSTEM_RESET` | Display-state reset notification |
+| Coordinator -> Visualisation | `VIZ_RECIPE` | Read-only `V1|A_tenths|B_tenths` recipe used by the filler display |
 | Coordinator -> M4 Registry | `M4_BATCH_START` | Formal `batchId|quantity|sizeCode` contract |
 | Coordinator -> M4 Sort/Pack | `SORT_PACK_BATCH_END` | `batchId|quantity|sizeCode`; closes the batch's partial package after every declared placement |
 

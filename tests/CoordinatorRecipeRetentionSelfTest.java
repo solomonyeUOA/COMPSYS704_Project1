@@ -21,8 +21,8 @@ public final class CoordinatorRecipeRetentionSelfTest {
 
         assertRecipeForReactions(
             coordinator,
-            25,
-            75,
+            250,
+            750,
             5,
             "quantity=1 delayed reader"
         );
@@ -32,8 +32,8 @@ public final class CoordinatorRecipeRetentionSelfTest {
         );
         assertRecipeForReactions(
             coordinator,
-            25,
-            75,
+            250,
+            750,
             2,
             "recipe must remain until completion state is cleared"
         );
@@ -50,8 +50,8 @@ public final class CoordinatorRecipeRetentionSelfTest {
         );
         assertRecipeForReactions(
             coordinator,
-            60,
-            40,
+            600,
+            400,
             7,
             "quantity>1 delayed reader"
         );
@@ -62,8 +62,8 @@ public final class CoordinatorRecipeRetentionSelfTest {
         );
         assertRecipeForReactions(
             coordinator,
-            60,
-            40,
+            600,
+            400,
             2,
             "quantity=3 recipe after bottle 1"
         );
@@ -73,8 +73,8 @@ public final class CoordinatorRecipeRetentionSelfTest {
         );
         assertRecipeForReactions(
             coordinator,
-            60,
-            40,
+            600,
+            400,
             2,
             "quantity=3 recipe after bottle 2"
         );

@@ -53,6 +53,7 @@ public final class CoordinatorStateV1 {
     public static int currentProductIndex = 0;
     public static String currentSizeCode = OrderV2.SMALL;
     public static int currentCapacityMl = OrderV2.SMALL_CAPACITY_ML;
+    /** Tenths-of-percent values published on the Integer recipe signals. */
     public static int currentLiquidARatio = 0;
     public static int currentLiquidBRatio = 0;
     public static int requiredBottles = 0;
@@ -986,6 +987,18 @@ public final class CoordinatorStateV1 {
         nextTwinContextMillis = now + 250L;
         return "V1|" + currentOrderId() + "|" + currentProductId() + "|" +
             currentLiquidARatio + "|" + currentLiquidBRatio + "|" + requiredBottles + "|" + currentSizeCode();
+    }
+
+    /** Read-only recipe projection for the visualisation runtime. */
+    public static synchronized String visualRecipePayload() {
+        if (!orderActive ||
+            !RecipeRatioV2.isValidUnits(currentLiquidARatio) ||
+            !RecipeRatioV2.isValidUnits(currentLiquidBRatio) ||
+            currentLiquidARatio + currentLiquidBRatio !=
+                RecipeRatioV2.TOTAL_UNITS) {
+            return null;
+        }
+        return "V1|" + currentLiquidARatio + "|" + currentLiquidBRatio;
     }
 
     /** One held quantity window; no anonymous retry after a batch may finish. */

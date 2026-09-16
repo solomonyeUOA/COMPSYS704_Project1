@@ -64,6 +64,8 @@ Coordinator(
     output Integer signal VIZ_UNLOADER_STATUS;
     output Integer signal VIZ_REQUIRED_BOTTLES;
     output Integer signal VIZ_COMPLETED_BOTTLES;
+    // Read-only fixed-point recipe: V1|A_tenths_percent|B_tenths_percent.
+    output String signal VIZ_RECIPE;
     // M1 IP-only read-only projection; not a frozen Controller signal.
     output String signal VIZ_FT_EVIDENCE;
 
@@ -143,10 +145,12 @@ Coordinator(
                         CoordinatorStateV1.currentCapacityMl() +
                         ", quantity=" +
                         CoordinatorStateV1.requiredBottles +
-                        ", A=" +
-                        CoordinatorStateV1.currentLiquidARatio +
-                        ", B=" +
-                        CoordinatorStateV1.currentLiquidBRatio
+                        ", A=" + RecipeRatioV2.formatPercent(
+                            CoordinatorStateV1.currentLiquidARatio
+                        ) + "%" +
+                        ", B=" + RecipeRatioV2.formatPercent(
+                            CoordinatorStateV1.currentLiquidBRatio
+                        ) + "%"
                     );
                     System.out.println(
                         "[COORD-LIFECYCLE] accepted " +
@@ -551,6 +555,11 @@ Coordinator(
                 emit FILL_B_RATIO(
                     CoordinatorStateV1.currentLiquidBRatio
                 );
+                String visualRecipe =
+                    CoordinatorStateV1.visualRecipePayload();
+                if (visualRecipe != null) {
+                    emit VIZ_RECIPE(visualRecipe);
+                }
             }
             pause;
         }

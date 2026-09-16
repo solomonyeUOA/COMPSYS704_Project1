@@ -136,7 +136,7 @@ public final class Member4SystemResetSelfTest {
         ), "runtime formal batch contract");
         Member4MachineStateV1.acceptRecognition(
             "RUNTIME-OLD-B001|RUNTIME-OLD|S|200");
-        Member4MachineStateV1.setFillerARatio(60);
+        Member4MachineStateV1.setFillerARatio(600);
         Member4MachineStateV1.acceptBottleAtFill(
             "RUNTIME-OLD-B001|S|200|GEOM_S|PACK_S");
         Member4PlantStateV1.acceptFillerACommand("RUNTIME-OLD-B001|SET_GEOMETRY|GEOM_S");
@@ -259,8 +259,8 @@ public final class Member4SystemResetSelfTest {
         require(Member4MachineStateV1.acceptRecognition(
             id + "|" + id + "-BATCH|" + size + "|" + capacity
         ), "new recognition " + id);
-        Member4MachineStateV1.setFillerARatio(60);
-        Member4MachineStateV1.setFillerBRatio(40);
+        Member4MachineStateV1.setFillerARatio(600);
+        Member4MachineStateV1.setFillerBRatio(400);
         require(Member4MachineStateV1.acceptBottleAtFill(context), "new fill " + id);
         boolean filled = false;
         boolean capped = false;

@@ -3,6 +3,7 @@
  *
  * Format:
  * orderId|productCount|productId,sizeCode,A%,B%,quantity;...
+ * A% and B% accept one decimal place; internal values use tenths of a percent.
  *
  * OrderV1 remains frozen and is parsed separately for backward compatibility.
  */
@@ -90,19 +91,16 @@ public final class OrderV2 {
                 productIds[index] = fields[0];
                 sizeCodes[index] = fields[1];
                 capacitiesMl[index] = capacity;
-                liquidARatios[index] = Integer.parseInt(fields[2]);
-                liquidBRatios[index] = Integer.parseInt(fields[3]);
+                liquidARatios[index] = RecipeRatioV2.parsePercent(fields[2]);
+                liquidBRatios[index] = RecipeRatioV2.parsePercent(fields[3]);
                 quantities[index] = Integer.parseInt(fields[4]);
             }
-            catch (NumberFormatException error) {
+            catch (IllegalArgumentException error) {
                 return null;
             }
 
-            if (liquidARatios[index] < 0 ||
-                liquidARatios[index] > 100 ||
-                liquidBRatios[index] < 0 ||
-                liquidBRatios[index] > 100 ||
-                liquidARatios[index] + liquidBRatios[index] != 100 ||
+            if (liquidARatios[index] + liquidBRatios[index] !=
+                    RecipeRatioV2.TOTAL_UNITS ||
                 quantities[index] <= 0) {
                 return null;
             }

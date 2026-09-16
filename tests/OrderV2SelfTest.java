@@ -10,6 +10,9 @@ public final class OrderV2SelfTest {
         require("S".equals(small.sizeCodeAt(0)), "S size code");
         require(small.capacityMlAt(0) == 200, "S capacity is 200 mL");
         require(small.quantityAt(0) == 3, "S quantity");
+        require(small.liquidARatioAt(0) == 600 &&
+            small.liquidBRatioAt(0) == 400,
+            "whole percentages become tenths-of-percent signal units");
 
         OrderV2 mixed = OrderV2.parse(
             "PO0002|2|P1,S,60,40,3;P2,L,50,50,2"
@@ -18,8 +21,15 @@ public final class OrderV2SelfTest {
             "mixed two-product order must parse");
         require("L".equals(mixed.sizeCodeAt(1)), "L size code");
         require(mixed.capacityMlAt(1) == 500, "L capacity is 500 mL");
-        require(mixed.liquidARatioAt(1) == 50 &&
-            mixed.liquidBRatioAt(1) == 50, "mixed recipe retained");
+        require(mixed.liquidARatioAt(1) == 500 &&
+            mixed.liquidBRatioAt(1) == 500, "mixed recipe retained");
+
+        OrderV2 precise = OrderV2.parse(
+            "PO0003|1|P1,L,33.3,66.7,1"
+        );
+        require(precise != null && precise.liquidARatioAt(0) == 333 &&
+            precise.liquidBRatioAt(0) == 667,
+            "one-decimal recipe precision is retained exactly");
 
         require(OrderV2.parse("PO|1|P1,s,60,40,1") == null,
             "lower-case size must fail");
@@ -27,6 +37,8 @@ public final class OrderV2SelfTest {
             "unsupported size must fail");
         require(OrderV2.parse("PO|1|P1,S,60,30,1") == null,
             "ratios not totalling 100 must fail");
+        require(OrderV2.parse("PO|1|P1,S,33.33,66.67,1") == null,
+            "more than one decimal place must fail");
         require(OrderV2.parse("PO|1|P1,L,60,40,0") == null,
             "zero quantity must fail");
         require(OrderV2.parse("PO|2|P1,S,60,40,1") == null,

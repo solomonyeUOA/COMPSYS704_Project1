@@ -156,7 +156,7 @@ public final class M4SlowDemoTimingSelfTest {
 
         FillerControllerModelV1 controller = (FillerControllerModelV1)
             field(Member4MachineStateV1.class, "fillerA");
-        controller.setRatio(60);
+        controller.setRatio(600);
         require(controller.acceptBottleAtFill("TIMEOUT|S|200|GEOM_S|PACK_S", 100L),
             "controller timeout fixture accepted");
         controller.tick(100L + scale(4567L));

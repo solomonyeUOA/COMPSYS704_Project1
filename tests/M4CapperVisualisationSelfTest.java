@@ -39,7 +39,11 @@ public final class M4CapperVisualisationSelfTest {
                 require(panel.getDisplayedRealStatus() == 2, "direct M4 status displayed");
                 require(panel.getBottleScaleForTest() == 1.18, "M4 geometry drives bottle size");
                 require(text(panel).contains("LIVE-L-B001") && text(panel).contains("GEOM_L") &&
-                    text(panel).contains("LOWERING"), "real telemetry displayed with identity");
+                    text(panel).contains("LOWERING") &&
+                    text(panel).contains("GRIP_Z_L") &&
+                    text(panel).contains("CLAMP_WIDE") &&
+                    text(panel).contains("CONFIRMED"),
+                    "real telemetry displays identity, actuator targets and position evidence");
                 ABSVisualisation.updateStatus("Capper", 3);
                 panel.syncRealState();
                 require(panel.getDisplayedRealStatus() == 2 && panel.getCapperPositionForTest() == 28,

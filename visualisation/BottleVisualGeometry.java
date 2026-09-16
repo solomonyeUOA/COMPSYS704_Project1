@@ -60,6 +60,14 @@ final class BottleVisualGeometry {
         return scaled(nominalWidth);
     }
 
+    /** Target clear opening between the two bottle-positioning jaws. */
+    int clampTargetGap(int nominalBottleWidth, int clearanceEachSide) {
+        if (clearanceEachSide < 0) {
+            throw new IllegalArgumentException("negative clamp clearance");
+        }
+        return bodyWidth(nominalBottleWidth) + 2 * clearanceEachSide;
+    }
+
     int totalHeight(int nominalHeight) {
         return scaled(nominalHeight);
     }

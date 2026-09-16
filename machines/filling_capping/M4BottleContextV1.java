@@ -120,15 +120,17 @@ public final class M4BottleContextV1 {
         return geometryProfileId;
     }
 
+    public M4GeometryProfileV1 getGeometryProfile() {
+        return M4GeometryProfileV1.forId(geometryProfileId);
+    }
+
     public String getPackagingProfileId() {
         return packagingProfileId;
     }
 
-    public int targetForRatio(int ratio) {
-        if (ratio < 0 || ratio > 100) {
-            throw new IllegalArgumentException("ratio must be 0..100");
-        }
-        return capacityMl * ratio / 100;
+    /** Calculate the nearest whole-mL target from tenths-of-percent units. */
+    public int targetForRatio(int ratioUnits) {
+        return RecipeRatioV2.targetMl(capacityMl, ratioUnits);
     }
 
     public String encode() {

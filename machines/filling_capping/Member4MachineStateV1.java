@@ -16,7 +16,11 @@ public final class Member4MachineStateV1 {
     private static M4BoundedEventV1 rotaryContextEvent;
     private static M4BoundedEventV1 loadProfileEvent;
     private static M4BoundedEventV1 unloadProfileEvent;
+    private static M4BoundedEventV1 fillerATelemetryEvent;
+    private static M4BoundedEventV1 fillerBTelemetryEvent;
     private static M4BoundedEventV1 capperTelemetryEvent;
+    private static String lastFillerATelemetry;
+    private static String lastFillerBTelemetry;
     private static String lastCapperTelemetry;
     private static final java.util.Queue<String> twinObservations =
         new java.util.ArrayDeque<String>();
@@ -66,7 +70,11 @@ public final class Member4MachineStateV1 {
         rotaryContextEvent = new M4BoundedEventV1(10, 50L);
         loadProfileEvent = new M4BoundedEventV1(10, 50L);
         unloadProfileEvent = new M4BoundedEventV1(10, 50L);
+        fillerATelemetryEvent = new M4BoundedEventV1(5, 50L);
+        fillerBTelemetryEvent = new M4BoundedEventV1(5, 50L);
         capperTelemetryEvent = new M4BoundedEventV1(5, 50L);
+        lastFillerATelemetry = null;
+        lastFillerBTelemetry = null;
         lastCapperTelemetry = null;
     }
 
@@ -330,6 +338,30 @@ public final class Member4MachineStateV1 {
         return capperTelemetryEvent.take(now);
     }
 
+    public static synchronized String nextFillerATelemetry() {
+        return nextFillerTelemetry(true, System.currentTimeMillis());
+    }
+
+    public static synchronized String nextFillerBTelemetry() {
+        return nextFillerTelemetry(false, System.currentTimeMillis());
+    }
+
+    private static String nextFillerTelemetry(boolean liquidA, long now) {
+        if (M4ResetFenceV1.isQuarantined()) { return null; }
+        FillerControllerModelV1 filler = liquidA ? fillerA : fillerB;
+        M4BoundedEventV1 event = liquidA ?
+            fillerATelemetryEvent : fillerBTelemetryEvent;
+        String current = filler.telemetryPayload();
+        String previous = liquidA ?
+            lastFillerATelemetry : lastFillerBTelemetry;
+        if (!current.equals(previous)) {
+            event.publish(current, now);
+            if (liquidA) { lastFillerATelemetry = current; }
+            else { lastFillerBTelemetry = current; }
+        }
+        return event.take(now);
+    }
+
     private static void observe(String bottle, String stage, String resource) {
         bottle = bottle.split("\\|", -1)[0];
         twinObservations.add("V1|W|M4-E01-" + (++twinSequence) + "|" +
@@ -355,6 +387,8 @@ public final class Member4MachineStateV1 {
         fillerBCommandEvent.cancel(); capperCommandEvent.cancel();
         sortPackCommandEvent.cancel(); rotaryContextEvent.cancel();
         loadProfileEvent.cancel(); unloadProfileEvent.cancel();
+        fillerATelemetryEvent.cancel(); lastFillerATelemetry = null;
+        fillerBTelemetryEvent.cancel(); lastFillerBTelemetry = null;
         capperTelemetryEvent.cancel(); lastCapperTelemetry = null;
         twinObservations.clear(); twinObservationEvent.cancel();
     }

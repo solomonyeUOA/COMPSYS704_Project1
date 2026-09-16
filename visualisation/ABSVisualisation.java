@@ -138,6 +138,10 @@ public final class ABSVisualisation {
         new ABSVisualisationTeamIpModel();
     private static final ABSVisualisationPresentationModel PRESENTATION_MODEL =
         new ABSVisualisationPresentationModel();
+    // Picture only. Twin evidence stays in VISUAL_MODEL and is never written here.
+    private static final SortPackMotionModel SORT_PACK_MOTION =
+        new SortPackMotionModel();
+    private static volatile double sortPackRouteFraction;
     private static volatile ABSVisualisationFlowModel.FlowSnapshot
         renderSnapshot = VISUAL_MODEL.getSnapshot();
     private static volatile ABSVisualisationTeamIpModel.Snapshot
@@ -150,11 +154,18 @@ public final class ABSVisualisation {
     private static int completedBottles = 0;
     private static boolean requiredBottlesReceived = false;
     private static boolean completedBottlesReceived = false;
+    private static volatile int liquidARatioUnits;
+    private static volatile int liquidBRatioUnits;
+    private static volatile boolean recipeReceived;
     private static String lastSystemResetId = "";
     private static final ABSLiveTwinModel LIVE_TWIN = new ABSLiveTwinModel();
     private static String lastTwinEvidence = "";
     private static int labellerStatus;
     private static boolean hasLabellerStatus;
+    private static M4FillerTelemetryV1 m4FillerATelemetry;
+    private static M4FillerTelemetryV1 m4FillerBTelemetry;
+    private static String lastM4FillerATelemetry = "";
+    private static String lastM4FillerBTelemetry = "";
     private static M4CapperTelemetryV1 m4CapperTelemetry;
     private static String lastM4CapperTelemetry = "";
     private static final M4CapperPresentationModel M4_CAPPER =
@@ -276,6 +287,7 @@ public final class ABSVisualisation {
                 public void actionPerformed(ActionEvent event) {
                     VISUAL_MODEL.tickElapsed(System.nanoTime());
                     renderSnapshot = VISUAL_MODEL.getSnapshot();
+                    advanceSortPackMotion();
                     publishPresentationSnapshot();
                     animationFrames++;
                     long traceNow = System.currentTimeMillis();
@@ -544,6 +556,76 @@ public final class ABSVisualisation {
         printAndRefreshProgress();
     }
 
+    /** Accept the Coordinator's read-only fixed-point recipe projection. */
+    public static synchronized boolean updateRecipe(String payload) {
+        String[] fields = payload == null ? new String[0] :
+            payload.split("\\|", -1);
+        if (fields.length != 3 || !"V1".equals(fields[0])) {
+            return false;
+        }
+        final int liquidA;
+        final int liquidB;
+        try {
+            liquidA = Integer.parseInt(fields[1]);
+            liquidB = Integer.parseInt(fields[2]);
+        }
+        catch (NumberFormatException error) {
+            return false;
+        }
+        if (!RecipeRatioV2.isValidUnits(liquidA) ||
+            !RecipeRatioV2.isValidUnits(liquidB) ||
+            liquidA + liquidB != RecipeRatioV2.TOTAL_UNITS) {
+            return false;
+        }
+        if (recipeReceived && liquidARatioUnits == liquidA &&
+            liquidBRatioUnits == liquidB) {
+            return true;
+        }
+        liquidARatioUnits = liquidA;
+        liquidBRatioUnits = liquidB;
+        recipeReceived = true;
+        VISUAL_MODEL.acceptRecipe(liquidA, liquidB);
+        renderSnapshot = VISUAL_MODEL.getSnapshot();
+        publishPresentationSnapshot();
+        System.out.println(
+            "ABS Visualisation recipe A=" +
+            RecipeRatioV2.formatPercent(liquidA) + "% B=" +
+            RecipeRatioV2.formatPercent(liquidB) + "%"
+        );
+        refreshStatusOnSwing();
+        return true;
+    }
+
+    private static String displayedRatio(int units) {
+        return recipeReceived ? RecipeRatioV2.formatPercent(units) : "--";
+    }
+
+    private static double displayedLiquidAPercent() {
+        return recipeReceived ? liquidARatioUnits /
+            (double)RecipeRatioV2.UNITS_PER_PERCENT :
+            DEMO_LIQUID_A_PERCENT;
+    }
+
+    private static double displayedLiquidBPercent() {
+        return recipeReceived ? liquidBRatioUnits /
+            (double)RecipeRatioV2.UNITS_PER_PERCENT :
+            DEMO_LIQUID_B_PERCENT;
+    }
+
+    private static String displayedTargetMl(
+        BottleVisualGeometry geometry,
+        boolean liquidA
+    ) {
+        if (!recipeReceived || geometry == null || !geometry.isKnown()) {
+            return "--";
+        }
+        int aTarget = RecipeRatioV2.targetMl(
+            geometry.getCapacityMl(), liquidARatioUnits
+        );
+        return Integer.toString(liquidA ? aTarget :
+            geometry.getCapacityMl() - aTarget);
+    }
+
     /** Accepts M1-only read-only evidence already validated by Coordinator. */
     public static synchronized void updateFtEvidence(String evidence) {
         if (!TEAM_IP_MODEL.acceptM3Evidence(evidence)) {
@@ -634,6 +716,43 @@ public final class ABSVisualisation {
         return true;
     }
 
+    /** Accepts the live bottle identity and stage from either M4 filler. */
+    public static synchronized boolean updateM4FillerState(String payload) {
+        final M4FillerTelemetryV1 parsed;
+        try {
+            parsed = M4FillerTelemetryV1.parse(payload);
+        }
+        catch (IllegalArgumentException invalid) {
+            return false;
+        }
+        boolean liquidA = "A".equals(parsed.getLiquid());
+        String canonical = parsed.encode();
+        String previous = liquidA ? lastM4FillerATelemetry :
+            lastM4FillerBTelemetry;
+        if (canonical.equals(previous)) { return true; }
+        if (liquidA) {
+            m4FillerATelemetry = parsed;
+            lastM4FillerATelemetry = canonical;
+        }
+        else {
+            m4FillerBTelemetry = parsed;
+            lastM4FillerBTelemetry = canonical;
+        }
+        VISUAL_MODEL.acceptFillerTelemetry(parsed);
+        updateStatus(liquidA ? "Filler A" : "Filler B", parsed.getStatus());
+        renderSnapshot = VISUAL_MODEL.getSnapshot();
+        publishPresentationSnapshot();
+        System.out.println(
+            "ABS Visualisation M4 Filler " + parsed.getLiquid() +
+            " stage=" + parsed.getStage() +
+            " bottle=" + parsed.getBottleId() +
+            " size=" + parsed.getSizeCode() +
+            " geometry=" + parsed.getGeometryProfile()
+        );
+        refreshStatusOnSwing();
+        return true;
+    }
+
     /**
      * Uses Coordinator status only until direct M4 telemetry is available.
      * Once present, that richer source owns the Capper status for the rest of
@@ -662,8 +781,15 @@ public final class ABSVisualisation {
         TEAM_IP_MODEL.acceptTwinEvidence(LIVE_TWIN.snapshot());
         hasLabellerStatus = false;
         labellerStatus = 0;
+        m4FillerATelemetry = null;
+        m4FillerBTelemetry = null;
+        lastM4FillerATelemetry = "";
+        lastM4FillerBTelemetry = "";
         m4CapperTelemetry = null;
         lastM4CapperTelemetry = "";
+        recipeReceived = false;
+        liquidARatioUnits = 0;
+        liquidBRatioUnits = 0;
         M4_CAPPER.reset();
         requiredBottles = 0;
         completedBottles = 0;
@@ -674,6 +800,8 @@ public final class ABSVisualisation {
             HAS_STATUS[index] = true;
         }
         VISUAL_MODEL.resetSystem(resetId);
+        SORT_PACK_MOTION.reset();
+        sortPackRouteFraction = 0.0;
         // The new-generation snapshot can overtake the Coordinator reset signal.
         // Keep that already-validated evidence rather than waiting for a retry.
         VISUAL_MODEL.acceptTwinSnapshot(LIVE_TWIN.snapshot());
@@ -969,6 +1097,32 @@ public final class ABSVisualisation {
         return !renderSnapshot.isTwinDriven() || renderModule(index).getCurrentBottleId() > 0;
     }
 
+    /**
+     * Advances the Sort / Pack picture between confirmed twin waypoints. The
+     * fallback animation already supplies a continuous fraction, so easing is
+     * only needed while live twin evidence drives the flow model.
+     */
+    private static void advanceSortPackMotion() {
+        ABSVisualisationFlowModel.ModuleSnapshot sortPack = renderModule(SORT_PACK);
+        if (!renderSnapshot.isTwinDriven()) {
+            SORT_PACK_MOTION.reset();
+            sortPackRouteFraction = clampFraction(sortPack.getProgress() / 100.0);
+            return;
+        }
+        boolean observed = sortPack.getCurrentBottleId() > 0;
+        sortPackRouteFraction = SORT_PACK_MOTION.observe(
+            observed ? sortPack.getCurrentBottleKey() : "",
+            sortPack.isRunning(),
+            observed && !sortPack.isRunning() &&
+                sortPack.getProgress() >= 100.0,
+            System.currentTimeMillis()
+        );
+    }
+
+    private static double clampFraction(double value) {
+        return value < 0.0 ? 0.0 : value > 1.0 ? 1.0 : value;
+    }
+
     private static synchronized M4CapperTelemetryV1 capperTelemetry() {
         return m4CapperTelemetry;
     }
@@ -983,6 +1137,20 @@ public final class ABSVisualisation {
                 telemetry.getStatus() == BUSY_STATUS) return null;
         }
         return telemetry;
+    }
+
+    private static M4FillerTelemetryV1 fillerTelemetryForCurrentBottle(
+        int moduleIndex
+    ) {
+        M4FillerTelemetryV1 telemetry = moduleIndex == FILLER_A ?
+            m4FillerATelemetry : moduleIndex == FILLER_B ?
+                m4FillerBTelemetry : null;
+        if (!renderSnapshot.isTwinDriven() || telemetry == null) {
+            return telemetry;
+        }
+        String key = renderModule(moduleIndex).getCurrentBottleKey();
+        return !key.isEmpty() && key.equals(telemetry.getBottleId()) ?
+            telemetry : null;
     }
 
     private static M4CapperPresentationModel.Snapshot currentCapperPresentation() {
@@ -1047,6 +1215,15 @@ public final class ABSVisualisation {
 
     private static ABSVisualisationPresentationModel.BottleSizeContext
         currentBottleSize(int moduleIndex, int symbolicBottleId) {
+        M4FillerTelemetryV1 filler =
+            fillerTelemetryForCurrentBottle(moduleIndex);
+        if (filler != null) {
+            return new ABSVisualisationPresentationModel.BottleSizeContext(
+                filler.getSizeCode(), "L".equals(filler.getSizeCode()) ?
+                    "500" : ("S".equals(filler.getSizeCode()) ? "200" :
+                        "--"),
+                filler.hasBottle(), "LIVE M4 FILLER TELEMETRY");
+        }
         M4CapperPresentationModel.Snapshot capper = currentCapperPresentation();
         if (moduleIndex == CAPPER && capper != null) {
             return new ABSVisualisationPresentationModel.BottleSizeContext(
@@ -1793,8 +1970,9 @@ public final class ABSVisualisation {
             int bottleX = x + 48;
             int bottleY = y + 43 + (156 - bottleHeight);
             ProductionLinePanel.drawLayeredBottle(g2, bottleX, bottleY,
-                bottleWidth, bottleHeight, LIQUID_A_COLOR, 60,
-                LIQUID_B_COLOR, 40, true, true);
+                bottleWidth, bottleHeight, LIQUID_A_COLOR,
+                displayedLiquidAPercent(), LIQUID_B_COLOR,
+                displayedLiquidBPercent(), true, true);
             g2.setColor(new Color(49, 62, 75));
             g2.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 17));
             g2.drawString(large ? "LARGE  L" : "SMALL  S", x + 160, y + 52);
@@ -3367,7 +3545,7 @@ public final class ABSVisualisation {
                 shared.getLiquidALevel() : shared.getLiquidBLevel());
             int liquidALevel = index == FILLER_A ? componentLevel :
                 (received[index] ?
-                    (int)Math.round(DEMO_LIQUID_A_PERCENT) : 0);
+                    (int)Math.round(displayedLiquidAPercent()) : 0);
             int liquidBLevel = index == FILLER_B ? componentLevel : 0;
             if (hasObservedBottle(index)) drawSizedLayeredBottleAtBase(
                 g2,
@@ -3645,8 +3823,9 @@ public final class ABSVisualisation {
                     statusColor(BUSY_STATUS) : null
             );
             if (hasObservedBottle(LABELLER)) drawSizedLayeredBottleAtBase(g2, x + 84.0, bottleBaseY,
-                24, 46, bottleSize.getSizeCode(), LIQUID_A_COLOR, 60,
-                LIQUID_B_COLOR, 40, true, true,
+                24, 46, bottleSize.getSizeCode(), LIQUID_A_COLOR,
+                displayedLiquidAPercent(), LIQUID_B_COLOR,
+                displayedLiquidBPercent(), true, true,
                 currentBottleLabel(LABELLER, shared).coverage);
             drawBottleIdentity(g2, x + 84,
                 (int)Math.round(bottleBaseY + 6.0),
@@ -3693,15 +3872,32 @@ public final class ABSVisualisation {
             g2.setColor(new Color(70, 89, 106));
             g2.drawRect(x + 89, y + 44, 46, 27);
             g2.drawRect(x + 89, y + 93, 46, 31);
-            g2.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 9));
-            drawCenteredText(g2, "S / 200", x + 112, y + 61);
-            drawCenteredText(g2, "L / 500", x + 112, y + 112);
-            if (hasObservedBottle(SORT_PACK)) drawSizedLayeredBottleAtBase(g2, x + 28.0, y + 95.0,
-                18, 36, bottleSize.getSizeCode(), LIQUID_A_COLOR, 60,
-                LIQUID_B_COLOR, 40, true, true,
+            // Schematic route, not a measured position: the infeed run is drawn
+            // while the resource is busy and the branch only once sort is confirmed.
+            double route = sortPackRouteFraction;
+            double branch = small || large ? Math.max(0.0,
+                (route - SortPackMotionModel.DIVERTER_FRACTION) /
+                    (1.0 - SortPackMotionModel.DIVERTER_FRACTION)) : 0.0;
+            // The package holds the bottle on its left and its profile on its right.
+            double bottleX = branch > 0.0 ? x + 52.0 + branch * 43.0 :
+                x + 28.0 + Math.min(1.0,
+                    route / SortPackMotionModel.DIVERTER_FRACTION) * 24.0;
+            double bottleBaseY = y + 95.0 + branch * (small ? -25.0 : 28.0);
+            int bottleWidth = (int)Math.round(18.0 - branch * 6.0);
+            int bottleHeight = (int)Math.round(36.0 - branch * 14.0);
+            if (hasObservedBottle(SORT_PACK)) drawSizedLayeredBottleAtBase(g2, bottleX, bottleBaseY,
+                bottleWidth, bottleHeight, bottleSize.getSizeCode(), LIQUID_A_COLOR,
+                displayedLiquidAPercent(), LIQUID_B_COLOR,
+                displayedLiquidBPercent(), true, true,
                 currentBottleLabel(SORT_PACK, shared).coverage);
-            drawBottleIdentity(g2, x + 28, y + 101,
+            drawBottleIdentity(g2, (int)Math.round(bottleX),
+                (int)Math.round(bottleBaseY + 6.0),
                 shared.getCurrentBottleId(), bottleSize);
+            // Drawn last, right of the bottle, so an arrived bottle never hides it.
+            g2.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 8));
+            g2.setColor(new Color(70, 89, 106));
+            drawCenteredText(g2, "S / 200", x + 117, y + 61);
+            drawCenteredText(g2, "L / 500", x + 117, y + 112);
             if (isDone(SORT_PACK, statuses, received)) drawDoneTick(g2, x + width - 15, y + 40);
         }
 
@@ -3975,9 +4171,9 @@ public final class ABSVisualisation {
             int nominalHeight,
             String sizeCode,
             Color bottomLiquidColor,
-            int bottomLiquidPercent,
+            double bottomLiquidPercent,
             Color topLiquidColor,
-            int topLiquidPercent,
+            double topLiquidPercent,
             boolean hasLid,
             boolean securedCap
         ) {
@@ -4003,7 +4199,7 @@ public final class ABSVisualisation {
         private static void drawSizedLayeredBottleAtBase(
             Graphics2D g2, double centreX, double baseY,
             int width, int height, String sizeCode,
-            Color bottom, int bottomPercent, Color top, int topPercent,
+            Color bottom, double bottomPercent, Color top, double topPercent,
             boolean lid, boolean cap, double labelCoverage
         ) {
             drawSizedLayeredBottleAtBase(g2, centreX, baseY, width, height,
@@ -4163,9 +4359,9 @@ public final class ABSVisualisation {
             int width,
             int height,
             Color bottomLiquidColor,
-            int bottomLiquidPercent,
+            double bottomLiquidPercent,
             Color topLiquidColor,
-            int topLiquidPercent,
+            double topLiquidPercent,
             boolean hasLid,
             boolean securedCap
         ) {
@@ -4185,13 +4381,13 @@ public final class ABSVisualisation {
             g2.fillRoundRect(x, shoulderY, width, bodyHeight, 7, 7);
             g2.fillRect(neckX, y + capInset, neckWidth, neckHeight);
 
-            int boundedBottom = Math.max(
-                0,
-                Math.min(100, bottomLiquidPercent)
+            double boundedBottom = Math.max(
+                0.0,
+                Math.min(100.0, bottomLiquidPercent)
             );
-            int boundedTop = Math.max(
-                0,
-                Math.min(100 - boundedBottom, topLiquidPercent)
+            double boundedTop = Math.max(
+                0.0,
+                Math.min(100.0 - boundedBottom, topLiquidPercent)
             );
             int innerHeight = Math.max(1, bodyHeight - 5);
             int innerBottom = shoulderY + bodyHeight - 3;
@@ -4334,10 +4530,10 @@ public final class ABSVisualisation {
             {"WAIT", "SELECT", "RELEASE", "TRANSFER", "HANDOFF"},
             {"WAIT", "RECEIVE", "TRANSPORT", "ARRIVE", "HANDOFF P1"},
             {"WAIT", "ENTRY", "INDEX 60 DEG", "SETTLE", "EXIT"},
-            {"WAIT", "VALVE OPEN", "A 0-60%", "TARGET", "RELEASE"},
-            {"WAIT", "A RETAINED", "B 0-40%", "TOTAL 100%", "RELEASE"},
+            {"WAIT", "VALVE OPEN", "A DOSING", "TARGET", "RELEASE"},
+            {"WAIT", "A RETAINED", "B DOSING", "TOTAL 100%", "RELEASE"},
             {"WAIT", "PICK", "FEED", "PLACE", "CONFIRM"},
-            {"WAIT", "HEAD DOWN", "TIGHTEN", "HEAD UP", "CLEAR"},
+            {"WAIT", "POSITION", "CLAMP", "LOWER / TWIST", "RAISE / CLEAR"},
             {"WAIT", "FEED LABEL", "APPLY", "VERIFY", "HANDOFF"},
             {"WAIT", "CAPTURE", "REMOVE", "BOTTLE_DONE", "CLEAR"},
             {"WAIT", "READ SIZE", "ROUTE S/L", "PACK", "CONFIRM"}
@@ -4635,12 +4831,30 @@ public final class ABSVisualisation {
             );
 
             if (renderSnapshot.isTwinDriven()) {
-                primaryMetricValue.setText(wrapInformationText(
-                    "Snapshot batch: <b>" + html(renderSnapshot.getTwinBatchKey()) +
-                    "</b><br>Completed twins: " + renderSnapshot.getTwinCompleted() +
-                    " / " + renderSnapshot.getTwinBottleCount() + " observed"));
-                secondaryMetricValue.setText(wrapInformationText(
-                    "Last confirmed stage, not a timed replay. No measured cycle percentage, fill level or rotary angle is provided by the twin feed."));
+                if (machineIndex == FILLER_A || machineIndex == FILLER_B) {
+                    boolean liquidA = machineIndex == FILLER_A;
+                    int units = liquidA ? liquidARatioUnits :
+                        liquidBRatioUnits;
+                    primaryMetricValue.setText(wrapInformationText(
+                        "Live recipe: <b>" +
+                        displayedRatio(units) + "% Liquid " +
+                        (liquidA ? "A" : "B") +
+                        "</b><br>Whole-mL target: <b>" +
+                        displayedTargetMl(displayedGeometry, liquidA) +
+                        " mL</b>"));
+                    secondaryMetricValue.setText(wrapInformationText(
+                        "Recipe comes from the Coordinator at 0.1% precision. " +
+                        "The twin provides the last confirmed stage; it does " +
+                        "not provide a measured continuous fill level."));
+                }
+                else {
+                    primaryMetricValue.setText(wrapInformationText(
+                        "Snapshot batch: <b>" + html(renderSnapshot.getTwinBatchKey()) +
+                        "</b><br>Completed twins: " + renderSnapshot.getTwinCompleted() +
+                        " / " + renderSnapshot.getTwinBottleCount() + " observed"));
+                    secondaryMetricValue.setText(wrapInformationText(
+                        "Last confirmed stage, not a timed replay. No measured cycle percentage, fill level or rotary angle is provided by the twin feed."));
+                }
                 if (machineIndex == CAPPER) updateCapperInformation();
                 if (machineIndex == UNLOADER) updateRealBatchInformation();
                 return;
@@ -4708,9 +4922,11 @@ public final class ABSVisualisation {
                 case FILLER_A:
                     primaryMetricValue.setText(
                         wrapInformationText(
-                            "Recipe target / symbolic visualisation" +
-                            "<br>Liquid A target: 60%" +
-                            "<br>Liquid B target: 40%" +
+                            "Live recipe / symbolic fill visualisation" +
+                            "<br>Liquid A target: " +
+                            displayedRatio(liquidARatioUnits) + "%" +
+                            "<br>Liquid B target: " +
+                            displayedRatio(liquidBRatioUnits) + "%" +
                             "<br>Current symbolic A: " +
                             oneDecimal(detailModel.getLiquidALevel()) +
                             "%<br>Current symbolic B: 0.0%"
@@ -4731,9 +4947,11 @@ public final class ABSVisualisation {
                 case FILLER_B:
                     primaryMetricValue.setText(
                         wrapInformationText(
-                            "Recipe target / symbolic visualisation" +
-                            "<br>Liquid A target: 60%" +
-                            "<br>Liquid B target: 40%" +
+                            "Live recipe / symbolic fill visualisation" +
+                            "<br>Liquid A target: " +
+                            displayedRatio(liquidARatioUnits) + "%" +
+                            "<br>Liquid B target: " +
+                            displayedRatio(liquidBRatioUnits) + "%" +
                             "<br>Current symbolic A retained: " +
                             oneDecimal(detailModel.getLiquidALevel()) +
                             "%<br>Current symbolic B added: " +
@@ -4807,11 +5025,34 @@ public final class ABSVisualisation {
 
         private void updateCapperInformation() {
             M4CapperTelemetryV1 raw = capperTelemetry();
+            M4GeometryProfileV1 profile = null;
+            if (raw != null) {
+                try {
+                    profile = M4GeometryProfileV1.forId(
+                        raw.getGeometryProfile()
+                    );
+                }
+                catch (IllegalArgumentException ignored) {
+                    profile = null;
+                }
+            }
+            String positionEvidence = raw == null ? "--" :
+                ("POSITIONING".equals(raw.getStage()) ? "PENDING" :
+                    ("WAITING".equals(raw.getStage()) ||
+                     "FAULT".equals(raw.getStage()) ? "UNAVAILABLE" :
+                        "CONFIRMED"));
             realBatchValue.setText(wrapInformationText(raw == null ?
                 "M4 arm telemetry: <b>awaiting optional input</b>" :
                 "<b>LIVE / CONFIRMED M4 CAPPER</b><br>Latest raw arm bottle: " +
                 html(raw.getBottleId()) + "<br>Size / geometry: " +
                 raw.getSizeCode() + " / " + raw.getGeometryProfile() +
+                (profile == null ? "" :
+                    "<br>Grip height target: <b>" +
+                    profile.getCapperGripZ() +
+                    "</b><br>Clamp opening target: <b>" +
+                    profile.getClampSetpoint() + "</b>") +
+                "<br>Position confirmation: <b>" + positionEvidence +
+                "</b>" +
                 "<br>Arm stage: <b>" + raw.getStage() +
                 "</b><br>Raw status: " + raw.getStatus()));
             if (capperState != null) {
@@ -4822,7 +5063,11 @@ public final class ABSVisualisation {
                     "<br>Stage: " + capperState.stage));
                 primaryMetricValue.setText(wrapInformationText(
                     "Stage-based drawing position: " + oneDecimal(capperState.displayPosition) +
-                    "%<br>Illustrative mapping, not a measured arm position."));
+                    "%<br>Geometry target: <b>" +
+                    (profile == null ? "--" :
+                        profile.getCapperGripZ() + " / " +
+                        profile.getClampSetpoint()) +
+                    "</b><br>Illustrative mapping, not a measured arm position."));
                 secondaryMetricValue.setText(wrapInformationText(
                     "Matched to displayed bottle. Local animation cannot advance this arm; " +
                     "FAULT holds the last position."));
@@ -5116,7 +5361,15 @@ public final class ABSVisualisation {
             }
 
             private void drawOperationRail(Graphics2D g2) {
-                String[] phases = DETAIL_PHASES[machineIndex];
+                String[] phases = DETAIL_PHASES[machineIndex].clone();
+                if (recipeReceived && machineIndex == FILLER_A) {
+                    phases[2] = "A 0-" +
+                        RecipeRatioV2.formatPercent(liquidARatioUnits) + "%";
+                }
+                else if (recipeReceived && machineIndex == FILLER_B) {
+                    phases[2] = "B 0-" +
+                        RecipeRatioV2.formatPercent(liquidBRatioUnits) + "%";
+                }
                 int active = detailModel.getCurrentBottleId() <= 0 ? 0 :
                     Math.min(phases.length - 1,
                         (int)Math.floor(detailModel.getProgress() /
@@ -5128,8 +5381,9 @@ public final class ABSVisualisation {
                         if (phases[i].equals(phase)) active = i;
                     }
                 }
-                if (capperState != null) active = Math.min(4,
-                    (int)(capperState.displayPosition / 20.0));
+                if (capperState != null) {
+                    active = capperRailPhase(capperState.stage);
+                }
                 int startX = 14;
                 int y = 445;
                 int width = 88;
@@ -5152,6 +5406,28 @@ public final class ABSVisualisation {
                             x + 95, y + 11);
                     }
                 }
+            }
+
+            private int capperRailPhase(String stage) {
+                if ("POSITIONING".equals(stage)) return 1;
+                if ("CLAMPING".equals(stage)) return 2;
+                if ("LOWERING".equals(stage) ||
+                    "GRIPPING".equals(stage) ||
+                    "TWISTING".equals(stage) ||
+                    "RELEASING".equals(stage) ||
+                    "RETURNING".equals(stage)) return 3;
+                if ("RAISING".equals(stage) ||
+                    "UNCLAMPING".equals(stage) ||
+                    "DONE".equals(stage)) return 4;
+                if ("FAULT".equals(stage)) {
+                    double position = capperState.displayPosition;
+                    if (position < 8.0) return 0;
+                    if (position < 18.0) return 1;
+                    if (position < 28.0) return 2;
+                    if (position < 82.0) return 3;
+                    return 4;
+                }
+                return 0;
             }
 
             private void drawSizedBottle(
@@ -5212,8 +5488,8 @@ public final class ABSVisualisation {
                 double bottomY,
                 int baseWidth,
                 int baseHeight,
-                int liquidA,
-                int liquidB,
+                double liquidA,
+                double liquidB,
                 boolean lid,
                 boolean secured
             ) {
@@ -5733,12 +6009,34 @@ public final class ABSVisualisation {
                 g2.drawString("PIPE + VALVE", 240, 92);
                 g2.drawString("SIZE-ADAPTIVE NOZZLE", 304,
                     (int)Math.round(nozzleY - 13.0));
+                String nozzleTarget = "--";
+                if (geometry.isKnown()) {
+                    nozzleTarget = M4GeometryProfileV1.forId(
+                        "S".equals(geometry.getSizeCode()) ?
+                            M4BottleContextV1.GEOMETRY_SMALL :
+                            M4BottleContextV1.GEOMETRY_LARGE
+                    ).getFillerNozzleZ();
+                }
+                g2.setFont(new Font(Font.MONOSPACED, Font.BOLD, 11));
+                g2.setColor(new Color(36, 92, 158));
+                g2.drawString("TARGET:", 252, 176);
+                g2.drawString(nozzleTarget, 252, 192);
+                g2.setColor(new Color(66, 82, 98));
+                g2.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 13));
                 g2.drawString("BOTTLE ON ROLLER BED", 300, 438);
                 if (machineIndex == FILLER_B) {
                     g2.setColor(LIQUID_A_COLOR);
-                    g2.drawString("A RETAINED (60% TARGET)", 235, 262);
+                    g2.drawString(
+                        "A RETAINED (" +
+                        displayedRatio(liquidARatioUnits) + "% TARGET)",
+                        235, 262
+                    );
                     g2.setColor(LIQUID_B_COLOR);
-                    g2.drawString("+ B ADDED (0-40%)", 365, 262);
+                    g2.drawString(
+                        "+ B ADDED (0-" +
+                        displayedRatio(liquidBRatioUnits) + "%)",
+                        365, 262
+                    );
                 }
             }
 
@@ -5843,7 +6141,6 @@ public final class ABSVisualisation {
                 double targetHeadY = geometry.workingTopY(400.0, 132, 43.0);
                 double workingHeadY = capperState == null ?
                     animateWorkingHeight(targetHeadY) : targetHeadY;
-                boolean largeGeometry = "L".equals(geometry.getSizeCode());
                 double headY;
                 if (progress < 30.0) {
                     headY = 82.0 + progress / 30.0 *
@@ -5861,7 +6158,7 @@ public final class ABSVisualisation {
                 g2.setColor(new Color(72, 87, 102));
                 g2.fillRect(244, 48, 12, (int)Math.round(headY - 25.0));
                 g2.setColor(new Color(207, 216, 226));
-                int liveHeadWidth = largeGeometry ? 188 : 160;
+                int liveHeadWidth = 168;
                 int liveHeadX = 250 - liveHeadWidth / 2;
                 g2.fillRoundRect(
                     liveHeadX,
@@ -5897,6 +6194,29 @@ public final class ABSVisualisation {
                     (int)Math.round(DEMO_LIQUID_A_PERCENT),
                     (int)Math.round(DEMO_LIQUID_B_PERCENT), true,
                     progress >= 99.5);
+
+                int targetGap = geometry.clampTargetGap(74, 0);
+                double closure = clampClosure(progress);
+                int jawGap = (int)Math.round(
+                    targetGap + (1.0 - closure) * 64.0
+                );
+                int jawY = (int)Math.round(
+                    geometry.labelCenterY(400.0, 132) - 27.0
+                );
+                int leftJawX = 250 - jawGap / 2 - 18;
+                int rightJawX = 250 + jawGap / 2;
+                g2.setColor(new Color(120, 137, 153));
+                g2.fillRect(95, jawY + 13, leftJawX - 95, 10);
+                g2.fillRect(rightJawX + 18, jawY + 13,
+                    405 - (rightJawX + 18), 10);
+                g2.setColor(closure >= 0.95 ?
+                    new Color(54, 142, 99) : new Color(188, 201, 213));
+                g2.fillRoundRect(leftJawX, jawY, 18, 36, 6, 6);
+                g2.fillRoundRect(rightJawX, jawY, 18, 36, 6, 6);
+                g2.setColor(new Color(67, 82, 97));
+                g2.setStroke(new BasicStroke(2.0f));
+                g2.drawRoundRect(leftJawX, jawY, 18, 36, 6, 6);
+                g2.drawRoundRect(rightJawX, jawY, 18, 36, 6, 6);
                 if (capperState == null ? progress >= 30.0 && progress <= 72.0 :
                     "TWISTING".equals(capperState.stage)) {
                     double angle = capperState == null ?
@@ -5916,15 +6236,59 @@ public final class ABSVisualisation {
                 g2.setColor(new Color(66, 82, 98));
                 g2.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 13));
                 g2.drawString("VERTICAL GUIDE SHAFT", 268, 76);
+                M4GeometryProfileV1 profile = geometry.isKnown() ?
+                    M4GeometryProfileV1.forId(
+                        "S".equals(geometry.getSizeCode()) ?
+                            M4BottleContextV1.GEOMETRY_SMALL :
+                            M4BottleContextV1.GEOMETRY_LARGE
+                    ) : null;
+                g2.setFont(new Font(Font.MONOSPACED, Font.BOLD, 11));
+                g2.setColor(new Color(36, 92, 158));
+                g2.drawString("GRIP Z: " + (profile == null ? "--" :
+                    profile.getCapperGripZ()), 18, 210);
+                g2.drawString("CLAMP: " + (profile == null ? "--" :
+                    profile.getClampSetpoint()), 18, 228);
+                g2.drawString("JAWS: " + jawState(closure), 350, 210);
                 if (capperState != null) {
                     g2.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 11));
                     g2.setColor(new Color(36, 92, 158));
                     g2.drawString("LIVE M4: " + capperState.stage + " / " +
-                        capperState.geometryProfile, 125, 438);
+                        capperState.geometryProfile, 18, 246);
                 }
                 g2.drawString("CAPPING HEAD", 190,
                     (int)Math.round(headY - 9.0));
 
+            }
+
+            private double clampClosure(double progress) {
+                if (capperState != null) {
+                    String stage = capperState.stage;
+                    if ("POSITIONING".equals(stage) ||
+                        "WAITING".equals(stage)) return 0.0;
+                    if ("CLAMPING".equals(stage)) return 0.55;
+                    if ("UNCLAMPING".equals(stage)) return 0.45;
+                    if ("DONE".equals(stage)) return 0.0;
+                    if ("FAULT".equals(stage)) {
+                        return capperState.displayPosition >= 18.0 &&
+                            capperState.displayPosition < 94.0 ? 1.0 : 0.0;
+                    }
+                    return 1.0;
+                }
+                if (progress < 8.0) return 0.0;
+                if (progress < 18.0) return (progress - 8.0) / 10.0;
+                if (progress < 94.0) return 1.0;
+                return Math.max(0.0, (100.0 - progress) / 6.0);
+            }
+
+            private String jawState(double closure) {
+                if (closure >= 0.95) return "CLAMPED";
+                if (closure <= 0.05) return "OPEN";
+                if (capperState != null &&
+                    "UNCLAMPING".equals(capperState.stage)) return "OPENING";
+                if (capperState == null && getCapperPositionForTest() >= 94.0) {
+                    return "OPENING";
+                }
+                return "CLOSING";
             }
 
             private void drawFinishingDetail(Graphics2D g2) {
@@ -5963,7 +6327,8 @@ public final class ABSVisualisation {
                     detailModel.isRunning() ? statusColor(BUSY_STATUS) : null);
                 g2.setStroke(new BasicStroke(1.5f));
                 drawSizedLayeredBottle(g2, centreX, 370.0, 70, 125,
-                    60, 40, true, true);
+                    displayedLiquidAPercent(), displayedLiquidBPercent(),
+                    true, true);
 
                 // Only unattached material moves independently of the bottle.
                 // WAIT keeps stock on the reel; VERIFY/HANDOFF paint only wrap.
@@ -6011,7 +6376,9 @@ public final class ABSVisualisation {
             }
 
             private void drawSortPackDetail(Graphics2D g2) {
-                double progress = detailModel.getProgress();
+                // Display-only route. Evidence stays in the panel's progress read-out,
+                // which still reports the twin's own 0 / 100 waypoint value.
+                double progress = sortPackRouteFraction * 100.0;
                 String size = presentationSize.getSizeCode();
                 boolean small = "S".equals(size);
                 boolean large = "L".equals(size);
@@ -6054,17 +6421,21 @@ public final class ABSVisualisation {
 
                 double bottleX;
                 double bottleY;
+                double branch = 0.0;
                 if (progress < 42.0 || (!small && !large)) {
                     bottleX = 40.0 + Math.min(1.0, progress / 42.0) * 138.0;
                     bottleY = 245.0;
                 }
                 else {
-                    double branch = (progress - 42.0) / 58.0;
-                    bottleX = 178.0 + branch * 160.0;
-                    bottleY = 245.0 + branch * (small ? -94.0 : 106.0);
+                    // Enter the package body rather than overhanging its top edge.
+                    branch = (progress - 42.0) / 58.0;
+                    bottleX = 178.0 + branch * 152.0;
+                    bottleY = 245.0 + branch * (small ? -50.0 : 156.0);
                 }
-                drawSizedLayeredBottle(g2, bottleX, bottleY, 47, 86,
-                    60, 40, true, true);
+                drawSizedLayeredBottle(g2, bottleX, bottleY, 47,
+                    (int)Math.round(86.0 - branch * 20.0),
+                    displayedLiquidAPercent(), displayedLiquidBPercent(),
+                    true, true);
                 g2.setColor(new Color(64, 81, 96));
                 g2.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 12));
                 g2.drawString(small || large ?

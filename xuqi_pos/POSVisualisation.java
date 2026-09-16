@@ -951,9 +951,9 @@ public final class POSVisualisation {
     }
 
     enum ProductPreset {
-        P1("P1", 25, 75),
-        P2("P2", 50, 50),
-        P3("P3", 75, 25),
+        P1("P1", 250, 750),
+        P2("P2", 500, 500),
+        P3("P3", 750, 250),
         CUSTOM("Custom", -1, -1);
 
         private final String productId;
@@ -975,11 +975,20 @@ public final class POSVisualisation {
             String liquidA,
             String liquidB
         ) {
+            final int liquidAUnits;
+            final int liquidBUnits;
+            try {
+                liquidAUnits = RecipeRatioV2.parsePercent(liquidA);
+                liquidBUnits = RecipeRatioV2.parsePercent(liquidB);
+            }
+            catch (IllegalArgumentException error) {
+                return CUSTOM;
+            }
             for (ProductPreset preset : values()) {
                 if (!preset.isCustom() &&
                     preset.productId.equals(productId) &&
-                    Integer.toString(preset.liquidA).equals(liquidA) &&
-                    Integer.toString(preset.liquidB).equals(liquidB)) {
+                    preset.liquidA == liquidAUnits &&
+                    preset.liquidB == liquidBUnits) {
                     return preset;
                 }
             }
@@ -1015,7 +1024,8 @@ public final class POSVisualisation {
                 new ProductPreset[] {
                     ProductPreset.P1,
                     ProductPreset.P2,
-                    ProductPreset.P3
+                    ProductPreset.P3,
+                    ProductPreset.CUSTOM
                 }
             );
             productId = new JTextField(productIdValue, 14);
@@ -1069,8 +1079,8 @@ public final class POSVisualisation {
             }
             else {
                 productId.setText(preset.productId);
-                liquidA.setText(Integer.toString(preset.liquidA));
-                liquidB.setText(Integer.toString(preset.liquidB));
+                liquidA.setText(RecipeRatioV2.formatPercent(preset.liquidA));
+                liquidB.setText(RecipeRatioV2.formatPercent(preset.liquidB));
             }
             productId.setEditable(custom);
             liquidA.setEditable(custom);
@@ -1095,12 +1105,17 @@ public final class POSVisualisation {
             final int encodedLiquidB;
             try {
                 encodedQuantity = Integer.parseInt(quantity.getText().trim());
-                encodedLiquidA = Integer.parseInt(liquidA.getText().trim());
-                encodedLiquidB = Integer.parseInt(liquidB.getText().trim());
+                encodedLiquidA = RecipeRatioV2.parsePercent(
+                    liquidA.getText()
+                );
+                encodedLiquidB = RecipeRatioV2.parsePercent(
+                    liquidB.getText()
+                );
             }
-            catch (NumberFormatException error) {
+            catch (IllegalArgumentException error) {
                 throw new IllegalArgumentException(
-                    "Quantity and liquid percentages must be integers"
+                    "Quantity must be an integer; liquid percentages must use " +
+                    "0.1% precision"
                 );
             }
             if (encodedQuantity <= 0) {
@@ -1108,19 +1123,16 @@ public final class POSVisualisation {
                     "Quantity must be greater than 0"
                 );
             }
-            if (encodedLiquidA < 0 || encodedLiquidA > 100 ||
-                encodedLiquidB < 0 || encodedLiquidB > 100) {
+            if (encodedLiquidA + encodedLiquidB !=
+                    RecipeRatioV2.TOTAL_UNITS) {
                 throw new IllegalArgumentException(
-                    "Liquid percentages must be from 0 to 100"
-                );
-            }
-            if (encodedLiquidA + encodedLiquidB != 100) {
-                throw new IllegalArgumentException(
-                    "Liquid A + Liquid B must equal 100"
+                    "Liquid A + Liquid B must equal 100.0"
                 );
             }
             return encodedProductId + ',' + selectedSizeCode() + ',' +
-                encodedLiquidA + ',' + encodedLiquidB + ',' + encodedQuantity;
+                RecipeRatioV2.formatPercent(encodedLiquidA) + ',' +
+                RecipeRatioV2.formatPercent(encodedLiquidB) + ',' +
+                encodedQuantity;
         }
 
         void selectPresetForTest(ProductPreset preset) {

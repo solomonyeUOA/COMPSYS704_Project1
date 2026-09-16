@@ -9,6 +9,7 @@ FillerAController(
     output Integer signal FILLER_A_STATUS;
     output String signal FILLER_A_PLANT_COMMAND;
     output String signal FILL_A_DONE;
+    output String signal M4_FILLER_A_STATE;
 )
 ->{
     System.out.println("M4 FillerAControllerCD started");
@@ -60,6 +61,10 @@ FillerAController(
         String completed = Member4MachineStateV1.takeFillADone();
         if (completed != null) {
             emit FILL_A_DONE(completed);
+        }
+        String telemetry = Member4MachineStateV1.nextFillerATelemetry();
+        if (telemetry != null) {
+            emit M4_FILLER_A_STATE(telemetry);
         }
         pause;
     }}
