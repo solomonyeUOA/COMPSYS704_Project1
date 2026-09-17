@@ -8,6 +8,7 @@ public final class FaultInjectionStateV2_1 {
     private static String transferRequestId;
     private static int transferDeliveryRounds;
     private static boolean transferRequestAccepted;
+    private static boolean transferCancellationPending;
     private static String transferDeliveryError;
 
     private FaultInjectionStateV2_1() {
@@ -17,7 +18,13 @@ public final class FaultInjectionStateV2_1 {
         if (faultCode == null || armedFault != null) {
             return false;
         }
-        if (isRotaryOrLid(faultCode)) {
+        if (isController(faultCode)) {
+            if (!Member3MachineStateV1.armControllerFailure(faultCode)) return false;
+        }
+        else if (isRedundantDevice(faultCode)) {
+            if (!Member3PlantStateV1.armRedundantFault(faultCode)) return false;
+        }
+        else if (isRotaryOrLid(faultCode)) {
             if (!Member3MachineStateV1.armTestFault(faultCode)) {
                 return false;
             }
@@ -30,6 +37,7 @@ public final class FaultInjectionStateV2_1 {
             transferRequestId = requestId;
             transferDeliveryRounds = 1;
             transferRequestAccepted = false;
+            transferCancellationPending = false;
             transferDeliveryError = null;
         }
         else {
@@ -44,16 +52,24 @@ public final class FaultInjectionStateV2_1 {
         if (transferRequestId != null && !transferRequestAccepted &&
             !transferOffer.isActive()) {
             if (transferDeliveryRounds >= MAXIMUM_TRANSFER_DELIVERY_ROUNDS) {
+                if (!transferCancellationPending) {
+                    transferDeliveryError =
+                        "M2 did not acknowledge the fault-injection request; cancelling it safely";
+                    beginTransferCancellation();
+                    return transferOffer.nextReactionValue();
+                }
                 transferDeliveryError =
-                    "M2 did not acknowledge the fault-injection request";
-                transferRequestId = null;
-                armedFault = null;
+                    "M2 did not acknowledge cancellation; retry cancellation or reset the disconnected test runtime";
+                transferCancellationPending = false;
+                transferRequestAccepted = true;
+                transferDeliveryRounds = 0;
                 return null;
             }
             transferDeliveryRounds++;
             transferOffer.arm(
                 transferRequestId,
-                transferRequestId + "|" + armedFault
+                transferRequestId + "|" +
+                    (transferCancellationPending ? "CANCEL" : armedFault)
             );
         }
         return transferOffer.nextReactionValue();
@@ -70,6 +86,12 @@ public final class FaultInjectionStateV2_1 {
             return false;
         }
         if ("ACCEPTED".equals(fields[2])) {
+            if (transferCancellationPending) {
+                clearTransferState();
+                armedFault = null;
+                transferDeliveryError = null;
+                return true;
+            }
             transferRequestAccepted = true;
             transferOffer.acknowledge(transferRequestId);
             transferDeliveryError = null;
@@ -77,9 +99,14 @@ public final class FaultInjectionStateV2_1 {
         }
         if ("REJECTED".equals(fields[2])) {
             transferOffer.acknowledge(transferRequestId);
-            transferDeliveryError = "M2 rejected " + armedFault;
+            transferDeliveryError = transferCancellationPending ?
+                "M2 could not cancel the injection because it had already triggered" :
+                "M2 rejected " + armedFault;
             transferRequestId = null;
-            armedFault = null;
+            if (!transferCancellationPending) {
+                armedFault = null;
+            }
+            transferCancellationPending = false;
             return true;
         }
         return false;
@@ -91,10 +118,40 @@ public final class FaultInjectionStateV2_1 {
                 transferOffer.acknowledge(transferRequestId);
                 transferRequestId = null;
             }
-            transferRequestAccepted = false;
-            transferDeliveryRounds = 0;
+            clearTransferState();
             armedFault = null;
         }
+    }
+
+    public static synchronized boolean cancel() {
+        if (armedFault == null) {
+            return false;
+        }
+        if (isController(armedFault)) {
+            if (!Member3MachineStateV1.cancelControllerFailure(armedFault)) return false;
+            armedFault = null;
+            return true;
+        }
+        if (isRedundantDevice(armedFault)) {
+            if (!Member3PlantStateV1.cancelRedundantFault(armedFault)) return false;
+            armedFault = null;
+            return true;
+        }
+        if (isRotaryOrLid(armedFault)) {
+            if (!Member3MachineStateV1.cancelArmedTestFault(armedFault)) {
+                return false;
+            }
+            armedFault = null;
+            transferDeliveryError = null;
+            return true;
+        }
+        if (!isTransfer(armedFault) || transferRequestId == null ||
+            transferCancellationPending) {
+            return false;
+        }
+        beginTransferCancellation();
+        transferDeliveryError = null;
+        return true;
     }
 
     public static synchronized String armedFault() {
@@ -109,17 +166,64 @@ public final class FaultInjectionStateV2_1 {
         return transferRequestAccepted;
     }
 
+    public static synchronized boolean cancellationPending() {
+        return transferCancellationPending;
+    }
+
     public static synchronized boolean hasTransferRequest() {
         return transferRequestId != null;
     }
 
     public static synchronized void reset() {
+        Member3MachineStateV1.clearPendingTestFaults();
+        Member3PlantStateV1.clearPendingRedundantFault();
         transferOffer = new BoundedSignalOfferV1(20, 500L, 100L);
         transferRequestId = null;
         transferDeliveryRounds = 0;
         transferRequestAccepted = false;
+        transferCancellationPending = false;
         transferDeliveryError = null;
         armedFault = null;
+    }
+
+    private static void clearTransferState() {
+        if (transferRequestId != null) {
+            transferOffer.acknowledge(transferRequestId);
+        }
+        transferRequestId = null;
+        transferRequestAccepted = false;
+        transferCancellationPending = false;
+        transferDeliveryRounds = 0;
+    }
+
+    private static void beginTransferCancellation() {
+        transferOffer.acknowledge(transferRequestId);
+        transferOffer = new BoundedSignalOfferV1(20, 500L, 100L);
+        transferOffer.arm(transferRequestId, transferRequestId + "|CANCEL");
+        transferCancellationPending = true;
+        transferRequestAccepted = false;
+        transferDeliveryRounds = 1;
+    }
+
+    static boolean isRedundantDevice(String faultCode) {
+        return isPhysicalFault(faultCode) || "ROTARY_DRIVE_FAILURE".equals(faultCode) ||
+            "PICK_DRIVE_FAILURE".equals(faultCode) ||
+            "PLACE_DRIVE_FAILURE".equals(faultCode) ||
+            "ROTARY_FEEDBACK_FAILURE".equals(faultCode);
+    }
+
+    static boolean isPhysicalFault(String code) {
+        if ("ROTARY_FEEDBACK_DISAGREEMENT".equals(code) || "PLACE_LOAD_LOSS".equals(code)) return true;
+        if (code == null) return false;
+        for (String axis : new String[] {"ROTARY", "PICK", "PLACE"})
+            for (String fault : new String[] {"STOP_FAILURE", "HOLD_FAILURE", "ISOLATION_FAILURE",
+                    "ENGAGEMENT_FAILURE", "BACKUP_FAILURE", "MECHANICAL_JAM"})
+                if ((axis + "_" + fault).equals(code)) return true;
+        return false;
+    }
+
+    private static boolean isController(String code) {
+        return "ROTARY_CONTROLLER_FAILURE".equals(code) || "LID_CONTROLLER_FAILURE".equals(code);
     }
 
     private static boolean isRotaryOrLid(String faultCode) {

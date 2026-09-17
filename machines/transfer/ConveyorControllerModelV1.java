@@ -149,7 +149,9 @@ public final class ConveyorControllerModelV1 {
 
     public boolean injectFault(String code, String sourceEpoch) {
         if (status != M2StatusV1.BUSY || active == null ||
-            !"ARRIVAL_TIMEOUT".equals(code)) {
+            (!"ARRIVAL_TIMEOUT".equals(code) &&
+             !"PHOTO_EYE_FAILURE".equals(code) &&
+             !"POSITION_CONFLICT".equals(code))) {
             return false;
         }
         motorEnabled = false;
@@ -158,9 +160,30 @@ public final class ConveyorControllerModelV1 {
         stateVersion++;
         String eventId = "M2-TRANSFER-" + stateVersion;
         faultPayload = "V2|" + eventId + "|" + sourceEpoch +
-            "|TRANSFER|" + code + "|WARNING|" +
+            "|TRANSFER|" + code + ("ARRIVAL_TIMEOUT".equals(code) ? "|WARNING|" : "|CRITICAL|") +
             active.getBottleId() + "|" + stateVersion;
         return true;
+    }
+
+    /** Independent sensor-health and occupancy evidence at the entry/P1 boundary. */
+    public boolean observeEntrySensors(boolean photoEyeHealthy, boolean p1Present,
+        boolean entryClear, String sourceEpoch) {
+        if (status != M2StatusV1.BUSY || active == null) return false;
+        if (!photoEyeHealthy) return injectFault("PHOTO_EYE_FAILURE", sourceEpoch);
+        if (p1Present && !entryClear) return injectFault("POSITION_CONFLICT", sourceEpoch);
+        return false;
+    }
+
+    public long recoverInjectedFault(String code, long expectedVersion) {
+        if (status != M2StatusV1.FAULT || active == null || motorEnabled ||
+            stateVersion != expectedVersion || !code.equals(faultCode) ||
+            (!"PHOTO_EYE_FAILURE".equals(code) && !"POSITION_CONFLICT".equals(code))) return -1L;
+        faultCode = null;
+        faultPayload = null;
+        status = M2StatusV1.READY;
+        contextPending = true;
+        stateVersion++;
+        return stateVersion;
     }
 
     public String takeFaultPayload() {

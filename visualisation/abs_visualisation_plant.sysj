@@ -24,12 +24,17 @@ ABSVisualisationPlant(
     input String signal VIZ_TWIN_SNAPSHOT;
     input String signal M4_FILLER_A_STATE;
     input String signal M4_FILLER_B_STATE;
+    input String signal M3_REDUNDANCY_VIEW;
     input String signal M4_CAPPER_STATE;
 )
 ->{
     ABSVisualisation.start();
     System.out.println("ABSVisualisationPlantCD started");
 
+    {loop {present(M3_REDUNDANCY_VIEW) {
+        ABSVisualisation.updateRedundancy(#M3_REDUNDANCY_VIEW);
+    } pause;}}
+    ||
     {loop {present(VIZ_LOADER_STATUS) {
         ABSVisualisation.updateStatus(
             "Bottle Loader", #VIZ_LOADER_STATUS

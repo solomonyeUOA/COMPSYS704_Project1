@@ -75,6 +75,7 @@ LidLoaderController(
                 Member3MachineStateV1.tickLidLoaderNow(false, false);
             }
         }
+        M3PickRecoveryV1.tick();
         pause;
     }}
     ||

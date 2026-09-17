@@ -33,6 +33,22 @@ public final class BottleUnloaderControllerModelV1 {
     private long stateVersion;
     private String faultCode;
     private String faultPayload;
+    private long departureDeadline = -1L;
+    private String departureEpoch;
+
+    public boolean armDepartureTimeout(long nowMillis, String epoch) {
+        if (status != M2StatusV1.BUSY || active == null || departureDeadline >= 0L) return false;
+        departureDeadline = nowMillis + SimulationTiming.scaleMillis(2000L);
+        departureEpoch = epoch;
+        return true;
+    }
+
+    public void tickDeparture(long nowMillis) {
+        if (departureDeadline >= 0L && nowMillis >= departureDeadline) {
+            departureDeadline = -1L;
+            injectFault("DEPARTURE_TIMEOUT", departureEpoch);
+        }
+    }
 
     public BottleUnloaderControllerModelV1() {
         this(500L);
@@ -58,9 +74,7 @@ public final class BottleUnloaderControllerModelV1 {
 
     public boolean injectFault(String code, String sourceEpoch) {
         if (status != M2StatusV1.BUSY || active == null ||
-            (!"DEPARTURE_TIMEOUT".equals(code) &&
-            !"PHOTO_EYE_FAILURE".equals(code) &&
-            !"POSITION_CONFLICT".equals(code))) {
+            !"DEPARTURE_TIMEOUT".equals(code)) {
             return false;
         }
         status = M2StatusV1.FAULT;
@@ -93,6 +107,8 @@ public final class BottleUnloaderControllerModelV1 {
         status = M2StatusV1.READY;
         faultCode = null;
         faultPayload = null;
+        departureDeadline = -1L;
+        departureEpoch = null;
         stateVersion++;
         return stateVersion;
     }
@@ -155,6 +171,7 @@ public final class BottleUnloaderControllerModelV1 {
 
     /** REMOVAL_CONFIRMED is bottleId|true and true means P6 is empty. */
     public boolean acceptRemovalConfirmed(String payload, long nowMillis) {
+        if (departureDeadline >= 0L) return false;
         String[] fields = payload == null ? new String[0] :
             payload.split("\\|", -1);
         if (fields.length != 2 || active == null ||

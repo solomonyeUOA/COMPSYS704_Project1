@@ -62,6 +62,7 @@ ConveyorController(
         M2MachineStateV1.tickConveyor(System.currentTimeMillis());
         String fault = M2MachineStateV1.takeConveyorFault();
         if (fault != null) {
+            M2TransferFaultAdapterStateV2_1.onLocalFault(fault);
             emit LOCAL_TRANSFER_FAULT(fault);
         }
 

@@ -67,9 +67,9 @@ public final class Member2Member3SelfTest {
             "M3 accepts retained M2 MARK_LABELLED");
         check(labelledOffer.nextReactionValue(601L) == null,
             "M2 returns MARK_LABELLED to ABSENT after the retry pulse");
-        check(!rotary.markLabelled(
+        check(rotary.markLabelled(
             labelledOffer.nextReactionValue(1200L)
-        ), "M3 does not apply a later label retry twice");
+        ), "M3 acknowledges a later label retry idempotently");
 
         BottleUnloaderControllerModelV1 unloader =
             new BottleUnloaderControllerModelV1(500L);
@@ -89,8 +89,10 @@ public final class Member2Member3SelfTest {
             "M3 accepts retained M2 P6_CLEAR");
         check(clearOffer.nextReactionValue(601L) == null,
             "M2 returns P6_CLEAR to ABSENT after the retry pulse");
-        check(!rotary.clearP6(clearOffer.nextReactionValue(1200L)),
-            "M3 does not clear P6 twice for a later retry");
+        check(rotary.clearP6(clearOffer.nextReactionValue(1200L)),
+            "M3 acknowledges a later P6 clear retry idempotently");
+        check(rotary.getBottleAt(5) == null,
+            "M3 does not recreate or clear another bottle on retry");
         check(contextPayload.equals(unloader.takeSortContext()),
             "M2 preserves context for M4 SortPack");
         check(unloader.isBottleDonePresent(5000L),

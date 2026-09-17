@@ -57,6 +57,11 @@ import javax.swing.table.DefaultTableModel;
  * mechanism positions and the fallback animation are schematic, not measured.
  */
 public final class ABSVisualisation {
+    private static final M1RedundancyView REDUNDANCY = new M1RedundancyView();
+    public static void updateRedundancy(String payload) {
+        if (REDUNDANCY.accept(payload, System.currentTimeMillis()) && TRACE_ENABLED)
+            System.out.println("[M1-REDUNDANCY] " + payload);
+    }
     private static final int LOADER = 0;
     private static final int CONVEYOR = 1;
     private static final int ROTARY = 2;
@@ -2806,7 +2811,7 @@ public final class ABSVisualisation {
     static final class ProductionLinePanel extends JPanel {
         private static final long serialVersionUID = 1L;
         private static final int DESIGN_WIDTH = 1360;
-        private static final int DESIGN_HEIGHT = 420;
+        private static final int DESIGN_HEIGHT = 528;
         private static final Rectangle[] MODULE_HIT_REGIONS = {
             new Rectangle(20, 142, 116, 164),
             new Rectangle(153, 160, 104, 128),
@@ -3034,6 +3039,8 @@ public final class ABSVisualisation {
             drawLabeller(g2, 870, 142, 126, 164, statuses, received);
             drawUnloader(g2, 1016, 142, 146, 164, statuses, received);
             drawSortPack(g2, 1182, 142, 156, 164, statuses, received);
+            REDUNDANCY.outline(g2, 275, 105, 158, 248, 0, 3);
+            REDUNDANCY.outline(g2, 607, 142, 112, 182, 1, 2);
 
             g2.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 12));
             g2.setColor(new Color(78, 86, 98));
@@ -3043,6 +3050,7 @@ public final class ABSVisualisation {
                 DESIGN_WIDTH / 2,
                 400
             );
+            REDUNDANCY.draw(g2, 416, DESIGN_WIDTH);
         }
 
         private void drawFlowRibbon(Graphics2D g2) {

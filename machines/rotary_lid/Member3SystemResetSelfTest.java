@@ -115,8 +115,9 @@ public final class Member3SystemResetSelfTest {
         require(!Member3PlantStateV1.loadBottle("RST-PLANT"),
             "reset retires in-flight bottle identity");
         require(Member3PlantStateV1.pendingLoadCount() == 0 &&
-            !Member3PlantStateV1.acceptLoadRequest("RST-QUEUED"),
-            "reset clears and retires queued bottle identities");
+            Member3PlantStateV1.acceptLoadRequest("RST-QUEUED") &&
+            Member3PlantStateV1.pendingLoadCount() == 0,
+            "reset absorbs retired queued retries without reloading them");
     }
 
     private static void testResetBarrierAndQuarantine() throws Exception {

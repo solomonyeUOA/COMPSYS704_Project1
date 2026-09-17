@@ -9,6 +9,7 @@
             <iSignal Name="VIZ_RECIPE" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="11008" />
             <iSignal Name="M4_FILLER_A_STATE" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="11008" />
             <iSignal Name="M4_FILLER_B_STATE" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="11008" />
+            <iSignal Name="M3_REDUNDANCY_VIEW" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="11008" />
             <iSignal Name="M4_CAPPER_STATE" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="11008" />
             <iSignal Name="VIZ_LOADER_STATUS"
                      Class="com.systemj.ipc.SimpleServer"

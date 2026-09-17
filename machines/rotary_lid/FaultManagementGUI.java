@@ -128,18 +128,12 @@ public final class FaultManagementGUI {
             new FaultMonitoringViewV2_1();
         private final JTextArea details = readOnlyArea(true);
         private final JTextArea history = readOnlyArea(true);
+        private final JTextArea driveStatus = readOnlyArea(true);
+        private final JTextArea supervisorDrives = readOnlyArea(false);
         private final JTabbedPane tabs = new JTabbedPane();
-        private final JComboBox<String> faults = new JComboBox<String>(new String[] {
-            "ALIGNMENT_TIMEOUT", "MOTOR_STALL", "POSITION_SENSOR_FAILURE",
-            "MAGAZINE_EMPTY", "PICK_TIMEOUT", "PLACEMENT_TIMEOUT",
-            "LID_SENSOR_FAULT", "ARRIVAL_TIMEOUT", "DEPARTURE_TIMEOUT",
-            "PHOTO_EYE_FAILURE", "POSITION_CONFLICT"
-        });
+        private final JComboBox<String> faults = new JComboBox<String>(FaultInjectionCatalogV1.codes());
         private final JButton inject = new JButton("Arm fault for next order");
-        private final JButton safeStop = new JButton("Confirm safe stop");
-        private final JButton controllerEvidence = new JButton("Submit controller evidence");
-        private final JButton manualEvidence = new JButton("Record reconciliation");
-        private final JButton resume = new JButton("Approve resume through M1");
+        private final JButton cancelInjection = new JButton("Cancel pending injection");
         private final JButton reset = new JButton("Reset");
         private final JButton language = new JButton("中文");
         private final JLabel testNote = new JLabel();
@@ -151,6 +145,10 @@ public final class FaultManagementGUI {
         private String actionFeedback = "";
         private boolean actionFailed;
         private long lastWatchdogNotificationSequence;
+        private long lastDriveNotificationSequence = DriveEventsV1.notificationSequence();
+        private JDialog driveNotificationDialog;
+        private final JTextArea driveNotificationText = readOnlyArea(false);
+        private final java.util.ArrayDeque<String> driveNotices = new java.util.ArrayDeque<String>();
         private String lastEventId = "-";
         private String lastSupervisorState = "IDLE";
         private long lastCompletedRecoverySequence;
@@ -163,6 +161,28 @@ public final class FaultManagementGUI {
             setMinimumSize(new Dimension(820, 580));
             setSize(new Dimension(1120, 720));
             setLocationRelativeTo(null);
+            faults.setRenderer(new javax.swing.DefaultListCellRenderer() {
+                public Component getListCellRendererComponent(javax.swing.JList<?> list,
+                    Object value, int index, boolean selected, boolean focused) {
+                    super.getListCellRendererComponent(list, value, index, selected, focused);
+                    String code = String.valueOf(value);
+                    if ("ROTARY_DRIVE_FAILURE".equals(code))
+                        setText(code + t(" - Rotary active motor / automatic standby", " - 转盘当前电机故障 / 自动切换备用"));
+                    else if ("PICK_DRIVE_FAILURE".equals(code))
+                        setText(code + t(" - Lid pick active drive / automatic standby", " - 取盖当前驱动故障 / 自动切换备用"));
+                    else if ("PLACE_DRIVE_FAILURE".equals(code))
+                        setText(code + t(" - Lid place active drive / automatic standby", " - 放盖当前驱动故障 / 自动切换备用"));
+                    else if ("ROTARY_FEEDBACK_FAILURE".equals(code))
+                        setText(code + t(" - Rotary active position channel / automatic standby", " - 转盘当前位置反馈故障 / 自动切换备用"));
+                    else if ("ROTARY_BACKUP_FAILURE".equals(code))
+                        setText(code + t(" - BOTH drives fail / expected SAFE STOP", " - 主备同时故障 / 预期安全停机"));
+                    else if ("PICK_TIMEOUT".equals(code))
+                        setText(code + t(" - One bounded retry if safe", " - 安全条件满足时有限重试一次"));
+                    else if (code.endsWith("CONTROLLER_FAILURE"))
+                        setText(code + t(" - Checkpoint takeover", " - 检查点接管"));
+                    return this;
+                }
+            });
             mode.setFocusPainted(false);
             mode.setOpaque(true);
             mode.setBorder(BorderFactory.createEmptyBorder(5, 10, 5, 10));
@@ -263,6 +283,12 @@ public final class FaultManagementGUI {
             c.gridwidth = 4;
             c.weightx = 1;
             panel.add(field("Last control action", scroll(feedback)), c);
+            c.gridy = 5;
+            supervisorDrives.setRows(4);
+            JScrollPane driveSummaryScroll = scroll(supervisorDrives);
+            driveSummaryScroll.setPreferredSize(new Dimension(200,
+                supervisorDrives.getFontMetrics(supervisorDrives.getFont()).getHeight() * 4 + 16));
+            panel.add(field("M3 drive redundancy / Local failover", driveSummaryScroll), c);
             return panel;
         }
 
@@ -271,7 +297,15 @@ public final class FaultManagementGUI {
             tabs.addTab("Fault details", buildDetailsTab());
             tabs.addTab("Event log", scroll(history));
             tabs.addTab("Test controls", buildTestTab());
+            tabs.addTab("M3 redundant drives", buildDriveTab());
             return tabs;
+        }
+
+        private JPanel buildDriveTab() {
+            JPanel panel = new JPanel(new BorderLayout(8, 8));
+            panel.setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
+            panel.add(scroll(driveStatus), BorderLayout.CENTER);
+            return panel;
         }
 
         private JPanel buildDetailsTab() {
@@ -314,13 +348,12 @@ public final class FaultManagementGUI {
             content.setBorder(BorderFactory.createEmptyBorder(12, 12, 12, 12));
             JPanel selection = new JPanel(new BorderLayout(8, 0));
             selection.add(faults, BorderLayout.CENTER);
-            selection.add(inject, BorderLayout.EAST);
+            JPanel injectionActions = new JPanel(new GridLayout(1, 2, 8, 0));
+            injectionActions.add(inject);
+            injectionActions.add(cancelInjection);
+            selection.add(injectionActions, BorderLayout.EAST);
             content.add(selection, BorderLayout.NORTH);
             JPanel actions = new JPanel(new GridLayout(2, 2, 8, 8));
-            actions.add(safeStop);
-            actions.add(controllerEvidence);
-            actions.add(manualEvidence);
-            actions.add(resume);
             content.add(actions, BorderLayout.CENTER);
             testNote.setForeground(MUTED);
             content.add(testNote, BorderLayout.SOUTH);
@@ -329,10 +362,7 @@ public final class FaultManagementGUI {
 
         private void wireActions() {
             inject.addActionListener(event -> runAction("inject"));
-            safeStop.addActionListener(event -> runAction("safe-stop"));
-            controllerEvidence.addActionListener(event -> runAction("controller-evidence"));
-            manualEvidence.addActionListener(event -> runAction("manual-evidence"));
-            resume.addActionListener(event -> runAction("resume"));
+            cancelInjection.addActionListener(event -> runAction("cancel-injection"));
             reset.addActionListener(event -> runAction("reset"));
             watchdogMode.addActionListener(event -> {
                 SystemWatchdogV1.setActive(watchdogMode.isSelected());
@@ -361,6 +391,7 @@ public final class FaultManagementGUI {
             if (actionRunning) {
                 return;
             }
+            final String selectedFault = String.valueOf(faults.getSelectedItem());
             actionRunning = true;
             actionFailed = false;
             runningAction = actionName(action);
@@ -372,7 +403,7 @@ public final class FaultManagementGUI {
                 protected Boolean doInBackground() {
                     try {
                         return Boolean.valueOf(FaultGuiActionsV2_1.perform(
-                            action, String.valueOf(faults.getSelectedItem())
+                            action, selectedFault
                         ));
                     }
                     catch (RuntimeException exception) {
@@ -396,22 +427,8 @@ public final class FaultManagementGUI {
                     }
                     actionRunning = false;
                     actionFailed = !accepted;
-                    if (accepted && "resume".equals(action) &&
-                        automaticRecoveryVerified) {
-                        actionFeedback = automaticRecoverySummary + t(
-                            ". M1 approved resume; system resumed normally.",
-                            "。M1 已批准恢复，系统已正常继续运行。"
-                        );
-                    }
-                    else {
-                        actionFeedback = accepted ?
-                            t("Completed: ", "已完成：") + runningAction :
-                            value(error, t("Rejected in the current state", "当前状态拒绝该操作"));
-                    }
-                    if (accepted && "reset".equals(action)) {
-                        automaticRecoveryVerified = false;
-                        automaticRecoverySummary = "";
-                    }
+                    actionFeedback = accepted ? t("Completed: ", "已完成：") + runningAction :
+                        value(error, t("Rejected in the current state", "当前状态拒绝该操作"));
                     runningAction = "";
                     refresh();
                 }
@@ -419,11 +436,26 @@ public final class FaultManagementGUI {
         }
 
         private void refresh() {
+            driveStatus.setText(Member3MachineStateV1.controllerRedundancySnapshot() + "\n\n" + Member3PlantStateV1.driveSnapshot());
             FaultMonitoringStateV2_1.heartbeat(
                 FaultMonitoringStateV2_1.GUI_WORKER, true, "Swing refresh worker"
             );
             FaultMonitoringStateV2_1.Snapshot snapshot =
                 FaultMonitoringStateV2_1.snapshot();
+            StringBuilder driveSummary = new StringBuilder();
+            boolean driveFault = false;
+            boolean driveDegraded = false;
+            for (FaultMonitoringStateV2_1.ComponentSnapshot component : snapshot.components) {
+                if (!"LOCAL DRIVE STATE".equals(component.heartbeat) &&
+                    !"LOCAL FEEDBACK STATE".equals(component.heartbeat)) continue;
+                if (driveSummary.length() > 0) driveSummary.append('\n');
+                driveSummary.append(component.name).append(" | ").append(component.detail);
+                driveFault |= "SAFE_ERROR".equals(component.state);
+                driveDegraded |= !"AVAILABLE".equals(component.state);
+            }
+            supervisorDrives.setText(Member3MachineStateV1.controllerRedundancySnapshot() + "\n" + driveSummary.toString());
+            supervisorDrives.setForeground(driveFault ? RED : driveDegraded ? AMBER : GREEN);
+            supervisorDrives.setCaretPosition(0);
             synchroniseActionFeedback(snapshot);
             String viewState = "RESETTING".equals(snapshot.systemHealth) ?
                 t("RESETTING", "重置中") : displayState(snapshot.supervisorState);
@@ -436,11 +468,11 @@ public final class FaultManagementGUI {
             workingStatus.setBackground(statusColor(snapshot.supervisorState));
             backendState.setText(snapshot.supervisorState);
             watchdogStatus.setText(snapshot.watchdogActive ?
-                (snapshot.watchdogManualInterventionRequired ?
+                (snapshot.watchdogSafeError ?
                     "ON / SAFE_ERROR" : "ON / ACTIVE") :
                 "OFF / DISABLED");
             watchdogStatus.setBackground(
-                snapshot.watchdogManualInterventionRequired ? RED :
+                snapshot.watchdogSafeError ? RED :
                     snapshot.watchdogActive ? GREEN : MUTED
             );
             watchdogFault.setText(snapshot.watchdogFaultComponent);
@@ -461,6 +493,31 @@ public final class FaultManagementGUI {
             history.setText(historyText());
             updateButtons(snapshot);
             showWatchdogNotification(snapshot);
+            showDriveNotifications();
+        }
+
+        private void showDriveNotifications() {
+            DriveEventsV1.Notification[] pending =
+                DriveEventsV1.notificationsAfter(lastDriveNotificationSequence);
+            if (pending.length == 0) return;
+            for (DriveEventsV1.Notification notification : pending) {
+                lastDriveNotificationSequence = notification.sequence;
+                if (driveNotices.size() == 20) driveNotices.removeFirst();
+                driveNotices.addLast(notification.message);
+                actionFeedback = notification.module + " / " + notification.action;
+            }
+            driveNotificationText.setText(String.join("\n\n", driveNotices));
+            driveNotificationText.setCaretPosition(driveNotificationText.getDocument().getLength());
+            if (driveNotificationDialog == null || !driveNotificationDialog.isDisplayable()) {
+                JScrollPane messages = new JScrollPane(driveNotificationText);
+                messages.setPreferredSize(new Dimension(600, 240));
+                JOptionPane pane = new JOptionPane(messages, JOptionPane.INFORMATION_MESSAGE);
+                driveNotificationDialog = pane.createDialog(this,
+                    t("M3 Automatic Failover", "M3 自动切换通知"));
+                // Notifications must never block controller progress or recovery buttons.
+                driveNotificationDialog.setModal(false);
+            }
+            driveNotificationDialog.setVisible(true);
         }
 
         private void synchroniseActionFeedback(
@@ -477,8 +534,8 @@ public final class FaultManagementGUI {
                 automaticRecoverySummary = "";
                 actionFailed = false;
                 actionFeedback = t(
-                    "Fault detected; follow the enabled recovery steps.",
-                    "已检测到故障；请按已启用的恢复步骤操作。"
+                    "Fault detected; automatic recovery or safe hold.",
+                    "已检测到故障；自动恢复或保持安全停止。"
                 );
             }
             if ("RECOVERY_READY".equals(snapshot.supervisorState) &&
@@ -645,12 +702,10 @@ public final class FaultManagementGUI {
             inject.setEnabled(!actionRunning && testMode &&
                 "-".equals(FaultInjectionStateV2_1.armedFault()) &&
                 FaultGuiPolicyV2_1.canInject(state));
-            safeStop.setEnabled(!actionRunning && testMode && FaultGuiPolicyV2_1.canConfirmSafeStop(state));
-            controllerEvidence.setEnabled(!actionRunning && testMode &&
-                FaultGuiPolicyV2_1.canReturnControllerEvidence(state, snapshot.decision));
-            manualEvidence.setEnabled(!actionRunning && testMode &&
-                FaultGuiPolicyV2_1.canRecordManualEvidence(state));
-            resume.setEnabled(!actionRunning && testMode && FaultGuiPolicyV2_1.canResume(state));
+            cancelInjection.setEnabled(!actionRunning && testMode &&
+                !"-".equals(FaultInjectionStateV2_1.armedFault()) &&
+                !FaultInjectionStateV2_1.cancellationPending() &&
+                "IDLE".equals(state));
             reset.setEnabled(!actionRunning);
             language.setEnabled(!actionRunning);
             faults.setEnabled(inject.isEnabled());
@@ -663,6 +718,12 @@ public final class FaultManagementGUI {
             }
             else if (!"-".equals(armed)) {
                 testNote.setText(
+                    !"-".equals(FaultInjectionStateV2_1.transferDeliveryError()) ?
+                        t("Fault injection transport: ", "故障注入传输：") +
+                            FaultInjectionStateV2_1.transferDeliveryError() :
+                    FaultInjectionStateV2_1.cancellationPending() ?
+                        t("Cancelling the pending M2 fault injection.",
+                            "正在取消 M2 中待触发的故障注入。") :
                     !FaultInjectionStateV2_1.hasTransferRequest() ?
                         t("Fault armed for the next matching machine stage.",
                             "故障已布置，正在等待下一次匹配的机器工序。") :
@@ -688,8 +749,8 @@ public final class FaultManagementGUI {
             }
             else {
                 testNote.setText(t(
-                    "Follow the enabled recovery control; each step updates the real supervisor and M1 state.",
-                    "按当前启用的恢复按钮操作；每一步都会更新真实 Supervisor 与 M1 状态。"
+                    "Unattended recovery: verified automatic recovery or safe hold.",
+                    "无人恢复：自动恢复验证通过后继续，否则保持安全停止。"
                 ));
             }
         }
@@ -708,8 +769,8 @@ public final class FaultManagementGUI {
                 line("Watchdog recovery attempt",
                     snapshot.watchdogRecoveryAttempt + " / " +
                         SystemWatchdogV1.MAX_AUTOMATIC_RESETS) +
-                line("Manual intervention required",
-                    String.valueOf(snapshot.watchdogManualInterventionRequired)) +
+                line("Safe stop required",
+                    String.valueOf(snapshot.watchdogSafeError)) +
                 line("Watchdog reset count", String.valueOf(snapshot.watchdogResetCount)) +
                 line("Last reset", formatTimestamp(snapshot.watchdogLastResetMs)) +
                 line("Last fault", formatTimestamp(snapshot.watchdogLastFaultMs)) +
@@ -763,10 +824,13 @@ public final class FaultManagementGUI {
         private String historyText() {
             String[] events = FaultSupervisorStateV2_1.historySnapshot();
             String[] watchdogEvents = SystemWatchdogV1.historySnapshot();
-            if (events.length == 0 && watchdogEvents.length == 0) {
+            String[] driveEvents = DriveEventsV1.snapshot();
+            if (events.length == 0 && watchdogEvents.length == 0 && driveEvents.length == 0) {
                 return t("No protocol events recorded.", "尚无协议事件。");
             }
             StringBuilder text = new StringBuilder();
+            for (int index = driveEvents.length - 1; index >= 0; index--)
+                text.append("[M3-DRIVE] ").append(driveEvents[index]).append('\n');
             for (int index = watchdogEvents.length - 1; index >= 0; index--) {
                 text.append("[WATCHDOG] ").append(watchdogEvents[index])
                     .append('\n');
@@ -807,12 +871,12 @@ public final class FaultManagementGUI {
             if ("WAITING_SAFE_STOP".equals(state)) return t("Isolating fault and awaiting M1 safe stop", "隔离故障并等待 M1 安全停机");
             if ("WAITING_ACK".equals(state)) return t("Sending bounded recovery request", "发送有限次数恢复请求");
             if ("WAITING_RESULT".equals(state)) return t("Controller recovery in progress", "控制器正在恢复");
-            if ("RESOURCE_WAIT".equals(state)) return t("Waiting for resource replenishment", "等待资源补充");
-            if ("MANUAL_RECOVERY".equals(state) || "LOCKED_OUT".equals(state)) return t("Fault isolated; manual reconciliation required", "故障已隔离，需要人工核对");
+            if ("RESOURCE_WAIT".equals(state)) return t("No automatic replenishment path", "未接入自动补料路径");
+            if ("MANUAL_RECOVERY".equals(state) || "LOCKED_OUT".equals(state)) return t("Safe hold; no verified automatic recovery", "安全保持：没有已验证的自动恢复路径");
             if ("RECOVERY_READY".equals(state)) return
                 FaultMonitoringPresentationV2_1.isAutomaticRecovery(snapshot) ?
-                    t("Automatic recovery verified; waiting only for M1 approval",
-                        "自动恢复已验证；当前仅等待 M1 批准") :
+                    t("Action verified; waiting for automatic M1 Resume",
+                        "动作已验证；等待 M1 自动恢复放行") :
                     t("Evidence verified; waiting for M1", "证据已验证，等待 M1");
             if ("FAILED".equals(state)) return t("Recovery failed", "恢复失败");
             return t("Monitoring M3 runtime and controller events", "监控 M3 运行状态与控制器事件");
@@ -853,15 +917,17 @@ public final class FaultManagementGUI {
             }
             String source = "-".equals(snapshot.subsystem) ? "" :
                 snapshot.subsystem + " / " + snapshot.faultCode + ": ";
+            if ("LID".equals(snapshot.subsystem) && "PICK_TIMEOUT".equals(snapshot.faultCode))
+                return source + M3PickRecoveryV1.status();
             if ("WAITING_SAFE_STOP".equals(state)) return source + t("fault detected and isolated; waiting for M1 safe-stop confirmation.", "检测并隔离故障，等待 M1 确认安全停机。");
             if ("WAITING_ACK".equals(state)) return source + t("waiting for controller acknowledgement.", "等待控制器确认恢复请求。");
             if ("WAITING_RESULT".equals(state)) return source + t("recovering; waiting for newer controller evidence.", "正在恢复，等待控制器返回更新证据。");
-            if ("RESOURCE_WAIT".equals(state)) return source + t("replenish the resource and submit controller evidence.", "补充资源并提交控制器证据。");
+            if ("RESOURCE_WAIT".equals(state)) return source + t("safe hold: automatic replenishment is not connected.", "安全保持：未接入自动补料执行路径。");
             if ("LOCKED_OUT".equals(state) &&
                 "TRANSFER".equals(snapshot.subsystem)) {
                 return source + t(
-                    "record reconciliation, then submit controller evidence to recover the isolated transfer.",
-                    "先记录人工核对，再提交控制器证据以恢复被隔离的传输设备。");
+                    "safe hold: no verified automatic recovery path.",
+                    "安全保持：没有已验证的自动恢复路径。");
             }
             if ("LOCKED_OUT".equals(state)) return source + t("automatic recovery stopped. " + snapshot.decision, "自动恢复已停止。" + snapshot.decision);
             if ("RECOVERY_READY".equals(state) &&
@@ -913,6 +979,7 @@ public final class FaultManagementGUI {
             if ("controller-evidence".equals(action)) return t("Submit controller evidence", "提交控制器证据");
             if ("manual-evidence".equals(action)) return t("Record reconciliation", "记录人工核对");
             if ("resume".equals(action)) return t("Approve resume through M1", "通过 M1 批准恢复");
+            if ("cancel-injection".equals(action)) return t("Cancel pending injection", "取消待触发故障");
             return t("Reset", "重置");
         }
 
@@ -922,16 +989,14 @@ public final class FaultManagementGUI {
                 t("WATCHDOG ON", "看门狗 开") :
                 t("WATCHDOG OFF", "看门狗 关"));
             language.setText(chinese ? "EN" : "中文");
-            reset.setText(t("Reset", "重置"));
             inject.setText(t("Arm fault for next order", "为下一订单布置故障"));
-            safeStop.setText(t("Confirm safe stop", "确认安全停机"));
-            controllerEvidence.setText(t("Submit controller evidence", "提交控制器证据"));
-            manualEvidence.setText(t("Record reconciliation", "记录人工核对"));
-            resume.setText(t("Approve resume through M1", "通过 M1 批准恢复"));
+            cancelInjection.setText(t("Cancel pending injection", "取消待触发故障"));
+            reset.setText(t("Reset", "重置"));
             tabs.setTitleAt(0, t("Dynamic monitoring", "动态监控"));
             tabs.setTitleAt(1, t("Fault details", "故障详情"));
             tabs.setTitleAt(2, t("Event log", "事件日志"));
             tabs.setTitleAt(3, t("Test controls", "测试控制"));
+            tabs.setTitleAt(4, t("M3 redundant drives", "M3 主备驱动"));
         }
 
         private String t(String english, String chineseText) {

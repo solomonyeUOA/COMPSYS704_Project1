@@ -8,8 +8,8 @@ public final class Member2FaultInjectionIntegrationSelfTest {
     public static void main(String[] args) {
         verifyArrivalTimeout();
         verifyUnloaderFault("DEPARTURE_TIMEOUT", 2);
-        verifyUnloaderFault("PHOTO_EYE_FAILURE", 3);
-        verifyUnloaderFault("POSITION_CONFLICT", 4);
+        verifyEntryFault("PHOTO_EYE_FAILURE", 3);
+        verifyEntryFault("POSITION_CONFLICT", 4);
         System.out.println(
             "Member2FaultInjectionIntegrationSelfTest PASSED (4 faults)"
         );
@@ -44,6 +44,9 @@ public final class Member2FaultInjectionIntegrationSelfTest {
             "accept unload-ready evidence");
         require(M2MachineStateV1.takeUnloadCommand() == null,
             faultCode + " suppresses physical unload command");
+        require(M2MachineStateV1.getUnloaderStatus() == M2StatusV1.BUSY,
+            "departure remains BUSY before deadline");
+        M2MachineStateV1.tickUnloaderFault(System.currentTimeMillis() + SimulationTiming.scaleMillis(2001L));
         require(M2MachineStateV1.getUnloaderStatus() == M2StatusV1.FAULT,
             faultCode + " faults real unloader");
         String event = M2MachineStateV1.takeUnloaderFault();
@@ -61,6 +64,26 @@ public final class Member2FaultInjectionIntegrationSelfTest {
         ), faultCode + " returns real controller evidence");
         require(M2MachineStateV1.nextUnloadCommandOffer() != null,
             faultCode + " retries the interrupted unload command");
+    }
+
+    private static void verifyEntryFault(String faultCode, int sequence) {
+        M2MachineStateV1.reset();
+        M2TransferFaultAdapterStateV2_1.reset();
+        require(M2TransferFaultAdapterStateV2_1.armTestFault("GUI-" + sequence + "|" + faultCode), "arm entry fault");
+        require(M2MachineStateV1.offerConveyorBottle(PROFILE), "entry bottle");
+        M2MachineStateV1.nextConveyorTransferOffer();
+        require(M2MachineStateV1.getConveyorStatus() == M2StatusV1.FAULT, "entry fault location");
+        require(M2MachineStateV1.getUnloaderStatus() == M2StatusV1.READY, "unloader unaffected");
+        require(!M2MachineStateV1.isConveyorMotorEnabled(), "entry motor stopped");
+        require(!M2MachineStateV1.acceptP1Feedback("TEST-M2-B001|true|true|true|true|true"), "fault blocks P1 handoff");
+        String event = M2MachineStateV1.takeConveyorFault();
+        verifyEvent(event, faultCode);
+        String[] f = event.split("\\|", -1);
+        require(M2TransferFaultAdapterStateV2_1.recoverTestFault("V2|" + f[1] + "|" + f[2] + "|" + faultCode + "|MANUAL_RECOVER|" + f[7]), "entry manual recovery");
+        M2MachineStateV1.acknowledgeConveyorTransfer("TEST-M2-B001");
+        require(M2MachineStateV1.nextConveyorTransferOffer() != null, "retry interrupted entry transfer");
+        require(M2MachineStateV1.acceptP1Feedback("TEST-M2-B001|true|true|true|true|true"), "fresh P1 evidence accepted");
+        require(M2MachineStateV1.nextLoadBottleOffer() != null, "recovered bottle reaches P1");
     }
 
     private static void verifyEvent(String event, String faultCode) {

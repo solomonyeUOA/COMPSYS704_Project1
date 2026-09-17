@@ -21,6 +21,7 @@ RotaryTablePlant(
     output String signal BOTTLE_AT_CAP;
     output String signal BOTTLE_AT_LABEL;
     output String signal M3_WORKPIECE_OBSERVATION;
+    output String signal M3_REDUNDANCY_VIEW;
 )
 ->{
     Member3Visualisation.start();
@@ -100,6 +101,8 @@ RotaryTablePlant(
             }
         }
         Member3PlantStateV1.updateRotary();
+        String redundancyView = Member3PlantStateV1.nextRedundancyTelemetry();
+        if (redundancyView != null) { emit M3_REDUNDANCY_VIEW(redundancyView); }
         pause;
     }}
     ||

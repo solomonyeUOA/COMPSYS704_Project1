@@ -92,21 +92,12 @@ public final class FaultSupervisorSelfTest {
             "E2", "A", "motor_off+occupancy_consistent",
             "location_confirmed", 7),
             "controller evidence cannot replace operator reconciliation");
-        require(model.recordManualEvidence(
-            new ManualReconciliationEvidenceV2_1(
-                "E2", "A", "TRANSFER", "B001", 6,
-                "operator-1", "BOTTLE_LOCATION_RECONCILED"
-            )), "manual evidence recorded");
-        require(model.getState() ==
-            FaultSupervisorModelV2_1.State.LOCKED_OUT,
-            "manual evidence alone does not unlock recovery");
-        require(model.confirmManualControllerEvidence(
-            "E2", "A", "motor_off+occupancy_consistent",
-            "location_confirmed", 7),
-            "newer independent Controller evidence is accepted");
-        require(model.getState() ==
-            FaultSupervisorModelV2_1.State.RECOVERY_READY,
-            "manual path still waits for M1 resume");
+
+        require(!model.recordManualEvidence(new ManualReconciliationEvidenceV2_1(
+            "E2", "A", "TRANSFER", "B001", 6, "operator", "BOTTLE_LOCATION_RECONCILED")),
+            "operator evidence is disabled");
+        require(model.getState() == FaultSupervisorModelV2_1.State.LOCKED_OUT &&
+            model.takeRecoveryReady() == null, "uncertain position stays held");
     }
 
     private static void testResourceWait() {
@@ -467,22 +458,14 @@ public final class FaultSupervisorSelfTest {
     }
 
     private static void testGuiEnablementRules() {
-        require(FaultGuiPolicyV2_1.canInject("IDLE"),
-            "fault injection is test-idle only");
-        require(!FaultGuiPolicyV2_1.canResume("WAITING_RESULT"),
-            "GUI cannot expose early resume");
-        require(FaultGuiPolicyV2_1.canConfirmSafeStop(
-            "WAITING_SAFE_STOP"), "safe-stop control follows policy state");
-        require(FaultGuiPolicyV2_1.canRecordManualEvidence("LOCKED_OUT"),
-            "manual evidence is available only after lockout");
-        require(!FaultGuiPolicyV2_1.canReturnControllerEvidence(
-            "LOCKED_OUT", "MANUAL_RECONCILIATION_REQUIRED"),
-            "controller evidence remains blocked before manual evidence");
-        require(FaultGuiPolicyV2_1.canReturnControllerEvidence(
-            "LOCKED_OUT", "AWAIT_NEWER_CONTROLLER_EVIDENCE"),
-            "newer Controller evidence is enabled after reconciliation");
-        require(FaultGuiPolicyV2_1.canResume("RECOVERY_READY"),
-            "resume appears only after verified readiness");
+        require(FaultGuiPolicyV2_1.canInject("IDLE"), "test injection remains available");
+        for (String state : new String[] {"WAITING_SAFE_STOP", "LOCKED_OUT", "RECOVERY_READY", "RESOURCE_WAIT"}) {
+            require(!FaultGuiPolicyV2_1.canConfirmSafeStop(state), "no operator safe-stop confirmation");
+            require(!FaultGuiPolicyV2_1.canResume(state), "no operator resume");
+            require(!FaultGuiPolicyV2_1.canRecordManualEvidence(state), "no reconciliation control");
+            require(!FaultGuiPolicyV2_1.canReturnControllerEvidence(state, "AWAIT_NEWER_CONTROLLER_EVIDENCE"),
+                "no fabricated evidence control");
+        }
     }
 
     private static void testGuiHotModeSwitch() {
@@ -526,18 +509,13 @@ public final class FaultSupervisorSelfTest {
         require(Member3PlantStateV1.getLidMagazineCount() == capacity - 1,
             "Plant inventory is below capacity before recovery");
 
-        require(FaultGuiActionsV2_1.perform("controller-evidence", null),
-            "resource evidence refills the real Plant and clears the fault");
-        require(Member3PlantStateV1.getLidMagazineCount() == capacity &&
-            Member3PlantStateV1.isLidAvailable(),
-            "resource recovery restores actual magazine availability");
-        require("RECOVERY_READY".equals(FaultSupervisorStateV2_1.stateName()),
-            "resource recovery waits for M1 resume approval");
 
+        require(!FaultGuiActionsV2_1.perform("controller-evidence", null), "GUI cannot create resources");
+        require(Member3PlantStateV1.getLidMagazineCount() == capacity - 1, "inventory unchanged");
+        require("RESOURCE_WAIT".equals(FaultSupervisorStateV2_1.stateName()), "no false recovery");
         FaultGuiActionsV2_1.setTestMode(false);
         Member3PlantStateV1.reset();
         Member3MachineStateV1.reset();
-        FaultSupervisorStateV2_1.reset();
     }
 
     private static void testGuiM1RecoveryRoundTrip() {
@@ -560,69 +538,15 @@ public final class FaultSupervisorSelfTest {
             FaultSupervisorStateV2_1.takeSafeStopRequest()
         ), "M1 establishes the fault hold");
 
-        require(FaultGuiActionsV2_1.perform("safe-stop", null),
-            "safe-stop button queues a real M1 request");
-        String safeStopAck = CoordinatorStateV1.acceptFtTestControl(
-            FaultTestControlStateV2_1.nextRequest()
-        );
-        require(safeStopAck != null &&
-            FaultSupervisorStateV2_1.onSafeStopAck(safeStopAck),
-            "M1 safe-stop acknowledgement returns to M3");
-        require("LOCKED_OUT".equals(FaultSupervisorStateV2_1.stateName()),
-            "critical lid fault remains locked until evidence exists");
 
-        require(FaultGuiActionsV2_1.perform("manual-evidence", null),
-            "operator reconciliation is recorded");
-        require(FaultGuiActionsV2_1.perform("controller-evidence", null),
-            "controller evidence completes recovery verification");
-        require("RECOVERY_READY".equals(
-            FaultSupervisorStateV2_1.stateName()),
-            "verified recovery waits for M1 resume");
-        require(CoordinatorStateV1.recordFtRecoveryReady(
-            FaultSupervisorStateV2_1.takeRecoveryReady()
-        ), "M1 records recovery-ready evidence");
-        require(CoordinatorStateV1.takeFtAutomaticResumeDecision() == null,
-            "critical manual recovery cannot receive automatic M1 resume");
-        require(FaultTestControlStateV2_1.nextRequest() == null,
-            "controller evidence does not queue an implicit resume request");
-        require(!FaultSupervisorStateV2_1.onResumeDecision(
-            "V2|GUI-RECOVERY-1|M3-E01|RESUME|UNSOLICITED|2"
-        ), "test-mode supervisor rejects resume without GUI approval");
-        require("RECOVERY_READY".equals(
-            FaultSupervisorStateV2_1.stateName()),
-            "unsolicited resume cannot clear recovery-ready state");
-        require(CoordinatorStateV1.ftCoordinationHold,
-            "M1 hold remains before explicit GUI approval");
-        require(!Member3MachineStateV1.requestRotation(true),
-            "M3 cannot start another rotary cycle before GUI approval");
-        require(!Member3MachineStateV1.requestLidLoad("HOLD-B001", true),
-            "M3 cannot start another lid cycle before GUI approval");
-        require(Member3PlantStateV1.acceptLoadRequest("HOLD-B001"),
-            "one-reaction load is retained while recovery is held");
-        require(Member3PlantStateV1.pendingLoadCount() == 1 &&
-            !Member3PlantStateV1.drainPendingLoad(),
-            "held load remains queued until explicit GUI approval");
-
-        require(FaultGuiActionsV2_1.perform("resume", null),
-            "resume button queues a real M1 request");
-        String resumeDecision = CoordinatorStateV1.acceptFtTestControl(
-            FaultTestControlStateV2_1.nextRequest()
-        );
-        require(resumeDecision != null &&
-            FaultSupervisorStateV2_1.onResumeDecision(resumeDecision),
-            "M1 resume decision returns to M3");
-        require("IDLE".equals(FaultSupervisorStateV2_1.stateName()),
-            "M3 returns to idle after the M1 decision");
-        require(!CoordinatorStateV1.ftCoordinationHold,
-            "M1 releases the order hold after verified recovery");
-        require(Member3PlantStateV1.drainPendingLoad(),
-            "queued load resumes only after explicit GUI approval");
-        require(Member3MachineStateV1.requestRotation(true),
-            "M3 may start the next rotary cycle after M1 release");
-
+        for (String action : new String[] {"safe-stop", "manual-evidence", "controller-evidence", "resume"})
+            require(!FaultGuiActionsV2_1.perform(action, null), "operator bypass rejected: " + action);
+        require(FaultTestControlStateV2_1.nextRequest() == null &&
+            FaultTestControlStateV2_1.nextTransferRequest() == null, "no manual signals queued");
+        require(CoordinatorStateV1.ftCoordinationHold, "uncertain fault remains held");
         FaultGuiActionsV2_1.setTestMode(false);
+        Member3MachineStateV1.reset();
         Member3PlantStateV1.reset();
-        FaultSupervisorStateV2_1.reset();
         CoordinatorStateV1.resetForTest();
     }
 
@@ -686,7 +610,7 @@ public final class FaultSupervisorSelfTest {
         FaultGuiActionsV2_1.setTestMode(true);
 
         require(M2TransferFaultAdapterStateV2_1.armTestFault(
-            "GUI-TRANSFER|POSITION_CONFLICT"
+            "GUI-TRANSFER|DEPARTURE_TIMEOUT"
         ), "M2 accepts the transfer fault request");
         require(M2MachineStateV1.acceptUnloadProfile(
             "GUI-TRANSFER-B001|S|200|GEOM_S|PACK_S"
@@ -695,6 +619,7 @@ public final class FaultSupervisorSelfTest {
             "M2 accepts unload-ready evidence");
         require(M2MachineStateV1.takeUnloadCommand() == null,
             "physical transfer fault suppresses the unload command");
+        M2MachineStateV1.tickUnloaderFault(System.currentTimeMillis() + SimulationTiming.scaleMillis(2001L));
         String event = M2MachineStateV1.takeUnloaderFault();
         require(M2TransferFaultAdapterStateV2_1.onLocalFault(event),
             "M2 adapter accepts the physical fault");
@@ -708,41 +633,15 @@ public final class FaultSupervisorSelfTest {
         require(CoordinatorStateV1.recordFtSafeStopRequest(
             FaultSupervisorStateV2_1.takeSafeStopRequest()
         ), "M1 holds the transfer workflow");
-        require(FaultGuiActionsV2_1.perform("safe-stop", null),
-            "transfer safe-stop action is queued");
-        require(FaultSupervisorStateV2_1.onSafeStopAck(
-            CoordinatorStateV1.acceptFtTestControl(
-                FaultTestControlStateV2_1.nextRequest()
-            )
-        ), "M1 confirms transfer safe stop");
-        require(FaultGuiActionsV2_1.perform("manual-evidence", null),
-            "operator records transfer reconciliation");
-        require(FaultGuiActionsV2_1.perform("controller-evidence", null),
-            "controller evidence requests physical M2 recovery");
-        require(M2TransferFaultAdapterStateV2_1.recoverTestFault(
-            FaultTestControlStateV2_1.nextTransferRequest()
-        ), "M2 exits physical isolation after reconciliation");
-        require(FaultSupervisorStateV2_1.onRecoveryResult(
-            M2TransferFaultAdapterStateV2_1.takeResult()
-        ), "M3 validates the real M2 controller evidence");
-        require("RECOVERY_READY".equals(
-            FaultSupervisorStateV2_1.stateName()),
-            "transfer recovery waits for M1 resume");
-        require(CoordinatorStateV1.recordFtRecoveryReady(
-            FaultSupervisorStateV2_1.takeRecoveryReady()
-        ), "M1 records transfer recovery readiness");
-        require(FaultGuiActionsV2_1.perform("resume", null),
-            "transfer resume action is queued");
-        require(FaultSupervisorStateV2_1.onResumeDecision(
-            CoordinatorStateV1.acceptFtTestControl(
-                FaultTestControlStateV2_1.nextRequest()
-            )
-        ), "M1 releases the transfer workflow");
-        require(M2MachineStateV1.nextUnloadCommandOffer() != null,
-            "M2 retries the interrupted physical unload command");
 
+        for (String action : new String[] {"safe-stop", "manual-evidence", "controller-evidence", "resume"})
+            require(!FaultGuiActionsV2_1.perform(action, null), "operator bypass rejected: " + action);
+        require(FaultTestControlStateV2_1.nextRequest() == null &&
+            FaultTestControlStateV2_1.nextTransferRequest() == null, "no manual signals queued");
+        require(CoordinatorStateV1.ftCoordinationHold, "uncertain fault remains held");
         FaultGuiActionsV2_1.setTestMode(false);
-        FaultSupervisorStateV2_1.reset();
+        Member3MachineStateV1.reset();
+        Member3PlantStateV1.reset();
         CoordinatorStateV1.resetForTest();
     }
 
@@ -763,20 +662,12 @@ public final class FaultSupervisorSelfTest {
         );
         require("LOCKED_OUT".equals(FaultSupervisorStateV2_1.stateName()),
             "missing result enters bounded manual recovery");
-        require(FaultSupervisorStateV2_1.onRecoveryResult(
-            "V2|LATE-ARRIVAL-1|M2-E01|1|SUCCESS|" +
-            "motor_off+occupancy_consistent|arrival_confirmed|5"
-        ), "late real controller evidence is retained");
-        require("LOCKED_OUT".equals(FaultSupervisorStateV2_1.stateName()),
-            "late evidence cannot bypass operator reconciliation");
-        require(FaultGuiActionsV2_1.perform("manual-evidence", null),
-            "operator records late arrival reconciliation");
-        require(FaultGuiActionsV2_1.perform("controller-evidence", null),
-            "submit applies retained real controller evidence");
-        require("RECOVERY_READY".equals(
-            FaultSupervisorStateV2_1.stateName()),
-            "resume becomes available after record and submit");
 
+        require(!FaultSupervisorStateV2_1.onRecoveryResult(
+            "V2|LATE-ARRIVAL-1|M2-E01|1|SUCCESS|motor_off+occupancy_consistent|arrival_confirmed|5"),
+            "late result cannot unlock expired recovery");
+        require(!FaultGuiActionsV2_1.perform("manual-evidence", null), "no manual fallback");
+        require("LOCKED_OUT".equals(FaultSupervisorStateV2_1.stateName()), "bounded hold");
         FaultGuiActionsV2_1.setTestMode(false);
         FaultSupervisorStateV2_1.reset();
     }
@@ -864,7 +755,7 @@ public final class FaultSupervisorSelfTest {
             FaultMonitoringStateV2_1.snapshot();
         require("HEALTHY".equals(idle.systemHealth),
             "idle monitored M3 scope is healthy");
-        require(idle.components.length == 10,
+        require(idle.components.length == 16,
             "global monitoring exposes every declared component boundary");
         require("IDLE".equals(FaultMonitoringPresentationV2_1.displayState(
             component(idle, FaultMonitoringStateV2_1.SUPERVISOR), idle
@@ -925,7 +816,7 @@ public final class FaultSupervisorSelfTest {
         require(FaultMonitoringPresentationV2_1.isAutomaticRecovery(verified),
             "verified automatic policy is exposed to the GUI");
         require(FaultSupervisorStateV2_1.onResumeDecision(
-            "V2|MON-1|MONITOR|RESUME|test|2"
+            "V2|MON-1|MONITOR|RESUME|M1_AUTO_INTERLOCK_VERIFIED|2"
         ), "M1 resume returns the monitoring flow to idle");
         FaultMonitoringStateV2_1.Snapshot resumed =
             FaultMonitoringStateV2_1.snapshot();

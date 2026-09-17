@@ -19,7 +19,7 @@ public final class LidLoaderControllerModelV1 {
         LID_SENSOR_FAULT
     }
 
-    private State state = State.READY;
+    private volatile State state = State.READY;
     private long stateElapsedMs = 0;
     private boolean pickActuatorEnabled = false;
     private boolean placeActuatorEnabled = false;
@@ -29,9 +29,25 @@ public final class LidLoaderControllerModelV1 {
     private String completedBottleId;
     private long faultSequence;
     private String faultEventId;
+    private boolean retryingPick;
 
     public LidLoaderControllerModelV1() {
         this(0L);
+    }
+
+    /** Independent standby checkpoint; immutable strings and scalar state only. */
+    public LidLoaderControllerModelV1(LidLoaderControllerModelV1 source) {
+        state = source.state;
+        stateElapsedMs = source.stateElapsedMs;
+        pickActuatorEnabled = source.pickActuatorEnabled;
+        placeActuatorEnabled = source.placeActuatorEnabled;
+        faultReason = source.faultReason;
+        fault = source.fault;
+        activeBottleId = source.activeBottleId;
+        completedBottleId = source.completedBottleId;
+        faultSequence = source.faultSequence;
+        faultEventId = source.faultEventId;
+        retryingPick = source.retryingPick;
     }
 
     public LidLoaderControllerModelV1(long initialFaultSequence) {
@@ -101,6 +117,7 @@ public final class LidLoaderControllerModelV1 {
         }
         activeBottleId = null;
         completedBottleId = null;
+        retryingPick = false;
         state = State.READY;
         return true;
     }
@@ -118,6 +135,22 @@ public final class LidLoaderControllerModelV1 {
         faultEventId = null;
         return true;
     }
+
+    /** Continue the same bottle; a second failure retains the original event budget. */
+    public boolean retryPick(String eventId) {
+        if (retryingPick || state != State.FAULT || fault != Fault.PICK_TIMEOUT ||
+            eventId == null || !eventId.equals(faultEventId)) return false;
+        retryingPick = true;
+        state = State.PICKING;
+        stateElapsedMs = 0;
+        fault = Fault.NONE;
+        faultReason = "";
+        pickActuatorEnabled = true;
+        placeActuatorEnabled = false;
+        return true;
+    }
+
+    public boolean isRetryingPick() { return retryingPick; }
 
     public void reportLidSensorFault() {
         if (state != State.FAULT) {
@@ -196,7 +229,9 @@ public final class LidLoaderControllerModelV1 {
         placeActuatorEnabled = false;
         fault = faultValue;
         faultReason = reason;
-        faultSequence++;
-        faultEventId = "LID-" + faultSequence;
+        if (!retryingPick) {
+            faultSequence++;
+            faultEventId = "LID-" + faultSequence;
+        }
     }
 }
