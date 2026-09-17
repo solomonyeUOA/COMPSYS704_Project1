@@ -25,6 +25,7 @@
             <oSignal Name="FILLER_A_STATUS" To="Member4DemoDriverCD.FILLER_A_STATUS" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="12114" />
             <oSignal Name="FILLER_A_PLANT_COMMAND" To="FillerAPlantCD.FILLER_A_PLANT_COMMAND" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="12004" />
             <oSignal Name="FILL_A_DONE" To="FillerBControllerCD.FILL_A_DONE" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="11005" />
+            <oSignal Name="M4_FILLER_A_STATE" To="ABSVisualisationPlantCD.M4_FILLER_A_STATE" Class="OptionalSimpleClient" IP="127.0.0.1" Port="11008" />
         </ClockDomain>
         <ClockDomain Name="FillerAPlantCD" Class="FillerAPlant">
             <iSignal Name="FILLER_A_PLANT_COMMAND" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="12004" />
@@ -39,6 +40,7 @@
             <oSignal Name="FILLER_B_STATUS" To="Member4DemoDriverCD.FILLER_B_STATUS" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="12114" />
             <oSignal Name="FILLER_B_PLANT_COMMAND" To="FillerBPlantCD.FILLER_B_PLANT_COMMAND" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="12005" />
             <oSignal Name="MARK_FILLED" To="Member4DemoDriverCD.MARK_FILLED" Class="com.systemj.ipc.SimpleClient" IP="127.0.0.1" Port="12114" />
+            <oSignal Name="M4_FILLER_B_STATE" To="ABSVisualisationPlantCD.M4_FILLER_B_STATE" Class="OptionalSimpleClient" IP="127.0.0.1" Port="11008" />
         </ClockDomain>
         <ClockDomain Name="FillerBPlantCD" Class="FillerBPlant">
             <iSignal Name="FILLER_B_PLANT_COMMAND" Class="com.systemj.ipc.SimpleServer" IP="127.0.0.1" Port="12005" />

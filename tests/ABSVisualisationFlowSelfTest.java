@@ -24,6 +24,8 @@ public final class ABSVisualisationFlowSelfTest {
         caseLLongIdleAndElapsedTimerDoNotDrift();
         caseMExplicitDownstreamJourney();
         caseNSortFaultCannotFabricateCompletion();
+        caseORecipeTenthsDriveFillerLevels();
+        casePLiveFillerTelemetryAnchorsBottleAnimation();
         teamIpVisualCaseAM2ArchitectureSnapshot();
         teamIpVisualCaseBM2DoesNotInventLiveTwin();
         teamIpVisualCaseCM3NormalEvidence();
@@ -37,7 +39,7 @@ public final class ABSVisualisationFlowSelfTest {
         teamIpFaultStillFreezesAnimation();
         System.out.println(
             "ABSVisualisationFlowSelfTest PASS (" + assertions +
-            " assertions; flow cases A-N; TEAM_IP_VISUAL cases A-J; " +
+            " assertions; flow cases A-P; TEAM_IP_VISUAL cases A-J; " +
             "fault freeze regression)"
         );
     }
@@ -477,6 +479,76 @@ public final class ABSVisualisationFlowSelfTest {
             model.getSnapshot().getBottles().size());
         assertEquals("N reset clears sort cycle evidence", 0L,
             model.getStartedCycles(ABSVisualisationFlowModel.SORT_PACK));
+    }
+
+    private static void caseORecipeTenthsDriveFillerLevels() {
+        ABSVisualisationFlowModel model = new ABSVisualisationFlowModel();
+        assertTrue("O accepts a 33.3/66.7 recipe",
+            model.acceptRecipe(333, 667));
+        assertTrue("O rejects recipes that do not total 100.0%",
+            !model.acceptRecipe(333, 666));
+        model.acceptRequired(1);
+        completeStage(model, ABSVisualisationFlowModel.LOADER);
+        completeStage(model, ABSVisualisationFlowModel.CONVEYOR);
+        completeStage(model, ABSVisualisationFlowModel.ROTARY);
+        completeStage(model, ABSVisualisationFlowModel.FILLER_A);
+        model.acceptStatus(ABSVisualisationFlowModel.FILLER_B,
+            ABSVisualisationFlowModel.BUSY_STATUS);
+        tick(model, 30);
+        ABSVisualisationFlowModel.ModuleSnapshot fillerB =
+            model.getModuleSnapshot(ABSVisualisationFlowModel.FILLER_B);
+        assertNear("O Filler B retains the exact A percentage", 33.3,
+            fillerB.getLiquidALevel(), 0.0001);
+        assertTrue("O Filler B rises toward the exact B percentage",
+            fillerB.getLiquidBLevel() > 0.0 &&
+            fillerB.getLiquidBLevel() < 66.7);
+    }
+
+    private static void casePLiveFillerTelemetryAnchorsBottleAnimation() {
+        ABSVisualisationFlowModel model = new ABSVisualisationFlowModel();
+        assertTrue("P accepts exact recipe", model.acceptRecipe(333, 667));
+        ABSLiveTwinModel twin = new ABSLiveTwinModel();
+        assertTrue("P accepts bottle before the combined FILLED event",
+            twin.accept(
+                "V2|TWIN|1|1|W=1|R=0|REJECTED=0|WORKPIECES=" +
+                "PO0001-P01-B001,P1,ROTARY,3,S,200|RESOURCES="
+            ));
+        model.acceptTwinSnapshot(twin.snapshot());
+
+        assertTrue("P accepts Filler A live identity",
+            model.acceptFillerTelemetry(M4FillerTelemetryV1.parse(
+                "V1|A|PO0001-P01-B001|S|GEOM_S|DOSING|2|67|0"
+            )));
+        ABSVisualisationFlowModel.ModuleSnapshot fillerA =
+            model.getModuleSnapshot(ABSVisualisationFlowModel.FILLER_A);
+        assertEquals("P Filler A displays the live bottle identity",
+            "PO0001-P01-B001", fillerA.getCurrentBottleKey());
+        assertTrue("P Filler A animation is active", fillerA.isRunning());
+        assertTrue("P Filler A displays a rising liquid level",
+            fillerA.getLiquidALevel() > 0.0 &&
+            fillerA.getLiquidALevel() < 33.3);
+
+        assertTrue("P accepts Filler A completion",
+            model.acceptFillerTelemetry(M4FillerTelemetryV1.parse(
+                "V1|A|PO0001-P01-B001|S|GEOM_S|DONE|3|67|67"
+            )));
+        assertTrue("P accepts Filler B live identity",
+            model.acceptFillerTelemetry(M4FillerTelemetryV1.parse(
+                "V1|B|PO0001-P01-B001|S|GEOM_S|DOSING|2|133|0"
+            )));
+        fillerA = model.getModuleSnapshot(ABSVisualisationFlowModel.FILLER_A);
+        ABSVisualisationFlowModel.ModuleSnapshot fillerB =
+            model.getModuleSnapshot(ABSVisualisationFlowModel.FILLER_B);
+        assertEquals("P bottle leaves Filler A when B starts", 0,
+            fillerA.getCurrentBottleId());
+        assertEquals("P Filler B displays the same bottle identity",
+            "PO0001-P01-B001", fillerB.getCurrentBottleKey());
+        assertTrue("P Filler B animation is active", fillerB.isRunning());
+        assertNear("P Filler B retains exact liquid A", 33.3,
+            fillerB.getLiquidALevel(), 0.0001);
+        assertTrue("P Filler B displays a rising liquid B level",
+            fillerB.getLiquidBLevel() > 0.0 &&
+            fillerB.getLiquidBLevel() < 66.7);
     }
 
     private static void teamIpVisualCaseAM2ArchitectureSnapshot() {

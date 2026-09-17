@@ -8,7 +8,7 @@
         <mxCell id="title" value="Member 4 System Architecture" style="text;html=0;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontSize=26;fontStyle=1;fontColor=#17324D;" vertex="1" parent="1">
           <mxGeometry x="50" y="20" width="1500" height="40" as="geometry"/>
         </mxCell>
-        <mxCell id="subtitle" value="Dual-liquid filling, capping, Controller/Plant separation and frozen M1 interfaces" style="text;html=0;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontSize=13;fontColor=#157A7E;" vertex="1" parent="1">
+        <mxCell id="subtitle" value="Dual-liquid filling, capping, Controller/Plant separation and fixed-point M1 interfaces" style="text;html=0;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontSize=13;fontColor=#157A7E;" vertex="1" parent="1">
           <mxGeometry x="50" y="62" width="1500" height="28" as="geometry"/>
         </mxCell>
         <mxCell id="m1" value="M1 CoordinatorCD&#10;Receiver port 11001&#10;Recipe + status coordination" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#E8E1F5;strokeColor=#7253A3;strokeWidth=2;fontSize=15;fontColor=#17212B;align=center;verticalAlign=middle;arcSize=8;" vertex="1" parent="1">
@@ -20,10 +20,10 @@
         <mxCell id="m2" value="M2 Unloader&#10;Owns BOTTLE_DONE&#10;M4 never emits order completion" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#DDECF8;strokeColor=#377EAB;strokeWidth=2;fontSize=15;fontColor=#17212B;align=center;verticalAlign=middle;arcSize=8;" vertex="1" parent="1">
           <mxGeometry x="50" y="620" width="270" height="125" as="geometry"/>
         </mxCell>
-        <mxCell id="fillerA" value="FillerAControllerCD&#10;Receiver port 11004&#10;Stores Integer FILL_A_RATIO&#10;Latches new bottleId + capacity&#10;Independent status: 0..4" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#FFF0C2;strokeColor=#B18112;strokeWidth=2;fontSize=15;fontColor=#17212B;align=center;verticalAlign=middle;arcSize=8;" vertex="1" parent="1">
+        <mxCell id="fillerA" value="FillerAControllerCD&#10;Receiver port 11004&#10;Stores Integer FILL_A_RATIO at 0.1% precision&#10;Latches new bottleId + capacity&#10;Independent status: 0..4" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#FFF0C2;strokeColor=#B18112;strokeWidth=2;fontSize=15;fontColor=#17212B;align=center;verticalAlign=middle;arcSize=8;" vertex="1" parent="1">
           <mxGeometry x="760" y="105" width="300" height="175" as="geometry"/>
         </mxCell>
-        <mxCell id="fillerB" value="FillerBControllerCD&#10;Receiver port 11005&#10;Stores Integer FILL_B_RATIO&#10;Gets context in matching FILL_A_DONE&#10;Independent status: 0..4" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#FFF0C2;strokeColor=#B18112;strokeWidth=2;fontSize=15;fontColor=#17212B;align=center;verticalAlign=middle;arcSize=8;" vertex="1" parent="1">
+        <mxCell id="fillerB" value="FillerBControllerCD&#10;Receiver port 11005&#10;Stores Integer FILL_B_RATIO at 0.1% precision&#10;Gets context in matching FILL_A_DONE&#10;Independent status: 0..4" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#FFF0C2;strokeColor=#B18112;strokeWidth=2;fontSize=15;fontColor=#17212B;align=center;verticalAlign=middle;arcSize=8;" vertex="1" parent="1">
           <mxGeometry x="760" y="355" width="300" height="175" as="geometry"/>
         </mxCell>
         <mxCell id="capper" value="CapperControllerCD&#10;Receiver port 11007&#10;Latches bottleId&#10;Same cap sequence for both sizes&#10;Independent status: 0..4" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#FFF0C2;strokeColor=#B18112;strokeWidth=2;fontSize=15;fontColor=#17212B;align=center;verticalAlign=middle;arcSize=8;" vertex="1" parent="1">
@@ -436,7 +436,7 @@
         <mxCell id="subtitle" value="M1 validates the A/B pair before dispatch; M3 relays the full BottleContext at Position 2; M4 applies local range, geometry and complement checks" style="text;html=0;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontSize=13;fontColor=#157A7E;" vertex="1" parent="1">
           <mxGeometry x="50" y="62" width="1500" height="28" as="geometry"/>
         </mxCell>
-        <mxCell id="input" value="Receive split inputs&#10;M1: ratioA → Filler A | ratioB → Filler B&#10;M3: full BottleContext at P2&#10;M1 confirms each pair is 0..100 and sums to 100" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#DDECF8;strokeColor=#377EAB;strokeWidth=2;fontSize=13;fontColor=#17212B;align=center;verticalAlign=middle;arcSize=8;" vertex="1" parent="1">
+        <mxCell id="input" value="Receive split inputs&#10;M1: ratioA → Filler A | ratioB → Filler B&#10;M3: full BottleContext at P2&#10;Each ratio uses 0..1000 tenths-of-percent units and the pair sums to 1000" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#DDECF8;strokeColor=#377EAB;strokeWidth=2;fontSize=13;fontColor=#17212B;align=center;verticalAlign=middle;arcSize=8;" vertex="1" parent="1">
           <mxGeometry x="40" y="325" width="240" height="145" as="geometry"/>
         </mxCell>
         <mxCell id="capacity" value="New bottleId?&#10;active and completed IDs checked" style="rhombus;whiteSpace=wrap;html=0;fillColor=#FFF0C2;strokeColor=#B18112;strokeWidth=2;fontSize=14;fontColor=#17212B;align=center;verticalAlign=middle;" vertex="1" parent="1">
@@ -445,7 +445,7 @@
         <mxCell id="capacity2" value="Known bottle profile?&#10;S ↔ 200 mL | L ↔ 500 mL&#10;capacity and profile IDs valid" style="rhombus;whiteSpace=wrap;html=0;fillColor=#FFF0C2;strokeColor=#B18112;strokeWidth=2;fontSize=13;fontColor=#17212B;align=center;verticalAlign=middle;" vertex="1" parent="1">
           <mxGeometry x="620" y="310" width="230" height="175" as="geometry"/>
         </mxCell>
-        <mxCell id="compute" value="Position nozzle + compute targets&#10;fillerNozzleZ from geometryProfileId&#10;wait within positionTolerance&#10;targetA = C × ratioA / 100&#10;targetB = C × ratioB / 100&#10;closeAt = target - shutoffLeadMl" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#E8E1F5;strokeColor=#7253A3;strokeWidth=2;fontSize=12;fontColor=#17212B;align=center;verticalAlign=middle;arcSize=8;" vertex="1" parent="1">
+        <mxCell id="compute" value="Position nozzle + compute targets&#10;fillerNozzleZ from geometryProfileId&#10;wait within positionTolerance&#10;targetA = round(C × ratioA / 1000)&#10;targetB = C - measuredA&#10;closeAt = target - shutoffLeadMl" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#E8E1F5;strokeColor=#7253A3;strokeWidth=2;fontSize=12;fontColor=#17212B;align=center;verticalAlign=middle;arcSize=8;" vertex="1" parent="1">
           <mxGeometry x="900" y="310" width="270" height="175" as="geometry"/>
         </mxCell>
         <mxCell id="valid" value="Trust/local checks valid?&#10;M1 pair invariant confirmed&#10;local ratio in range&#10;measuredA + targetB ≈ capacity before B" style="rhombus;whiteSpace=wrap;html=0;fillColor=#FFF0C2;strokeColor=#B18112;strokeWidth=2;fontSize=12;fontColor=#17212B;align=center;verticalAlign=middle;" vertex="1" parent="1">
@@ -549,7 +549,7 @@
         <mxCell id="unloader" value="M2 BottleUnloaderControllerCD&#10;Receiver 11010&#10;UNLOAD_PROFILE(full BottleContext)&#10;Emit BOTTLE_DONE after collection; then forward&#10;BOTTLE_READY_FOR_SORT(full context) → M4:11012" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#DDECF8;strokeColor=#377EAB;strokeWidth=2;fontSize=13;fontColor=#17212B;align=center;verticalAlign=middle;arcSize=8;" vertex="1" parent="1">
           <mxGeometry x="440" y="650" width="300" height="140" as="geometry"/>
         </mxCell>
-        <mxCell id="frozen" value="FROZEN M1 BOUNDARY — do not change&#10;• FILL_A_RATIO: Integer → FillerAControllerCD:11004&#10;• FILL_B_RATIO: Integer → FillerBControllerCD:11005&#10;• *_STATUS_REQUEST → each Controller; *_STATUS(Integer 0..4) → CoordinatorCD:11001&#10;• BOTTLE_DONE: pure signal, Bottle Unloader → CoordinatorCD:11001 only&#10;• OPEN CLARIFICATION: brief says tenths of %, while current M1 uses 0..100; confirm 0..100 vs fixed-point 0..1000 scaling" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#E8E1F5;strokeColor=#7253A3;strokeWidth=2;fontSize=12;fontColor=#17212B;align=left;spacingLeft=12;verticalAlign=middle;arcSize=8;" vertex="1" parent="1">
+        <mxCell id="frozen" value="M1 / M4 BOUNDARY&#10;• FILL_A_RATIO: Integer tenths-of-percent → FillerAControllerCD:11004&#10;• FILL_B_RATIO: Integer tenths-of-percent → FillerBControllerCD:11005&#10;• Ratio range 0..1000; the pair must sum to 1000&#10;• *_STATUS_REQUEST → each Controller; *_STATUS(Integer 0..4) → CoordinatorCD:11001&#10;• BOTTLE_DONE: pure signal, Bottle Unloader → CoordinatorCD:11001 only" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#E8E1F5;strokeColor=#7253A3;strokeWidth=2;fontSize=12;fontColor=#17212B;align=left;spacingLeft=12;verticalAlign=middle;arcSize=8;" vertex="1" parent="1">
           <mxGeometry x="810" y="115" width="730" height="155" as="geometry"/>
         </mxCell>
         <mxCell id="proposed" value="PROPOSED CROSS-TEAM SIGNALS — TEAM APPROVAL REQUIRED&#10;1. BOTTLE_RECOGNISED(id|size|capacity): Recognition → Registry:11011&#10;2. LOAD_PROFILE(full context): Registry → M2 Loader:11002&#10;3. ROTARY_BOTTLE_CONTEXT(full context): BLOCKED until M1/M3 reconcile 11009 vs 11003&#10;4. BOTTLE_AT_FILL(full context): M3 Rotary → M4 Filler A:11004&#10;5. FILL_A_DONE(full context|measuredA): Filler A → Filler B:11005&#10;6. MARK_FILLED(id): Filler B → M3 RotaryTablePlantCD:12003&#10;7. BOTTLE_AT_CAP(full context): M3 Rotary → M4 Capper:11007&#10;8. MARK_CAPPED(id): Capper → M3 RotaryTablePlantCD:12003&#10;9. UNLOAD_PROFILE(full context): Registry → M2 Unloader:11010&#10;10. BOTTLE_READY_FOR_SORT(full context): M2 Unloader → M4 SortPack:11012" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#FFF0C2;strokeColor=#B18112;strokeWidth=2;fontSize=12;fontColor=#17212B;align=left;spacingLeft=12;verticalAlign=middle;arcSize=8;" vertex="1" parent="1">
@@ -611,13 +611,13 @@
         <mxCell id="life5" value="" style="shape=line;dashed=1;whiteSpace=wrap;html=0;strokeColor=#6B7C8C;strokeWidth=2;" vertex="1" parent="1">
           <mxGeometry x="1370" y="185" width="1" height="650" as="geometry"/>
         </mxCell>
-        <mxCell id="s1" value="FILL_A_RATIO(Integer 0..100) → port 11004" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;strokeColor=#7253A3;strokeWidth=2;endArrow=block;endFill=1;fontSize=11;labelBackgroundColor=#FFFFFF;" edge="1" parent="1">
+        <mxCell id="s1" value="FILL_A_RATIO(Integer 0..1000 tenths-of-percent) → port 11004" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;strokeColor=#7253A3;strokeWidth=2;endArrow=block;endFill=1;fontSize=11;labelBackgroundColor=#FFFFFF;" edge="1" parent="1">
           <mxGeometry relative="1" as="geometry">
             <mxPoint x="170" y="230" as="sourcePoint"/>
             <mxPoint x="770" y="230" as="targetPoint"/>
           </mxGeometry>
         </mxCell>
-        <mxCell id="s2" value="FILL_B_RATIO(Integer 0..100) → port 11005" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;strokeColor=#7253A3;strokeWidth=2;endArrow=block;endFill=1;fontSize=11;labelBackgroundColor=#FFFFFF;" edge="1" parent="1">
+        <mxCell id="s2" value="FILL_B_RATIO(Integer 0..1000 tenths-of-percent) → port 11005" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;strokeColor=#7253A3;strokeWidth=2;endArrow=block;endFill=1;fontSize=11;labelBackgroundColor=#FFFFFF;" edge="1" parent="1">
           <mxGeometry relative="1" as="geometry">
             <mxPoint x="170" y="290" as="sourcePoint"/>
             <mxPoint x="1070" y="290" as="targetPoint"/>

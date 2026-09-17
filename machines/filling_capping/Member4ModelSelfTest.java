@@ -6,6 +6,7 @@ public final class Member4ModelSelfTest {
     public static void main(String[] args) {
         testContextRegistry();
         testSmallAndLargeFilling();
+        testGeometryTargetsAndPositionGates();
         testCalibrationAndCumulativeOverflow();
         testFillerGatingAndFaults();
         testCapperProfilesAndInterlocks();
@@ -41,22 +42,31 @@ public final class Member4ModelSelfTest {
     private static void testSmallAndLargeFilling() {
         String small = "S001|S|200|GEOM_S|PACK_S";
         String large = "L001|L|500|GEOM_L|PACK_L";
-        String smallADone = runFillerA(small, 60, 120);
+        String smallADone = runFillerA(small, 600, 120);
         require(smallADone.endsWith("|120"), "small A target is 120 mL");
-        String smallFilled = runFillerB(smallADone, 40, 80);
+        String smallFilled = runFillerB(smallADone, 400, 80);
         require("S001".equals(smallFilled), "small B target completes");
 
-        String largeADone = runFillerA(large, 60, 300);
+        String largeADone = runFillerA(large, 600, 300);
         require(largeADone.endsWith("|300"), "large A target is 300 mL");
-        String largeFilled = runFillerB(largeADone, 40, 200);
+        String largeFilled = runFillerB(largeADone, 400, 200);
         require("L001".equals(largeFilled), "large B target completes");
+
+        String preciseADone = runFillerA(
+            "P001|L|500|GEOM_L|PACK_L", 333, 167
+        );
+        require(preciseADone.endsWith("|167"),
+            "33.3% A rounds to the nearest whole mL");
+        String preciseFilled = runFillerB(preciseADone, 667, 333);
+        require("P001".equals(preciseFilled),
+            "66.7% B fills the measured remainder to exactly 500 mL");
     }
 
     private static void testFillerGatingAndFaults() {
         FillerControllerModelV1 fillerB = new FillerControllerModelV1(
             FillerControllerModelV1.LIQUID_B, 0, 100
         );
-        fillerB.setRatio(40);
+        fillerB.setRatio(400);
         require(fillerB.getStatus() == M4StatusV1.READY,
             "recipe alone does not start Filler B");
         fillerB.tick(1000);
@@ -73,7 +83,7 @@ public final class Member4ModelSelfTest {
             FillerControllerModelV1.LIQUID_A, 0, 1000
         );
         FillerPlantModelV1 plant = new FillerPlantModelV1(10, 10, 10);
-        fillerA.setRatio(60);
+        fillerA.setRatio(600);
         plant.setForcedOverflowMl(1);
         fillerA.acceptBottleAtFill("OV1|S|200|GEOM_S|PACK_S", 0);
         pumpFiller(fillerA, plant, 0, 100);
@@ -89,7 +99,7 @@ public final class Member4ModelSelfTest {
                 FillerControllerModelV1.LIQUID_A, 0, 50
             );
         FillerPlantModelV1 timeoutPlant = new FillerPlantModelV1(0, 0, 0);
-        timeoutController.setRatio(60);
+        timeoutController.setRatio(600);
         timeoutPlant.setForceDoseTimeout(true);
         timeoutController.acceptBottleAtFill(
             "TO1|S|200|GEOM_S|PACK_S", 0
@@ -105,7 +115,7 @@ public final class Member4ModelSelfTest {
                 FillerControllerModelV1.LIQUID_A, 0, 1000
             );
         FillerPlantModelV1 conflictPlant = new FillerPlantModelV1(0, 0, 0);
-        conflictController.setRatio(60);
+        conflictController.setRatio(600);
         conflictPlant.setForceSensorConflict(true);
         conflictController.acceptBottleAtFill(
             "SC1|S|200|GEOM_S|PACK_S", 0
@@ -115,6 +125,62 @@ public final class Member4ModelSelfTest {
             "contradictory Filler sensor state enters FAULT");
         require(conflictController.takeCompletion() == null,
             "sensor conflict emits no completion");
+    }
+
+    private static void testGeometryTargetsAndPositionGates() {
+        M4GeometryProfileV1 small = M4GeometryProfileV1.forId("GEOM_S");
+        M4GeometryProfileV1 large = M4GeometryProfileV1.forId("GEOM_L");
+        require(!small.getFillerNozzleZ().equals(large.getFillerNozzleZ()),
+            "small and large bottles select different nozzle heights");
+        require(!small.getCapperGripZ().equals(large.getCapperGripZ()),
+            "small and large bottles select different capper heights");
+        require(!small.getClampSetpoint().equals(large.getClampSetpoint()),
+            "small and large bottles select different clamp openings");
+
+        FillerPlantModelV1 filler = new FillerPlantModelV1(10, 0, 0);
+        require(filler.acceptCommand("GEO-F|SET_GEOMETRY|GEOM_S", 0),
+            "Filler accepts small geometry selection");
+        require(M4GeometryProfileV1.NOZZLE_Z_SMALL.equals(
+                filler.getNozzleSetpoint()) &&
+                !filler.isPositionConfirmed(),
+            "Filler applies the small nozzle target before confirmation");
+        filler.tick(9);
+        require(!filler.isPositionConfirmed(),
+            "Filler does not confirm position before its sensor delay");
+        filler.tick(10);
+        require(filler.isPositionConfirmed() &&
+                "GEO-F|PROFILE_CONFIRMED|GEOM_S".equals(
+                    filler.takeFeedback()),
+            "Filler confirms geometry before dosing is enabled");
+
+        FillerPlantModelV1 earlyFiller = new FillerPlantModelV1(10, 0, 0);
+        earlyFiller.acceptCommand("EARLY-F|SET_GEOMETRY|GEOM_L", 0);
+        require(!earlyFiller.acceptCommand("EARLY-F|START_DOSE|100", 0),
+            "Filler rejects dosing before position confirmation");
+        require(!earlyFiller.isInjectorOpen(),
+            "early Filler command cannot open the injector");
+
+        CapperPlantModelV1 capper = new CapperPlantModelV1(10);
+        require(capper.acceptCommand("GEO-C|SET_GEOMETRY|GEOM_L", 0),
+            "Capper accepts large geometry selection");
+        require(M4GeometryProfileV1.GRIP_Z_LARGE.equals(
+                capper.getGripZSetpoint()) &&
+                M4GeometryProfileV1.CLAMP_WIDE.equals(
+                    capper.getClampSetpoint()) &&
+                !capper.isPositionConfirmed(),
+            "Capper applies large height and jaw targets before confirmation");
+        capper.tick(10);
+        require(capper.isPositionConfirmed() &&
+                "GEO-C|PROFILE_CONFIRMED|GEOM_L".equals(
+                    capper.takeFeedback()),
+            "Capper confirms geometry before clamping is enabled");
+
+        CapperPlantModelV1 earlyCapper = new CapperPlantModelV1(10);
+        earlyCapper.acceptCommand("EARLY-C|SET_GEOMETRY|GEOM_S", 0);
+        require(!earlyCapper.acceptCommand("EARLY-C|CLAMP|-", 0),
+            "Capper rejects clamping before position confirmation");
+        require(!earlyCapper.isClamped(),
+            "early Capper command cannot close the clamp");
     }
 
     private static void testCalibrationAndCumulativeOverflow() {
@@ -137,7 +203,7 @@ public final class Member4ModelSelfTest {
             FillerControllerModelV1.LIQUID_B, 1, 0, 1000
         );
         FillerPlantModelV1 overflowing = new FillerPlantModelV1(0, 0, 0);
-        fillerB.setRatio(40);
+        fillerB.setRatio(400);
         require(fillerB.acceptFillADone(
             "OV2|S|200|GEOM_S|PACK_S|120", 0
         ), "Filler B accepts matching measured A");
@@ -171,6 +237,11 @@ public final class Member4ModelSelfTest {
             "Capper emits one correlated completion");
         require("GEOM_L".equals(plant.getGeometryProfile()),
             "Capper selects the large geometry profile");
+        require(M4GeometryProfileV1.GRIP_Z_LARGE.equals(
+                plant.getGripZSetpoint()) &&
+                M4GeometryProfileV1.CLAMP_WIDE.equals(
+                    plant.getClampSetpoint()),
+            "large profile selects the large grip height and wide clamp");
         require(!plant.isClamped() && !plant.isLowered(),
             "Capper ends raised and unclamped");
         require("DONE".equals(M4CapperTelemetryV1.parse(

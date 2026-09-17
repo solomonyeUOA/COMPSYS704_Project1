@@ -100,9 +100,10 @@ current reset generation.
 Rows update for B002 and later bottles. The **Evidence** column distinguishes
 M2 controller observations from upstream `OBSERVED_*` last-completed operations;
 `-` means no linked bottle. The snapshot generation and sequence are displayed.
-M4's present twin feed confirms combined filling after Filler B; it does not
-provide continuous Filler A/B position or fill-level telemetry. The overview
-therefore shows a last-confirmed waypoint, not an invented live operation.
+M4 publishes display-only Filler A/B identity and stage telemetry, so the
+overview can show the bottle while each filler is actually positioning,
+dosing, refilling and returning safe. M2's retained WorkpieceTwin still records
+the combined `FILLED` milestone only after Filler B completes.
 
 See [the consistency fix and acceptance checks](integration/TWIN_VISUALISATION_CONSISTENCY.md).
 
@@ -232,7 +233,8 @@ M1 GP
 
 The Swing POS owns order entry, automatic order IDs, multiple product rows,
 the S/L bottle-size selector (`Small — 200 mL`, `Large — 500 mL`), liquid A/B
-validation, submission of ORDER V1/V2-compatible payloads and
+validation, three presets plus a Custom option, submission of ORDER
+V1/V2-compatible payloads and
 `ORDER_COMPLETE` display. Its **Reset System** button and confirmation dialog
 are only the user entry point: POS sends `SYSTEM_RESET_REQUEST` and displays
 reset progress/completion, but it does not reset M2, M3, M4, Visualisation or
@@ -256,8 +258,9 @@ Coordinator responsibility, not a separate Reset Controller.
 ### Visualisation (IP)
 
 The hierarchical Visualisation is an asynchronous, display-only observer. It
-receives Coordinator telemetry, including `VIZ_SYSTEM_RESET`, but does not
-issue machine commands or own reset orchestration.
+receives Coordinator telemetry, including the current 0.1%-precision recipe
+and `VIZ_SYSTEM_RESET`, but does not issue machine commands or own reset
+orchestration.
 
 The runtime relationship is:
 
@@ -314,6 +317,10 @@ tools/                      structural integration validation
 ```text
 ORDER V2 (new POS submissions):
 orderId|productCount|productId,sizeCode,A%,B%,quantity;...
+
+A% and B% accept at most one decimal place, each remains within 0.0 to 100.0,
+and every pair must total 100.0. The Coordinator converts these values to
+integer tenths-of-percent signals (`33.3%` becomes `333`) for SystemJ.
 
 S = 200 mL
 L = 500 mL

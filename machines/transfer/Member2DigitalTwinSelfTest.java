@@ -2,7 +2,7 @@
 public final class Member2DigitalTwinSelfTest {
     public static void main(String[] args) {
         DigitalTwinStoreV1 store = new DigitalTwinStoreV1();
-        check(store.acceptBatchContext("V1|PO1|P1|60|40|2|MIXED"),
+        check(store.acceptBatchContext("V1|PO1|P1|600|400|2|MIXED"),
             "batch context");
 
         long time = 1000L;

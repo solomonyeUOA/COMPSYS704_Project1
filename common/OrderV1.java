@@ -70,17 +70,20 @@ public final class OrderV1 {
 
             try {
                 productIds[i] = productFields[0];
-                liquidARatios[i] = Integer.parseInt(productFields[1]);
-                liquidBRatios[i] = Integer.parseInt(productFields[2]);
+                liquidARatios[i] = RecipeRatioV2.parsePercent(
+                    productFields[1]
+                );
+                liquidBRatios[i] = RecipeRatioV2.parsePercent(
+                    productFields[2]
+                );
                 quantities[i] = Integer.parseInt(productFields[3]);
             }
-            catch (NumberFormatException error) {
+            catch (IllegalArgumentException error) {
                 return null;
             }
 
-            if (liquidARatios[i] < 0 || liquidARatios[i] > 100 ||
-                liquidBRatios[i] < 0 || liquidBRatios[i] > 100 ||
-                liquidARatios[i] + liquidBRatios[i] != 100 ||
+            if (liquidARatios[i] + liquidBRatios[i] !=
+                    RecipeRatioV2.TOTAL_UNITS ||
                 quantities[i] <= 0) {
                 return null;
             }

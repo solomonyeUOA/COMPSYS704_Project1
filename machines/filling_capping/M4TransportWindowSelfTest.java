@@ -89,7 +89,7 @@ public final class M4TransportWindowSelfTest {
         M4BoundedEventV1 feedback =
             M4BoundedEventV1.newLocalControlEvent();
         String bottleId = String.format("Q100-B%03d", number);
-        controller.setRatio(75);
+        controller.setRatio(750);
         require(controller.acceptFillADone(
             bottleId + "|L|500|GEOM_L|PACK_L|125", 0L
         ), "Filler B accepts " + bottleId);

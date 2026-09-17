@@ -27,14 +27,14 @@ Member4DemoDriver(
     Member4PlantStateV1.reset();
     Member4DemoStateV1.reset();
     // Seed the same validated 60/40 values that the demo also sends over M1.
-    Member4MachineStateV1.setFillerARatio(60);
-    Member4MachineStateV1.setFillerBRatio(40);
+    Member4MachineStateV1.setFillerARatio(600);
+    Member4MachineStateV1.setFillerBRatio(400);
     System.out.println("Member 4 demo driver started");
 
     {loop {
         if (Member4DemoStateV1.shouldSendRecipe()) {
-            emit FILL_A_RATIO(60);
-            emit FILL_B_RATIO(40);
+            emit FILL_A_RATIO(600);
+            emit FILL_B_RATIO(400);
         }
         if (Member4DemoStateV1.shouldPoll()) {
             emit FILLER_A_STATUS_REQUEST;

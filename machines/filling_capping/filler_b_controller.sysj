@@ -9,6 +9,7 @@ FillerBController(
     output Integer signal FILLER_B_STATUS;
     output String signal FILLER_B_PLANT_COMMAND;
     output String signal MARK_FILLED;
+    output String signal M4_FILLER_B_STATE;
 )
 ->{
     System.out.println("M4 FillerBControllerCD started");
@@ -54,6 +55,10 @@ FillerBController(
         String completed = Member4MachineStateV1.takeMarkFilled();
         if (completed != null) {
             emit MARK_FILLED(completed);
+        }
+        String telemetry = Member4MachineStateV1.nextFillerBTelemetry();
+        if (telemetry != null) {
+            emit M4_FILLER_B_STATE(telemetry);
         }
         pause;
     }}

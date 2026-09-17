@@ -51,7 +51,9 @@ public final class DigitalTwinStoreV1 {
             rejectedUpdateCount++;
             return false;
         }
-        if (ratioA > 100 || ratioB > 100 || ratioA + ratioB != 100) {
+        if (!RecipeRatioV2.isValidUnits(ratioA) ||
+            !RecipeRatioV2.isValidUnits(ratioB) ||
+            ratioA + ratioB != RecipeRatioV2.TOTAL_UNITS) {
             rejectedUpdateCount++;
             return false;
         }

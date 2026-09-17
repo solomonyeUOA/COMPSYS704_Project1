@@ -26,6 +26,7 @@ public final class FillerControllerModelV1 {
     private final Set<String> completedBottleIds = new HashSet<String>();
     private final Set<String> acceptedPlantFeedback = new HashSet<String>();
 
+    /** Tenths-of-percent units: 333 means 33.3%. */
     private int ratio = -1;
     private int status = M4StatusV1.READY;
     private Stage stage = Stage.WAITING;
@@ -64,7 +65,7 @@ public final class FillerControllerModelV1 {
 
     /** Stores batch configuration only; it never starts a physical action. */
     public boolean setRatio(int value) {
-        if (value < 0 || value > 100) {
+        if (!RecipeRatioV2.isValidUnits(value)) {
             fail("INVALID_RECIPE", System.currentTimeMillis());
             return false;
         }
@@ -217,8 +218,31 @@ public final class FillerControllerModelV1 {
         return activeContext == null ? "-" : activeContext.getBottleId();
     }
 
+    public String getSizeCode() {
+        return activeContext == null ? "-" : activeContext.getSizeCode();
+    }
+
+    public String getGeometryProfile() {
+        return activeContext == null ? "-" :
+            activeContext.getGeometryProfileId();
+    }
+
     public String getStageName() {
         return stage.name();
+    }
+
+    /** Read-only state used to identify the live bottle in the M1 view. */
+    public String telemetryPayload() {
+        return M4FillerTelemetryV1.of(
+            liquid,
+            getActiveBottleId(),
+            getSizeCode(),
+            getGeometryProfile(),
+            getStageName(),
+            getStatus(),
+            getTargetMl(),
+            getMeasuredMl()
+        ).encode();
     }
 
     public String getFaultReason() {
@@ -265,16 +289,23 @@ public final class FillerControllerModelV1 {
             fail("ACTIVE_BOTTLE_MISMATCH", nowMs);
             return false;
         }
-        if (ratio < 0 || ratio > 100) {
+        if (!RecipeRatioV2.isValidUnits(ratio)) {
             fail("MISSING_RECIPE", nowMs);
             return false;
         }
         int target = context.targetForRatio(ratio);
-        if (LIQUID_B.equals(liquid) &&
-            Math.abs(acceptedMeasuredAMl + target -
-                context.getCapacityMl()) > toleranceMl) {
-            fail("RECIPE_COMPLEMENT_MISMATCH", nowMs);
-            return false;
+        if (LIQUID_B.equals(liquid)) {
+            int expectedAMl = context.targetForRatio(
+                RecipeRatioV2.TOTAL_UNITS - ratio
+            );
+            if (Math.abs(acceptedMeasuredAMl - expectedAMl) > toleranceMl) {
+                fail("RECIPE_COMPLEMENT_MISMATCH", nowMs);
+                return false;
+            }
+            // Whole-mL actuation cannot always represent a 0.1% target
+            // exactly. Fill B uses the measured remainder so the final total
+            // remains exactly equal to the bottle capacity.
+            target = context.getCapacityMl() - acceptedMeasuredAMl;
         }
         activeContext = context;
         measuredAMl = acceptedMeasuredAMl;

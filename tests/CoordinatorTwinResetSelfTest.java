@@ -9,7 +9,7 @@ public final class CoordinatorTwinResetSelfTest {
         require(CoordinatorStateV1.nextWatchdogHeartbeat(500L) != null,
             "M1 heartbeat repeats after interval");
         require(CoordinatorStateV1.accept("PO0001|1|P1,L,60,40,1"), "order accepted");
-        require("V1|PO0001|P1|60|40|1|L".equals(CoordinatorStateV1.nextTwinBatchContext()), "live recipe context includes size");
+        require("V1|PO0001|P1|600|400|1|L".equals(CoordinatorStateV1.nextTwinBatchContext()), "live recipe context includes 0.1% units and size");
         require(CoordinatorStateV1.publishStartOrder(), "initial quantity is held");
         require(CoordinatorStateV1.recordFtSafeStopRequest("V2|OLD|GUI-TEST|SAFE_STOP|1"), "initial FT accepted");
         require(CoordinatorStateV1.beginSystemReset("RST0000", 10L), "zero reset id valid");

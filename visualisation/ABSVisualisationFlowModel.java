@@ -459,6 +459,10 @@ final class ABSVisualisationFlowModel {
     private String twinBatchKey = "";
     private int twinBottleCount;
     private int nextTwinDisplayId = 1;
+    private double recipeAPercent;
+    private double recipeBPercent;
+    private final M4FillerTelemetryV1[] fillerTelemetry =
+        new M4FillerTelemetryV1[2];
     private final BottleState[] twinModuleBottles = new BottleState[MODULE_COUNT];
     private final boolean[] twinModuleBusy = new boolean[MODULE_COUNT];
     private final boolean[] twinModuleFault = new boolean[MODULE_COUNT];
@@ -466,6 +470,32 @@ final class ABSVisualisationFlowModel {
 
     ABSVisualisationFlowModel() {
         publish();
+    }
+
+    /** Display-only recipe input; values are tenths of one percent. */
+    synchronized boolean acceptRecipe(int liquidAUnits, int liquidBUnits) {
+        if (!RecipeRatioV2.isValidUnits(liquidAUnits) ||
+            !RecipeRatioV2.isValidUnits(liquidBUnits) ||
+            liquidAUnits + liquidBUnits != RecipeRatioV2.TOTAL_UNITS) {
+            return false;
+        }
+        recipeAPercent = liquidAUnits /
+            (double)RecipeRatioV2.UNITS_PER_PERCENT;
+        recipeBPercent = liquidBUnits /
+            (double)RecipeRatioV2.UNITS_PER_PERCENT;
+        publish();
+        return true;
+    }
+
+    /** Overlay live M4 filler identity/stage on the confirmed Twin history. */
+    synchronized boolean acceptFillerTelemetry(
+        M4FillerTelemetryV1 telemetry
+    ) {
+        if (telemetry == null) { return false; }
+        int slot = "A".equals(telemetry.getLiquid()) ? 0 : 1;
+        fillerTelemetry[slot] = telemetry;
+        publish();
+        return true;
     }
 
     /**
@@ -589,6 +619,7 @@ final class ABSVisualisationFlowModel {
         }
     }
 
+
     private String latestBatch(String[][] rows) {
         String selected = "";
         for (String[] row : rows) {
@@ -655,9 +686,26 @@ final class ABSVisualisationFlowModel {
         boolean fault = false;
         for (int index = 0; index < MODULE_COUNT; index++) {
             BottleState bottle = twinModuleBottles[index];
+            M4FillerTelemetryV1 liveFiller = fillerTelemetryFor(index);
+            BottleState liveBottle = liveFiller == null ? null :
+                findBottle(liveFiller.getBottleId());
+            if (liveBottle != null && fillerTelemetryIsCurrent(
+                index, liveFiller, liveBottle
+            )) {
+                bottle = liveBottle;
+            }
             boolean moduleFault = twinModuleFault[index] ||
                 (bottle != null && hasStatus[index] && statuses[index] == FAULT_STATUS);
             boolean moduleBusy = bottle != null && twinModuleBusy[index] && !moduleFault;
+            boolean liveFillerApplied = liveBottle != null &&
+                bottle == liveBottle && fillerTelemetryIsCurrent(
+                    index, liveFiller, liveBottle
+                );
+            if (liveFillerApplied) {
+                moduleFault = liveFiller.getStatus() == FAULT_STATUS;
+                moduleBusy = liveFiller.getStatus() == BUSY_STATUS &&
+                    !moduleFault;
+            }
             ModuleLifecycle lifecycle = moduleFault ? ModuleLifecycle.FAULTED :
                 moduleBusy ? ModuleLifecycle.ACTIVE :
                 bottle == null ? ModuleLifecycle.WAITING : ModuleLifecycle.HOLDING;
@@ -666,12 +714,37 @@ final class ABSVisualisationFlowModel {
                 moduleBusy ? "RESOURCE BUSY - PROGRESS NOT MEASURED" :
                 bottle.twinStage + " CONFIRMED - AWAITING NEXT TWIN EVENT";
             double progress = bottle == null ? 0.0 : bottle.progress;
+            double liquidA = 0.0;
+            double liquidB = 0.0;
+            if (liveFillerApplied) {
+                progress = fillerStageProgress(liveFiller.getStage());
+                phase = liveFiller.getStage() +
+                    " - LIVE M4 FILLER TELEMETRY";
+                lifecycle = moduleFault ? ModuleLifecycle.FAULTED :
+                    moduleBusy ? ModuleLifecycle.ACTIVE :
+                    ModuleLifecycle.HOLDING;
+                if (index == FILLER_A) {
+                    liquidA = fillerComponentLevel(
+                        liveFiller.getStage(), recipeAPercent
+                    );
+                }
+                else {
+                    liquidA = recipeAPercent;
+                    liquidB = fillerComponentLevel(
+                        liveFiller.getStage(), recipeBPercent
+                    );
+                }
+            }
+            else if (index == FILLER_B && bottle != null) {
+                liquidA = recipeAPercent;
+                liquidB = recipeBPercent;
+            }
             int[] stationIds = new int[ROTARY_STATION_COUNT];
             // Schematic waypoint, not a measured pocket or reconstructed rotation.
             if (index == ROTARY && bottle != null) stationIds[0] = bottle.displayId;
             modules[index] = new ModuleSnapshot(version, index, progress,
                 bottle == null ? 0.0 : 0.5, 0.0, 0.0, 0.0, 0.0,
-                stationIds, 0, 0, 0.0, 0.0, 0.0,
+                stationIds, 0, 0, liquidA, liquidB, 0.0,
                 phase, phase, lifecycle, bottle == null ? 0 : bottle.displayId,
                 moduleBusy, bottle == null ? "" : bottle.bottleKey);
             busy |= moduleBusy;
@@ -688,6 +761,60 @@ final class ABSVisualisationFlowModel {
         for (BottleState bottle : bottles) snapshots.add(new BottleSnapshot(bottle));
         published = new FlowSnapshot(version, batchGeneration, required, realCompleted,
             visualCompleted, mode, modules, snapshots, true, twinBatchKey, twinBottleCount);
+    }
+
+    private M4FillerTelemetryV1 fillerTelemetryFor(int module) {
+        if (module == FILLER_A) { return fillerTelemetry[0]; }
+        if (module == FILLER_B) { return fillerTelemetry[1]; }
+        return null;
+    }
+
+    private BottleState findBottle(String bottleId) {
+        if (bottleId == null || "-".equals(bottleId)) { return null; }
+        for (BottleState bottle : bottles) {
+            if (bottleId.equals(bottle.bottleKey)) { return bottle; }
+        }
+        return null;
+    }
+
+    private boolean fillerTelemetryIsCurrent(
+        int module,
+        M4FillerTelemetryV1 telemetry,
+        BottleState bottle
+    ) {
+        if (telemetry == null || !telemetry.hasBottle()) { return false; }
+        int confirmed = confirmedStage(bottle.twinStage, "");
+        if (confirmed > module) { return false; }
+        if (module == FILLER_A) {
+            M4FillerTelemetryV1 fillerB = fillerTelemetry[1];
+            if (fillerB != null && fillerB.hasBottle() &&
+                telemetry.getBottleId().equals(fillerB.getBottleId()) &&
+                !"WAITING".equals(fillerB.getStage())) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static double fillerStageProgress(String stage) {
+        if ("POSITIONING".equals(stage)) { return 10.0; }
+        if ("DOSING".equals(stage)) { return 55.0; }
+        if ("REFILLING".equals(stage)) { return 78.0; }
+        if ("SAFE_WAIT".equals(stage)) { return 92.0; }
+        if ("DONE".equals(stage)) { return 100.0; }
+        return 0.0;
+    }
+
+    private static double fillerComponentLevel(
+        String stage,
+        double targetPercent
+    ) {
+        if ("DOSING".equals(stage)) { return targetPercent * 0.55; }
+        if ("REFILLING".equals(stage) || "SAFE_WAIT".equals(stage) ||
+            "DONE".equals(stage)) {
+            return targetPercent;
+        }
+        return 0.0;
     }
 
     synchronized void acceptRequired(int value) {
@@ -734,6 +861,10 @@ final class ABSVisualisationFlowModel {
         twinBatchKey = "";
         twinBottleCount = 0;
         requestedRequired = 0;
+        recipeAPercent = 0.0;
+        recipeBPercent = 0.0;
+        fillerTelemetry[0] = null;
+        fillerTelemetry[1] = null;
         clearTwinModules();
         resetBatchNow(0);
         lastRealtimeTickNanos = 0L;
@@ -751,6 +882,10 @@ final class ABSVisualisationFlowModel {
         if (expected.compareTo(minimumTwinGeneration) <= 0) return;
         minimumTwinGeneration = expected;
         requestedRequired = 0;
+        recipeAPercent = 0.0;
+        recipeBPercent = 0.0;
+        fillerTelemetry[0] = null;
+        fillerTelemetry[1] = null;
         realCompleted = 0;
         for (int index = 0; index < MODULE_COUNT; index++) {
             statuses[index] = IDLE_STATUS;
@@ -1440,11 +1575,11 @@ final class ABSVisualisationFlowModel {
         double liquidA = 0.0;
         double liquidB = 0.0;
         if (index == FILLER_A) {
-            liquidA = smoothStep(progress / 100.0) * 60.0;
+            liquidA = smoothStep(progress / 100.0) * recipeAPercent;
         }
         else if (index == FILLER_B) {
-            liquidA = current == null ? 0.0 : 60.0;
-            liquidB = smoothStep(progress / 100.0) * 40.0;
+            liquidA = current == null ? 0.0 : recipeAPercent;
+            liquidB = smoothStep(progress / 100.0) * recipeBPercent;
         }
         double tighteningAngle = index == CAPPER ?
             smoothStep(progress / 100.0) * 1080.0 : 0.0;

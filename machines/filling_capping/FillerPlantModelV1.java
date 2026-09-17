@@ -28,6 +28,8 @@ public final class FillerPlantModelV1 {
     private Stage stage = Stage.IDLE;
     private String activeBottleId;
     private String geometryProfile = "-";
+    private String nozzleSetpoint = "-";
+    private boolean positionConfirmed;
     private int targetMl;
     private int commandedShutoffMl;
     private int measuredMl;
@@ -85,6 +87,7 @@ public final class FillerPlantModelV1 {
         }
         if ("SAFE_STOP".equals(action)) {
             safeOutputs();
+            positionConfirmed = false;
             activeBottleId = bottleId;
             stage = Stage.FAULT;
             remember(payload);
@@ -96,8 +99,11 @@ public final class FillerPlantModelV1 {
             return false;
         }
         if ("SET_GEOMETRY".equals(action)) {
-            if (!M4BottleContextV1.GEOMETRY_SMALL.equals(value) &&
-                !M4BottleContextV1.GEOMETRY_LARGE.equals(value)) {
+            final M4GeometryProfileV1 profile;
+            try {
+                profile = M4GeometryProfileV1.forId(value);
+            }
+            catch (IllegalArgumentException exception) {
                 enterFault(bottleId, "UNKNOWN_GEOMETRY");
                 return false;
             }
@@ -105,12 +111,15 @@ public final class FillerPlantModelV1 {
             retirePreviousBottle(bottleId);
             activeBottleId = bottleId;
             geometryProfile = value;
+            nozzleSetpoint = profile.getFillerNozzleZ();
+            positionConfirmed = false;
             stage = Stage.POSITIONING;
             stageStartMs = nowMs;
             remember(payload);
             return true;
         }
-        if ("START_DOSE".equals(action) && stage == Stage.POSITIONED) {
+        if ("START_DOSE".equals(action) && stage == Stage.POSITIONED &&
+            positionConfirmed) {
             if (forceSensorConflict) {
                 enterFault(bottleId, "SENSOR_CONFLICT");
                 return false;
@@ -160,6 +169,7 @@ public final class FillerPlantModelV1 {
             }
             else {
                 stage = Stage.POSITIONED;
+                positionConfirmed = true;
                 feedback.add(
                     activeBottleId + "|PROFILE_CONFIRMED|" + geometryProfile
                 );
@@ -213,13 +223,23 @@ public final class FillerPlantModelV1 {
         return geometryProfile;
     }
 
+    public String getNozzleSetpoint() {
+        return nozzleSetpoint;
+    }
+
+    public boolean isPositionConfirmed() {
+        return positionConfirmed;
+    }
+
     public String getStageName() {
         return stage.name();
     }
 
     public String snapshot() {
         return "Plant[stage=" + stage + ",bottle=" + activeBottleId +
-            ",geometry=" + geometryProfile + ",injector=" + injectorOpen +
+            ",geometry=" + geometryProfile + ",nozzleZ=" + nozzleSetpoint +
+            ",positionConfirmed=" + positionConfirmed +
+            ",injector=" + injectorOpen +
             ",inlet=" + inletOpen + ",moving=" + doseUnitMoving +
             ",shutoff=" + commandedShutoffMl + ",volume=" + measuredMl +
             "]";
@@ -255,6 +275,8 @@ public final class FillerPlantModelV1 {
         stage = Stage.IDLE;
         activeBottleId = null;
         geometryProfile = "-";
+        nozzleSetpoint = "-";
+        positionConfirmed = false;
         commandedShutoffMl = 0;
         measuredMl = 0;
         targetMl = 0;
@@ -278,6 +300,7 @@ public final class FillerPlantModelV1 {
 
     private void enterFault(String bottleId, String reason) {
         safeOutputs();
+        positionConfirmed = false;
         stage = Stage.FAULT;
         feedback.add(bottleId + "|FAULT|" + reason);
     }

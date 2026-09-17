@@ -61,8 +61,8 @@ public final class Member3Member4IntegrationSelfTest {
         );
         FillerPlantModelV1 plantA = new FillerPlantModelV1(0, 0, 0);
         FillerPlantModelV1 plantB = new FillerPlantModelV1(0, 0, 0);
-        fillerA.setRatio(60);
-        fillerB.setRatio(40);
+        fillerA.setRatio(600);
+        fillerB.setRatio(400);
         require(fillerA.acceptBottleAtFill(context, 0),
             "M4 Filler A accepts the P2 context");
         pumpFiller(fillerA, plantA);
