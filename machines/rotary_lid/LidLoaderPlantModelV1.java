@@ -122,7 +122,6 @@ public final class LidLoaderPlantModelV1 {
         lastMotionTickMs = nowMs;
     }
 
-    /** Returns the number of lids accepted without exceeding physical capacity. */
     public int refill(int count) {
         if (count <= 0) {
             throw new IllegalArgumentException("refill count must be positive");

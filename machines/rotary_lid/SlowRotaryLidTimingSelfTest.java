@@ -1,4 +1,3 @@
-/** M3 slow-demo duration, matching deadline and prompt-reset regressions. */
 public final class SlowRotaryLidTimingSelfTest {
     private static int assertions;
 

@@ -58,7 +58,6 @@ public final class RotaryControllerModelV1 {
         return true;
     }
 
-    /** Advances simulated time and applies the current alignment sensor. */
     public void tick(long elapsedMs, boolean tableAlignedWithSensor) {
         if (elapsedMs < 0) {
             throw new IllegalArgumentException("elapsedMs must be non-negative");

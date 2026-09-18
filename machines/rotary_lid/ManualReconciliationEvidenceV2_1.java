@@ -1,4 +1,4 @@
-/** Auditable operator evidence. It cannot clear a fault by itself. */
+/** Legacy evidence payload; the unattended supervisor rejects operator recovery. */
 public final class ManualReconciliationEvidenceV2_1 {
     public final String eventId;
     public final String sourceEpoch;

@@ -1,4 +1,3 @@
-/** Deterministic checks for the M3 side of M1's system-reset barrier. */
 public final class Member3SystemResetSelfTest {
     private Member3SystemResetSelfTest() {
     }

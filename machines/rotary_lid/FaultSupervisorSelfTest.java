@@ -1,4 +1,3 @@
-/** Framework-free policy, evidence and authority checks for the M3 IP. */
 public final class FaultSupervisorSelfTest {
     private FaultSupervisorSelfTest() {
     }
@@ -497,7 +496,6 @@ public final class FaultSupervisorSelfTest {
         require("RESOURCE_WAIT".equals(FaultSupervisorStateV2_1.stateName()),
             "magazine empty enters resource wait");
 
-        // Model one consumed slot so the GUI recovery must change Plant state.
         Member3PlantStateV1.setPickCommand(true);
         sleep(LidLoaderPlantModelV1.PICK_TIME_MS + 25L);
         Member3PlantStateV1.updateLidLoader();

@@ -1,4 +1,3 @@
-/** Framework-free end-to-end checks for the Member 3 Plant models. */
 public final class Member3PlantSelfTest {
     private Member3PlantSelfTest() {
     }

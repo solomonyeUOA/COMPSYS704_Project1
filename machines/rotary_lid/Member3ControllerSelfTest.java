@@ -1,4 +1,3 @@
-/** Framework-free checks for the Member 3 deterministic controller models. */
 public final class Member3ControllerSelfTest {
     private Member3ControllerSelfTest() {
     }

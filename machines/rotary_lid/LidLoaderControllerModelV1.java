@@ -54,7 +54,6 @@ public final class LidLoaderControllerModelV1 {
         faultSequence = Math.max(0L, initialFaultSequence);
     }
 
-    /** Starts only when a bottle and a lid are both available. */
     public boolean requestLoad(
         String bottleId,
         boolean lidAvailable
@@ -75,7 +74,6 @@ public final class LidLoaderControllerModelV1 {
         return true;
     }
 
-    /** Advances the pick/place sequence using plant confirmation sensors. */
     public void tick(long elapsedMs, boolean lidPicked, boolean lidPlaced) {
         if (elapsedMs < 0) {
             throw new IllegalArgumentException("elapsedMs must be non-negative");

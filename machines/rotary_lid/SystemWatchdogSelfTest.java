@@ -1,4 +1,3 @@
-/** Deterministic checks for strict, bounded watchdog intervention. */
 public final class SystemWatchdogSelfTest {
     private static final String[] LOCAL = {
         "Fault Supervisor", "Rotary Controller", "Rotary Plant",

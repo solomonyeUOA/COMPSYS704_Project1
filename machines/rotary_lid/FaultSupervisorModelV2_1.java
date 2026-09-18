@@ -327,10 +327,10 @@ public final class FaultSupervisorModelV2_1 {
         return true;
     }
 
+    // Legacy operator-recovery entry points remain disabled for compatibility.
     public synchronized boolean recordManualEvidence(
         ManualReconciliationEvidenceV2_1 evidence
     ) {
-        // Compatibility entry point: unattended recovery rejects operator evidence.
         return false;
     }
 
@@ -341,17 +341,14 @@ public final class FaultSupervisorModelV2_1 {
         String serviceEvidence,
         long resultingStateVersion
     ) {
-        // Compatibility entry point: unattended recovery rejects operator evidence.
         return false;
     }
 
     public synchronized boolean deferManualControllerEvidence(String payload) {
-        // Compatibility entry point: unattended recovery rejects operator evidence.
         return false;
     }
 
     public synchronized boolean applyDeferredControllerEvidence() {
-        // Compatibility entry point: unattended recovery rejects operator evidence.
         return false;
     }
 
