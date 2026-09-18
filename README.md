@@ -189,17 +189,3 @@ python3 tools/project.py run --no-build --headless --order 'PO0001|2|P1,S,60,40,
 Expected: one completed order, exactly three completed bottle twins, no rejected
 updates and empty runtime error logs. Inspect each runtime's `*.out.log` and
 `*.err.log` in the printed run directory on failure.
-
-## 7. Simulation Limits
-
-This is a course simulation, not certified industrial control software.
-Drives, couplings, holding mechanisms and feedback channels are Plant models;
-there are no physical redundant motors, independent PLCs or independent sensor
-hardware. The lid magazine is finite (9999 simulated lids) with no automatic
-replenishment. Communication retries are bounded and cannot guarantee delivery
-during a prolonged outage. SAFE / ERROR intentionally prevents unsafe progress.
-
-Generated Java/classes and runtime evidence belong in `build/`, not source
-control. Supporting contracts, diagrams and integration notes remain in
-[docs/](docs/) and [integration/](integration/); source code and XML define
-current behaviour where older design notes differ.
