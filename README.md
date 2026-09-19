@@ -48,8 +48,8 @@ Run commands from the repository root. Set paths for your own computer first.
 ```powershell
 $env:PROJECT_JAVA_HOME = 'C:\path\to\jdk8'
 $env:SYSTEMJ_LIB = 'C:\path\to\SystemJ\lib'
-python tools/project.py test
-python tools/project.py run --no-build
+python tools\project.py test
+python tools\project.py run --no-build
 ```
 
 **macOS / Linux**
