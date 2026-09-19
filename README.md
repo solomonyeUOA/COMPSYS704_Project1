@@ -72,6 +72,10 @@ For a slower GUI demonstration:
 python3 tools/project.py run --demo-slowdown 5
 ```
 
+```powershell
+python tools\project.py run --demo-slowdown 5
+```
+
 Slowdown accepts 1-10 and scales simulated physical actions and their matching
 timeouts, not heartbeats or telemetry. Windows also provides
 [run-project.bat](run-project.bat) and [run-demo.bat](run-demo.bat).
