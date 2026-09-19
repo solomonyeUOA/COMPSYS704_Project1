@@ -46,8 +46,8 @@ Run commands from the repository root. Set paths for your own computer first.
 **Windows PowerShell**
 
 ```powershell
-$env:PROJECT_JAVA_HOME = 'C:\path\to\jdk8'
-$env:SYSTEMJ_LIB = 'C:\path\to\SystemJ\lib'
+$env:PROJECT_JAVA_HOME = '\path\to\jdk8'
+$env:SYSTEMJ_LIB = '\path\to\SystemJ\lib'
 python tools\project.py test
 python tools\project.py run --no-build
 ```
